@@ -3,17 +3,21 @@ import pandas as pd
 import sys
 import os
 from keycode_matcher import load_keycode_map, match_keycodes
+from utils.data import calculate_income_statement_items, calculate_market_turnover_and_trading_days
+
+st.set_page_config(page_title="Forecast", layout="wide")
 
 if st.sidebar.button("Reload Data"):
     st.cache_data.clear()
-
-st.set_page_config(layout="wide")
 
 @st.cache_data
 def load_data():
     try:
         df_index = pd.read_csv("sql/INDEX.csv")
-        keycode_map = load_keycode_map('IRIS_KEYCODE.csv')
+        # Extract 'Year' from 'TRADINGDATE' for df_index
+        if 'TRADINGDATE' in df_index.columns:
+            df_index['Year'] = pd.to_datetime(df_index['TRADINGDATE']).dt.year
+        keycode_map = load_keycode_map('sql/IRIS_KEYCODE.csv')
         df_is = match_keycodes('sql/IS_security.csv', keycode_map)
         df_bs = match_keycodes('sql/BS_security.csv', keycode_map)
         df_note = match_keycodes('sql/Note_security.csv', keycode_map)
@@ -23,7 +27,7 @@ def load_data():
             if 'YEARREPORT' in df.columns:
                 df['Year'] = df['YEARREPORT']
         df_forecast = pd.read_csv("sql/FORECAST.csv")
-        df_turnover = pd.read_excel("turnover.xlsx")
+        df_turnover = pd.read_excel("sql/turnover.xlsx")
         return df_index, df_bs, df_is, df_note, df_forecast, df_turnover
     except Exception as e:
         st.error(f"Error loading CSV file: {e}")
@@ -78,58 +82,35 @@ if not df_index.empty:
     filtered_is = filter_full_year(historical_is[historical_is['TICKER'] == selected_broker])
     filtered_bs = filter_full_year(historical_bs[historical_bs['TICKER'] == selected_broker])
 
-    fx_gain_loss_by_year = filtered_is.groupby('Year')[['IS.44','IS.50']].sum().sum(axis=1).reset_index(name='FX gain/loss')
-    affiliates = filtered_is.groupby('Year')[['IS.46']].sum().reset_index().rename(columns={'IS.46': 'Gain/loss from affiliates divestment'})
-    associates = filtered_is.groupby('Year')[['IS.47','IS.55']].sum().sum(axis=1).reset_index(name='Income from associate companies')
-    deposit_inc = filtered_is.groupby('Year')[['IS.45']].sum().reset_index().rename(columns={'IS.45': 'Deposit income'})
-    interest_exp = filtered_is.groupby('Year')[['IS.51']].sum().reset_index().rename(columns={'IS.51': 'Interest expense'})
-    ib_inc = filtered_is.groupby('Year')[['IS.12','IS.13','IS.15','IS.11','IS.16','IS.17','IS.18','IS.34','IS.35','IS.36','IS.38']].sum().sum(axis=1).reset_index(name='Net IB Income')
-    net_brokerage = filtered_is.groupby('Year')[['IS.10','IS.33']].sum().sum(axis=1).reset_index(name='Net Brokerage Income')
-    trading_inc = filtered_is.groupby('Year')[['IS.3','IS.4','IS.5','IS.8','IS.9','IS.27','IS.24','IS.25','IS.26','IS.28','IS.29','IS.31','IS.32']].sum().sum(axis=1).reset_index(name='Net trading income')
-    interest_inc = filtered_is.groupby('Year')[['IS.6']].sum().reset_index().rename(columns={'IS.6': 'Interest income'})
-    inv_inc = trading_inc.merge(interest_inc, on='Year', how='outer')
-    inv_inc = inv_inc.fillna(0)
-    inv_inc['Net Investment Income'] = inv_inc['Net trading income'] + inv_inc['Interest income']
-    margin_inc = filtered_is.groupby('Year')[['IS.7','IS.30']].sum().sum(axis=1).reset_index(name='Margin Lending Income')
-    other_inc = filtered_is.groupby('Year')[['IS.52','IS.54','IS.63']].sum().sum(axis=1).reset_index(name='Net other income')
-    other_op_inc = filtered_is.groupby('Year')[['IS.14','IS.19','IS.20','IS.37','IS.39','IS.40']].sum().sum(axis=1).reset_index(name='Net other operating income')
-    fee_inc = net_brokerage[['Year', 'Net Brokerage Income']].merge(
-        ib_inc[['Year', 'Net IB Income']], on='Year', how='outer').merge(
-        other_op_inc[['Year', 'Net other operating income']], on='Year', how='outer')
-    fee_inc = fee_inc.fillna(0)
-    fee_inc['Fee Income'] = fee_inc['Net Brokerage Income'] + fee_inc['Net IB Income'] + fee_inc['Net other operating income']
-    capital_inc = trading_inc[['Year', 'Net trading income']].merge(
-        interest_inc[['Year', 'Interest income']], on='Year', how='outer').merge(
-        margin_inc[['Year', 'Margin Lending Income']], on='Year', how='outer')
-    capital_inc = capital_inc.fillna(0)
-    capital_inc['Capital Income'] = capital_inc['Net trading income'] + capital_inc['Interest income'] + capital_inc['Margin Lending Income']
-    total_operating_income = capital_inc[['Year', 'Capital Income']].merge(
-        fee_inc[['Year', 'Fee Income']], on='Year', how='outer')
-    total_operating_income = total_operating_income.fillna(0)
-    total_operating_income['Total Operating Income'] = total_operating_income['Capital Income'] + total_operating_income['Fee Income']
-    borrowing_balance = filtered_bs.groupby('Year')[['BS.95','BS.100','BS.122','BS.127']].sum().sum(axis=1).reset_index(name='Borrowing Balance')
-    sga = filtered_is.groupby('Year')[['IS.57','IS.58']].sum().sum(axis=1).reset_index(name='SG&A')
-    pbt = filtered_is.groupby('Year')[['IS.65']].sum().reset_index().rename(columns={'IS.65': 'PBT'})
-    NPAT = filtered_is.groupby('Year')[['IS.71']].sum().reset_index().rename(columns={'IS.71': 'NPAT'})
-    margin_balance = filtered_bs.sort_values('ENDDATE').groupby('Year').tail(1)[['Year', 'BS.8']].rename(columns={'BS.8': 'Margin Balance'})
+    # Calculate income statement items using the utility function
+    income_statement_items = calculate_income_statement_items(filtered_is, filtered_bs)
+    
+    # Extract individual items for backward compatibility
+    fx_gain_loss_by_year = income_statement_items['fx_gain_loss_by_year']
+    affiliates = income_statement_items['affiliates']
+    associates = income_statement_items['associates']
+    deposit_inc = income_statement_items['deposit_inc']
+    interest_exp = income_statement_items['interest_exp']
+    ib_inc = income_statement_items['ib_inc']
+    net_brokerage = income_statement_items['net_brokerage']
+    trading_inc = income_statement_items['trading_inc']
+    interest_inc = income_statement_items['interest_inc']
+    inv_inc = income_statement_items['inv_inc']
+    margin_inc = income_statement_items['margin_inc']
+    other_inc = income_statement_items['other_inc']
+    other_op_inc = income_statement_items['other_op_inc']
+    fee_inc = income_statement_items['fee_inc']
+    capital_inc = income_statement_items['capital_inc']
+    total_operating_income = income_statement_items['total_operating_income']
+    borrowing_balance = income_statement_items['borrowing_balance']
+    sga = income_statement_items['sga']
+    pbt = income_statement_items['pbt']
+    NPAT = income_statement_items['NPAT']
+    margin_balance = income_statement_items['margin_balance']
     # Add more custom calculations and manipulations as needed
 
-    # Calculate average daily market turnover and trading days for each year from INDEX file
-    df_index['Year'] = pd.to_datetime(df_index['TRADINGDATE']).dt.year
-
-    market_turnover_by_year = df_index.groupby('Year').agg(
-        trading_days=('TRADINGDATE', 'nunique'),
-        total_turnover=('TOTALVALUE', 'sum')
-    ).reset_index()
-    # Calculate average daily turnover for each year
-    market_turnover_by_year['avg_daily_turnover'] = market_turnover_by_year['total_turnover'] / market_turnover_by_year['trading_days']
-
-    # Get trading days for 2025 - use 2024 as reference since 2025 data won't exist yet
-    trading_days_2024 = market_turnover_by_year.loc[market_turnover_by_year['Year'] == 2024, 'trading_days']
-    if not trading_days_2024.empty:
-        trading_days_2025 = int(trading_days_2024.iloc[0])  # Use 2024 trading days as baseline
-    else:
-        trading_days_2025 = 252  # fallback typical value
+    # Calculate average daily market turnover and trading days using the utility function
+    market_turnover_by_year, trading_days_2025 = calculate_market_turnover_and_trading_days(df_index, current_year=2024)
 
     # Calculate defaults: market share from 2024 actual, others from 2025 forecast
     def get_forecast_value(keycodename):

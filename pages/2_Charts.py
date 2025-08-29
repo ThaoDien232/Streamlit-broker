@@ -72,7 +72,7 @@ df_is['Quarter_Label'] = df_is.apply(create_quarter_label, axis=1)
 st.sidebar.header("🎛️ Filters")
 
 # Broker selection
-available_brokers = sorted(df_is['TICKER'].unique())
+available_brokers = sorted(df_is['TICKER'].dropna().astype(str).unique())
 selected_brokers = st.sidebar.multiselect(
     "Select Brokers:",
     options=available_brokers,
