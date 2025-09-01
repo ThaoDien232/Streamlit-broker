@@ -1,4 +1,14 @@
 import streamlit as st
+import toml
+
+# Load theme from config.toml
+theme_config = toml.load("utils/config.toml")
+theme = theme_config["theme"]
+primary_color = theme["primaryColor"]
+background_color = theme["backgroundColor"]
+secondary_background_color = theme["secondaryBackgroundColor"]
+text_color = theme["textColor"]
+font_family = theme["font"]
 import pandas as pd
 import requests
 from datetime import datetime

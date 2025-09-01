@@ -1,8 +1,18 @@
 import streamlit as st
+import toml
+
+# Load theme from config.toml
+theme_config = toml.load("utils/config.toml")
+theme = theme_config["theme"]
+primary_color = theme["primaryColor"]
+background_color = theme["backgroundColor"]
+secondary_background_color = theme["secondaryBackgroundColor"]
+text_color = theme["textColor"]
+font_family = theme["font"]
 import pandas as pd
 import sys
 import os
-from keycode_matcher import load_keycode_map, match_keycodes
+from utils.keycode_matcher import load_keycode_map, match_keycodes
 from utils.data import calculate_income_statement_items, calculate_market_turnover_and_trading_days
 
 st.set_page_config(page_title="Forecast", layout="wide")

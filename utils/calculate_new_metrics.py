@@ -1,0 +1,361 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime
+from keycode_matcher import load_keycode_map
+
+def load_keycode_mapping():
+    """Load the DWHCode to KeyCode mapping from IRIS_KEYCODE.csv"""
+    try:
+        keycode_map = load_keycode_map('sql/IRIS_KEYCODE.csv')
+        print(f"Loaded {len(keycode_map)} keycode mappings")
+        return keycode_map
+    except Exception as e:
+        print(f"Error loading keycode mapping: {e}")
+        return {}
+
+def load_combined_data():
+    """Load the Combined_Financial_Data.csv file"""
+    try:
+        print("Loading Combined_Financial_Data.csv...")
+        df = pd.read_csv('sql/Combined_Financial_Data.csv', low_memory=False)
+        print(f"Loaded {len(df):,} records")
+        return df
+    except Exception as e:
+        print(f"Error loading Combined_Financial_Data.csv: {e}")
+        return pd.DataFrame()
+
+def create_pivot_data(df):
+    """Create pivot table for faster metric lookups"""
+    print("Creating pivot table for faster processing...")
+    
+    # Filter only IS and BS data (exclude Note and CALC for now)
+    source_data = df[df['STATEMENT_TYPE'].isin(['IS', 'BS'])].copy()
+    
+    # Create pivot table: index=(TICKER, YEARREPORT, LENGTHREPORT), columns=KEYCODE, values=VALUE
+    # First standardize STARTDATE and ENDDATE to avoid pivot issues
+    source_data['STARTDATE'] = source_data['STARTDATE'].fillna('')
+    source_data['ENDDATE'] = source_data['ENDDATE'].fillna('')
+    
+    pivot_df = source_data.pivot_table(
+        index=['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'STARTDATE', 'ENDDATE'],
+        columns='KEYCODE',
+        values='VALUE',
+        aggfunc='first',  # Take first value (duplicates should be removed in combine_financial_data.py)
+        fill_value=0
+    ).reset_index()
+    
+    print(f"Created pivot table with {len(pivot_df)} periods and {len(pivot_df.columns)-5} metrics")
+    return pivot_df
+
+def calculate_financial_metrics_vectorized(pivot_df, keycode_map):
+    """
+    Calculate all financial metrics using vectorized operations and correct keycode mapping.
+    """
+    print("Calculating financial metrics using vectorized operations...")
+    
+    # Load existing data to check what CALC records already exist
+    existing_df = load_combined_data()
+    existing_calc = existing_df[existing_df['STATEMENT_TYPE'] == 'CALC']
+    existing_periods = set()
+    if len(existing_calc) > 0:
+        for _, row in existing_calc.iterrows():
+            key = (row['TICKER'], row['YEARREPORT'], row['LENGTHREPORT'])
+            existing_periods.add(key)
+    
+    print(f"Found {len(existing_periods)} periods with existing calculated metrics")
+    
+    calculated_records = []
+    
+    # Helper function to safely get column values using KeyCode
+    def get_col(keycode):
+        return pivot_df[keycode].fillna(0) if keycode in pivot_df.columns else pd.Series(0, index=pivot_df.index)
+    
+    # Helper function to get KeyCode from DWHCode (reverse mapping)
+    reverse_keycode_map = {v: k for k, v in keycode_map.items()}
+    def get_keycode_from_dwh(dwh_code):
+        return reverse_keycode_map.get(dwh_code, dwh_code)
+    
+    # Process each row (ticker/year/quarter combination)
+    for idx, row in pivot_df.iterrows():
+        ticker = row['TICKER']
+        year = row['YEARREPORT']
+        quarter = row['LENGTHREPORT']
+        start_date = row['STARTDATE'] if pd.notna(row['STARTDATE']) else ''
+        end_date = row['ENDDATE'] if pd.notna(row['ENDDATE']) else ''
+        quarter_label = f'Q{quarter}' if quarter in [1,2,3,4] else 'Annual'
+        
+        # Skip if this period already has calculated metrics
+        period_key = (ticker, year, quarter)
+        if period_key in existing_periods:
+            continue
+        
+        # Calculate metrics using the formulas from utils/data.py
+        metrics_to_calculate = []
+        
+        # Always calculate core metrics if we have the base IS/BS data for this period
+        has_is_data = any(get_col(f'IS.{i}').iloc[idx] != 0 for i in range(1, 100) if f'IS.{i}' in pivot_df.columns)
+        has_bs_data = any(get_col(f'BS.{i}').iloc[idx] != 0 for i in range(1, 200) if f'BS.{i}' in pivot_df.columns)
+        
+        # 1. FX gain/loss (IS.44 + IS.50) - Formula from IRIS_KEYCODE: IS.44+IS.50
+        fx_gain_loss = get_col('IS.44').iloc[idx] + get_col('IS.50').iloc[idx]
+        if fx_gain_loss != 0:
+            metrics_to_calculate.append(('FX_GAIN_LOSS', 'FX gain/loss', fx_gain_loss))
+        
+        # 2. Affiliates divestment (IS.46) - Formula from IRIS_KEYCODE: IS.46
+        affiliates = get_col('IS.46').iloc[idx]
+        if affiliates != 0:
+            metrics_to_calculate.append(('AFFILIATES_DIVESTMENT', 'Gain/loss from affiliates divestment', affiliates))
+        
+        # 3. Associates income (IS.47 + IS.55) - Formula from IRIS_KEYCODE: IS.55+IS.47
+        associates = get_col('IS.47').iloc[idx] + get_col('IS.55').iloc[idx]
+        if associates != 0:
+            metrics_to_calculate.append(('ASSOCIATES_INCOME', 'Income from associate companies', associates))
+        
+        # 4. Deposit income (IS.45) - Formula from IRIS_KEYCODE: IS.45
+        deposit_inc = get_col('IS.45').iloc[idx]
+        if deposit_inc != 0:
+            metrics_to_calculate.append(('DEPOSIT_INCOME', 'Deposit income', deposit_inc))
+        
+        # 5. Interest expense (IS.51) - Formula from IRIS_KEYCODE: IS.51
+        interest_exp = get_col('IS.51').iloc[idx]
+        if interest_exp != 0:
+            metrics_to_calculate.append(('INTEREST_EXPENSE', 'Interest expense', interest_exp))
+        
+        # 6. Investment Banking Income (multiple IS codes)
+        ib_codes = ['IS.12', 'IS.13', 'IS.15', 'IS.11', 'IS.16', 'IS.17', 'IS.18', 'IS.34', 'IS.35', 'IS.36', 'IS.38']
+        ib_income = sum(get_col(code).iloc[idx] for code in ib_codes)
+        if ib_income != 0:
+            metrics_to_calculate.append(('NET_IB_INCOME', 'Net IB Income', ib_income))
+        
+        # 7. Net Brokerage Income (IS.10 + IS.33) - Revenue minus Expenses
+        # IS.10 = Revenue in Brokerage services, IS.33 = Brokerage expenses (negative)
+        is_10_revenue = get_col('IS.10').iloc[idx]  # Should be positive
+        is_33_expenses = get_col('IS.33').iloc[idx]  # Should be negative
+        net_brokerage = is_10_revenue + is_33_expenses  # This gives net (revenue - expenses)
+        
+        # Debug print for verification (especially SSI Q2 2025)
+        if ticker == 'SSI' and year == 2025 and quarter == 2:
+            print(f"DEBUG - {ticker} {year} Q{quarter}: IS.10={is_10_revenue/1e9:.3f}B + IS.33={is_33_expenses/1e9:.3f}B = {net_brokerage/1e9:.3f}B")
+        
+        if net_brokerage != 0 or (is_10_revenue != 0 and has_is_data):
+            metrics_to_calculate.append(('NET_BROKERAGE_INCOME', 'Net Brokerage Income', net_brokerage))
+        
+        # 8. Net Trading Income - Formula from IRIS_KEYCODE: IS.3+IS.4+IS.5+IS.8+IS.9+IS.27+IS.24+IS.25+IS.26+IS.29+IS.28+IS.31+IS.32
+        trading_codes = ['IS.3', 'IS.4', 'IS.5', 'IS.8', 'IS.9', 'IS.27', 'IS.24', 'IS.25', 'IS.26', 'IS.28', 'IS.29', 'IS.31', 'IS.32']
+        trading_income = sum(get_col(code).iloc[idx] for code in trading_codes)
+        if trading_income != 0:
+            metrics_to_calculate.append(('NET_TRADING_INCOME', 'Net trading income', trading_income))
+        
+        # 9. Net Interest Income (IS.6) - Formula from IRIS_KEYCODE: IS.6
+        interest_income = get_col('IS.6').iloc[idx]
+        if interest_income != 0:
+            metrics_to_calculate.append(('INTEREST_INCOME', 'Interest income', interest_income))
+        
+        # 10. Net Investment Income (Trading + Interest)
+        net_investment_income = trading_income + interest_income
+        if net_investment_income != 0:
+            metrics_to_calculate.append(('NET_INVESTMENT_INCOME', 'Net Investment Income', net_investment_income))
+        
+        # 11. Net Margin Lending Income (IS.7 + IS.30) - Formula from IRIS_KEYCODE: IS.7+IS.30
+        margin_lending = get_col('IS.7').iloc[idx] + get_col('IS.30').iloc[idx]
+        if margin_lending != 0:
+            metrics_to_calculate.append(('MARGIN_LENDING_INCOME', 'Margin Lending Income', margin_lending))
+        
+        # 12. Net Other Income - Formula from IRIS_KEYCODE: IS.54+IS.63+IS.52
+        other_income = get_col('IS.52').iloc[idx] + get_col('IS.54').iloc[idx] + get_col('IS.63').iloc[idx]
+        if other_income != 0:
+            metrics_to_calculate.append(('NET_OTHER_INCOME', 'Net other income', other_income))
+        
+        # 13. Net Other Operating Income - Formula from IRIS_KEYCODE: IS.14+IS.19+IS.20+IS.37+IS.39+IS.40
+        other_op_codes = ['IS.14', 'IS.19', 'IS.20', 'IS.37', 'IS.39', 'IS.40']
+        other_op_income = sum(get_col(code).iloc[idx] for code in other_op_codes)
+        if other_op_income != 0:
+            metrics_to_calculate.append(('NET_OTHER_OP_INCOME', 'Net other operating income', other_op_income))
+        
+        # 14. Fee Income (Net Brokerage + Net IB + Other Operating)
+        fee_income = net_brokerage + ib_income + other_op_income
+        if fee_income != 0:
+            metrics_to_calculate.append(('FEE_INCOME', 'Fee Income', fee_income))
+        
+        # 15. Capital Income (Trading + Interest + Margin Lending)
+        capital_income = trading_income + interest_income + margin_lending
+        if capital_income != 0:
+            metrics_to_calculate.append(('CAPITAL_INCOME', 'Capital Income', capital_income))
+        
+        # 16. Total Operating Income (Capital + Fee)
+        total_operating_income = capital_income + fee_income
+        if total_operating_income != 0:
+            metrics_to_calculate.append(('TOTAL_OPERATING_INCOME', 'Total Operating Income', total_operating_income))
+        
+        # 17. Borrowing Balance (BS.95 + BS.100 + BS.122 + BS.127)
+        borrowing_balance = (get_col('BS.95').iloc[idx] + get_col('BS.100').iloc[idx] + 
+                           get_col('BS.122').iloc[idx] + get_col('BS.127').iloc[idx])
+        if borrowing_balance != 0:
+            metrics_to_calculate.append(('BORROWING_BALANCE', 'Borrowing Balance', borrowing_balance))
+        
+        # 18. SG&A - Formula from IRIS_KEYCODE: IS.57+IS.58
+        sga = get_col('IS.57').iloc[idx] + get_col('IS.58').iloc[idx]
+        if sga != 0 or (get_col('IS.58').iloc[idx] != 0 and has_is_data):
+            metrics_to_calculate.append(('SGA', 'SG&A', sga))
+        
+        # 19. PBT (IS.65) - Always calculate if we have IS.65
+        pbt = get_col('IS.65').iloc[idx]
+        if pbt != 0 or (get_col('IS.65').iloc[idx] != 0 or has_is_data):
+            metrics_to_calculate.append(('PBT', 'PBT', pbt))
+        
+        # 20. NPAT (IS.71) - Always calculate if we have IS.71  
+        npat = get_col('IS.71').iloc[idx]
+        if npat != 0 or (get_col('IS.71').iloc[idx] != 0 or has_is_data):
+            metrics_to_calculate.append(('NPAT', 'NPAT', npat))
+        
+        # 21. Margin Balance - Formula from IRIS_KEYCODE: BS.8 (Margin lending book)
+        margin_balance = get_col('BS.8').iloc[idx]
+        if margin_balance != 0:
+            metrics_to_calculate.append(('MARGIN_BALANCE', 'Margin Balance', margin_balance))
+        
+        # Add all calculated metrics for this period
+        for metric_code, metric_name, value in metrics_to_calculate:
+            calculated_records.append({
+                'TICKER': ticker,
+                'YEARREPORT': year,
+                'LENGTHREPORT': quarter,
+                'STARTDATE': start_date,
+                'ENDDATE': end_date,
+                'NOTE': f'Calculated from utils/data.py formulas',
+                'STATEMENT_TYPE': 'CALC',
+                'METRIC_CODE': metric_code,
+                'VALUE': float(value),
+                'KEYCODE': metric_code,
+                'KEYCODE_NAME': metric_name,
+                'QUARTER_LABEL': quarter_label
+            })
+    
+    print(f"Calculated {len(calculated_records):,} new metric records")
+    return calculated_records
+
+def append_to_combined_file(calculated_metrics):
+    """Append calculated metrics to the Combined_Financial_Data.csv file."""
+    if not calculated_metrics:
+        print("No calculated metrics to append.")
+        return
+    
+    print("Appending calculated metrics to Combined_Financial_Data.csv...")
+    
+    # Load existing data
+    existing_df = load_combined_data()
+    
+    # Convert calculated metrics to DataFrame
+    new_df = pd.DataFrame(calculated_metrics)
+    
+    # Combine with existing data
+    combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+    
+    # Sort by ticker, year, quarter, statement type
+    combined_df = combined_df.sort_values(['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'STATEMENT_TYPE', 'METRIC_CODE'])
+    
+    # Save back to file
+    output_file = 'sql/Combined_Financial_Data.csv'
+    combined_df.to_csv(output_file, index=False)
+    
+    print(f"SUCCESS: Added {len(new_df):,} calculated metrics to {output_file}")
+    print(f"Total records now: {len(combined_df):,}")
+    
+    return combined_df
+
+def display_sample_data(df, sample_ticker='SSI', sample_year=2025, sample_quarter=2):
+    """Display sample calculated metrics for verification"""
+    print("\n" + "="*100)
+    print(f"SAMPLE CALCULATED METRICS - {sample_ticker} {sample_year} Q{sample_quarter}")
+    print("="*100)
+    
+    sample = df[
+        (df['TICKER'] == sample_ticker) & 
+        (df['YEARREPORT'] == sample_year) & 
+        (df['LENGTHREPORT'] == sample_quarter) &
+        (df['STATEMENT_TYPE'] == 'CALC')
+    ].sort_values('METRIC_CODE')
+    
+    if len(sample) == 0:
+        print(f"No calculated metrics found for {sample_ticker} {sample_year} Q{sample_quarter}")
+        return
+    
+    print(f"{'Metric Code':<25} {'Metric Name':<35} {'Value':<15}")
+    print("-" * 75)
+    
+    for _, row in sample.iterrows():
+        metric_code = row['METRIC_CODE']
+        metric_name = str(row['KEYCODE_NAME'])[:34]
+        value = row['VALUE']
+        
+        if abs(value) >= 1_000_000_000:
+            value_str = f"{value/1_000_000_000:.1f}B"
+        elif abs(value) >= 1_000_000:
+            value_str = f"{value/1_000_000:.1f}M"
+        elif abs(value) >= 1_000:
+            value_str = f"{value/1_000:.1f}K"
+        else:
+            value_str = f"{value:.0f}"
+        
+        print(f"{metric_code:<25} {metric_name:<35} {value_str:<15}")
+
+def display_summary_statistics(df):
+    """Display summary statistics including calculated metrics"""
+    print("\n" + "="*80)
+    print("UPDATED COMBINED FINANCIAL DATA SUMMARY")
+    print("="*80)
+    
+    print(f"Total records: {len(df):,}")
+    print(f"Total tickers: {df['TICKER'].nunique()}")
+    print(f"Year range: {df['YEARREPORT'].min()} - {df['YEARREPORT'].max()}")
+    
+    print("\nRecords by Statement Type:")
+    statement_counts = df['STATEMENT_TYPE'].value_counts()
+    for stmt_type, count in statement_counts.items():
+        print(f"  {stmt_type}: {count:,} records")
+    
+    # Show calculated metrics breakdown
+    calc_metrics = df[df['STATEMENT_TYPE'] == 'CALC']
+    if len(calc_metrics) > 0:
+        print(f"\nTop 10 Calculated Metrics:")
+        calc_counts = calc_metrics['KEYCODE_NAME'].value_counts().head(10)
+        for metric, count in calc_counts.items():
+            metric_name = metric[:50] + "..." if len(metric) > 50 else metric
+            print(f"  {metric_name}: {count:,} records")
+
+# Execute the calculation
+if __name__ == "__main__":
+    print("Starting optimized calculation of new financial metrics...")
+    print("="*70)
+    
+    # Load keycode mapping
+    keycode_map = load_keycode_mapping()
+    if not keycode_map:
+        print("ERROR: Could not load keycode mapping. Exiting.")
+        exit(1)
+    
+    # Load and process data
+    df = load_combined_data()
+    if df.empty:
+        print("No data to process.")
+        exit(1)
+    
+    # Create pivot table for faster processing
+    pivot_df = create_pivot_data(df)
+    
+    # Calculate metrics using vectorized operations with keycode mapping
+    calculated_metrics = calculate_financial_metrics_vectorized(pivot_df, keycode_map)
+    
+    if calculated_metrics:
+        # Append to combined file
+        updated_df = append_to_combined_file(calculated_metrics)
+        
+        # Display statistics and sample data
+        display_summary_statistics(updated_df)
+        display_sample_data(updated_df)
+        
+        print(f"\n" + "="*70)
+        print("SUCCESS! New financial metrics calculated and added to Combined_Financial_Data.csv")
+        print(f"Added {len(calculated_metrics):,} calculated metric records")
+        print("="*70)
+    else:
+        print("No metrics were calculated. Check data availability and formulas.")
