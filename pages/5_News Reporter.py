@@ -33,13 +33,20 @@ def fetch_news(tickers, domains=VN_SOURCES, recency="day", context_size="medium"
         "Content-Type": "application/json"
     }
 
+    # Build enhanced search terms with both tickers and company names
+    enhanced_search_terms = []
+    for ticker in tickers:
+        search_terms = get_search_terms(ticker)
+        enhanced_search_terms.append(search_terms)
+    
     # Build user prompt based on recency period
     if recency == "day":
         time_period = "2 ngày gần nhất"
         prompt = (
-            f"Tìm TẤT CẢ tin tức về các mã cổ phiếu sau trong {time_period}: {', '.join(tickers)}. "
-            f"CHỈ báo cáo tin tức có chứa tên mã cổ phiếu cụ thể. KHÔNG báo cáo tin tức chung về thị trường."
-            f"Nếu mã cổ phiếu không có tin tức, bỏ qua mã cổ phiếu."
+            f"Tìm TẤT CẢ tin tức về các công ty sau trong {time_period}: {', '.join(enhanced_search_terms)}. "
+            f"Tìm kiếm cả MÃ CỔ PHIẾU và TÊN CÔNG TY để có kết quả chính xác nhất. "
+            f"CHỈ báo cáo tin tức có chứa tên mã cổ phiếu hoặc tên công ty cụ thể. KHÔNG báo cáo tin tức chung về thị trường."
+            f"Nếu không tìm thấy tin tức về công ty nào, bỏ qua công ty đó."
             f"Định dạng: Mỗi tin tức là MỘT DÒNG RIÊNG, bắt đầu bằng **MÃ CỔ PHIẾU**: theo sau là nội dung và nguồn."
             f"Tập trung vào: kết quả kinh doanh, thay đổi nhân sự, kế hoạch tăng vốn, thông báo quan trọng. "
             f"Trả lời bằng tiếng Việt."
@@ -47,8 +54,9 @@ def fetch_news(tickers, domains=VN_SOURCES, recency="day", context_size="medium"
     else:  # week or other periods
         time_period = "2 tuần gần nhất" if recency == "week" else "thời gian gần đây"
         prompt = (
-            f"Tìm TẤT CẢ tin tức về các mã cổ phiếu sau trong {time_period}: {', '.join(tickers)}. "
-            f"CHỈ báo cáo tin tức có chứa tên mã cổ phiếu cụ thể. KHÔNG báo cáo tin tức chung về thị trường."
+            f"Tìm TẤT CẢ tin tức về các công ty sau trong {time_period}: {', '.join(enhanced_search_terms)}. "
+            f"Tìm kiếm cả MÃ CỔ PHIẾU và TÊN CÔNG TY để có kết quả chính xác nhất. "
+            f"CHỈ báo cáo tin tức có chứa tên mã cổ phiếu hoặc tên công ty cụ thể. KHÔNG báo cáo tin tức chung về thị trường."
             f"Định dạng: **MÃ CỔ PHIẾU**: [Nội dung tin tức] - [Nguồn] "
             f"Tập trung vào: kết quả kinh doanh, thay đổi nhân sự, kế hoạch mới, biến động giá, tin ngành. "
             f"Trả lời bằng tiếng Việt."
@@ -136,6 +144,51 @@ OTHER_TICKERS = ["BSI", "FTS", "VIG", "CTS", "TCB", "VCB", "BID", "CTG", "MBB", 
                  "TPB", "STB", "ACB", "HDB", "MSB", "EIB", "VIB", "SHB", "OCB", "LPB", "NAB", "KLB", "BVB"]
 ALL_PREDEFINED_TICKERS = PRIORITY_TICKERS + OTHER_TICKERS
 
+# Ticker to Company Name Mapping for Enhanced Search Accuracy
+TICKER_TO_COMPANY = {
+    # Priority Brokerage Companies
+    "SSI": "SSI",
+    "VND": "VNDirect", 
+    "VCI": "Vietcap",
+    "HCM": "HSC",
+    "VIX": "VIX Securities",
+    "SHS": "Saigon Hanoi Securities",
+    "IPA": "I.P.A",
+    
+    # Other Brokerage Companies
+    "BSI": "BSI",
+    "FTS": "Chứng khoán FPT", 
+    "CTS": "Chứng khoán Công Thương",
+    
+    # Major Banks
+    "TCB": "Techcombank",
+    "VCB": "Vietcombank", 
+    "BID": "BIDV",
+    "CTG": "Vietinbank",
+    "MBB": "Ngân hàng Quân Đội",
+    "VPB": "VPBank",
+    "TPB": "Ngân hàng Tiên Phong",
+    "STB": "Sacombank",
+    "ACB": "Ngân hàng Á Châu",
+    "HDB": "HDBank",
+    "MSB": "Ngân hàng Maritime",
+    "EIB": "Eximbank",
+    "VIB": "VIB Bank",
+    "SHB": "SHB Bank", 
+    "OCB": "Ngân hàng Phương Đông",
+    "LPB": "Ngân hàng Lộc Phát",
+    "NAB": "Nam Á",
+    "KLB": "Ngân hàng Kiên Long",
+    "BVB": "Ngân hàng Bảo Việt"
+}
+
+def get_search_terms(ticker):
+    """Get both ticker and company name for enhanced search accuracy."""
+    company_name = TICKER_TO_COMPANY.get(ticker, "")
+    if company_name:
+        return f"{ticker} OR {company_name}"
+    return ticker
+
 # ------------- Streamlit UI ------------------
 
 st.set_page_config(page_title="📰 Vietnam Finance News Reporter", layout="wide")
@@ -222,7 +275,7 @@ if tickers_list:
             st.success(f"✅ Found news for: {', '.join(found_tickers)}")
         else:
             st.warning("⚠️ No specific ticker mentions found - results may be generic")
-        st.markdown(summary)
+        # News is already displayed directly in fetch_news() function
 
     # Show sources for custom tickers
     if sources:
