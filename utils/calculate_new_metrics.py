@@ -89,6 +89,10 @@ def calculate_financial_metrics_vectorized(pivot_df, keycode_map):
         if period_key in existing_periods:
             continue
         
+        # Skip Sector ticker - it will be calculated separately
+        if ticker == 'Sector':
+            continue
+        
         # Calculate metrics using the formulas from utils/data.py
         metrics_to_calculate = []
         
@@ -233,6 +237,56 @@ def calculate_financial_metrics_vectorized(pivot_df, keycode_map):
     print(f"Calculated {len(calculated_records):,} new metric records")
     return calculated_records
 
+def calculate_sector_metrics(calculated_records):
+    """
+    Calculate Sector metrics by summing individual broker calculated metrics for each period.
+    This ensures Sector calculated metrics follow the same logic as other Sector metrics.
+    """
+    print("Calculating Sector calculated metrics...")
+    
+    # Convert to DataFrame for easier processing
+    df = pd.DataFrame(calculated_records)
+    
+    if df.empty:
+        return calculated_records
+    
+    # Group by period and metric, then sum across all brokers (excluding any existing Sector records)
+    sector_aggregates = df[df['TICKER'] != 'Sector'].groupby([
+        'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'KEYCODE_NAME'
+    ]).agg({
+        'VALUE': 'sum',
+        'STARTDATE': 'first',  # Use first occurrence
+        'ENDDATE': 'first',    # Use first occurrence
+        'NOTE': 'first',       # Use first occurrence
+        'QUARTER_LABEL': 'first'  # Use first occurrence
+    }).reset_index()
+    
+    sector_records = []
+    
+    for _, row in sector_aggregates.iterrows():
+        sector_record = {
+            'TICKER': 'Sector',
+            'YEARREPORT': row['YEARREPORT'],
+            'LENGTHREPORT': row['LENGTHREPORT'],
+            'STARTDATE': row['STARTDATE'],
+            'ENDDATE': row['ENDDATE'],
+            'NOTE': 'Sum of all brokers - calculated metrics',
+            'STATEMENT_TYPE': 'CALC',
+            'METRIC_CODE': row['METRIC_CODE'],
+            'VALUE': float(row['VALUE']),
+            'KEYCODE': row['METRIC_CODE'],
+            'KEYCODE_NAME': row['KEYCODE_NAME'],
+            'QUARTER_LABEL': row['QUARTER_LABEL']
+        }
+        sector_records.append(sector_record)
+    
+    print(f"Calculated {len(sector_records):,} Sector calculated metric records")
+    
+    # Add sector records to the original list
+    calculated_records.extend(sector_records)
+    
+    return calculated_records
+
 def append_to_combined_file(calculated_metrics):
     """Append calculated metrics to the Combined_Financial_Data.csv file."""
     if not calculated_metrics:
@@ -344,6 +398,9 @@ if __name__ == "__main__":
     
     # Calculate metrics using vectorized operations with keycode mapping
     calculated_metrics = calculate_financial_metrics_vectorized(pivot_df, keycode_map)
+    
+    # Calculate Sector metrics by summing individual broker metrics
+    calculated_metrics = calculate_sector_metrics(calculated_metrics)
     
     if calculated_metrics:
         # Append to combined file
