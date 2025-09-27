@@ -73,29 +73,26 @@ def fetch_news(tickers, domains=VN_SOURCES, recency="day", context_size="medium"
         time_period = "2 tuần gần nhất" if recency == "week" else "thời gian gần đây"
 
         prompt = (
-            f"Tìm TẤT CẢ tin tức về các công ty sau trong {time_period}: {', '.join(tickers)}. "
-            f"Tìm kiếm cả MÃ CỔ PHIẾU và TÊN CÔNG TY để có kết quả chính xác nhất. "
-            f"CHỈ báo cáo tin tức có chứa tên mã cổ phiếu hoặc tên công ty cụ thể. "
-            f"TUYỆT ĐỐI BỎ QUA các tin tức không liên quan đến chủ đề cụ thể sau: "
-            f"- biến động giá cổ phiếu (tăng, giảm, % thay đổi, mức giá, vốn hóa), "
-            f"- giao dịch khối ngoại, tự doanh, dòng tiền, khối lượng giao dịch, "
-            f"- phân tích kỹ thuật, khuyến nghị đầu tư, tâm lý thị trường, "
-            f"- các hoạt động PR, marketing, sự kiện triển lãm, hội chợ, tài trợ, giải thưởng, CSR, "
-            f"- các chủ đề xã hội, chính trị, kinh tế vĩ mô không liên quan trực tiếp đến công ty, "
-            f"- tin tức về ngành nghề nói chung mà không nêu tên công ty cụ thể. "
-            f"ƯU TIÊN VÀ BẮT BUỘC GIỮ LẠI các tin tức quan trọng về: "
-            f"- kết quả kinh doanh (doanh thu, lợi nhuận, báo cáo tài chính, kết quả quý/năm), "
-            f"- thay đổi nhân sự cấp cao (bổ nhiệm, từ nhiệm, thay thế CEO/lãnh đạo), "
-            f"- tất cả hoạt động tăng vốn: phát hành cổ phiếu riêng lẻ, chào bán cổ phiếu cho cổ đông hiện hữu, IPO, "
-            f"- phát hành trái phiếu, huy động vốn, tăng vốn điều lệ, "
-            f"- hoạt động M&A (sáp nhập, mua bán, đầu tư chiến lược), "
-            f"- dự án đầu tư lớn, mở rộng kinh doanh, thành lập công ty con, "
-            f"- hợp tác chiến lược, ký kết hợp đồng lớn, "
-            f"- vướng mắc pháp lý, xử phạt, điều tra của cơ quan quản lý, "
-            f"- thông báo từ ĐHCĐ, quyết định của HĐQT, nghị quyết quan trọng. "
-            f"QUAN TRỌNG: KHÔNG BỎ SỐT bất kỳ tin tức nào về 'chào bán cổ phiếu riêng lẻ', 'private placement', 'tăng vốn', 'huy động vốn'. "
-            f"Nếu không tìm thấy tin tức phù hợp cho công ty nào, bỏ qua công ty đó. "
-            f"Định dạng: Mỗi tin tức là MỘT DÒNG RIÊNG, bắt đầu bằng **MÃ CỔ PHIẾU**: theo sau là nội dung và nguồn. "
+            f"Tìm tất cả tin tức về các công ty sau trong {time_period}: {', '.join(tickers)}.\n\n"
+            f"YÊU CẦU BẮT BUỘC:\n"
+            f"- Chỉ sử dụng nội dung xuất hiện trực tiếp trong search_results.\n"
+            f"- KHÔNG được tự viết lại, suy đoán, hoặc tổng hợp từ trí nhớ.\n"
+            f"- Nếu không tìm thấy tin tức phù hợp trong search_results cho một công ty, bỏ qua công ty đó.\n\n"
+            f"CHỈ BÁO CÁO các loại tin tức sau:\n"
+            f"- Kết quả kinh doanh (doanh thu, lợi nhuận, báo cáo tài chính).\n"
+            f"- Thay đổi nhân sự cấp cao (CEO, Chủ tịch, thành viên HĐQT).\n"
+            f"- Tăng vốn: phát hành cổ phiếu, trái phiếu, IPO, private placement.\n"
+            f"- Hoạt động M&A, đầu tư chiến lược, dự án lớn, hợp tác quan trọng.\n"
+            f"- Thông báo từ ĐHCĐ, HĐQT, cơ quan quản lý.\n\n"
+            f"TUYỆT ĐỐI BỎ QUA:\n"
+            f"- Biến động giá cổ phiếu, giao dịch khối ngoại, khuyến nghị đầu tư.\n"
+            f"- Các thông tin ngành chung không nhắc đến công ty.\n"
+            f"- PR, CSR, sự kiện triển lãm, giải thưởng.\n\n"
+            f"Định dạng bắt buộc:\n"
+            f"- Mỗi tin tức một dòng.\n"
+            f"- Bắt đầu bằng **MÃ CỔ PHIẾU**: rồi nội dung tin tức.\n"
+            f"- LUÔN kết thúc bằng đường link trực tiếp (URL) từ search_results.\n"
+            f"- Nếu không có tin nào, KHÔNG VIẾT GÌ.\n\n"
             f"Trả lời bằng tiếng Việt."
         )
 
@@ -112,13 +109,6 @@ def fetch_news(tickers, domains=VN_SOURCES, recency="day", context_size="medium"
         "model": "sonar-pro",
         "messages": [
             {"role": "system", "content": "Bạn là phóng viên tài chính chuyên nghiệp."
-             "QUY TẮC NGHIÊM NGẶT: "
-             "1. MỖI TIN TỨC CHỈ ĐƯỢC HIỂN THỊ MỘT LẦN với MỘT URL duy nhất"
-             "2. MỖI URL chỉ được sử dụng cho MỘT MÃ CỔ PHIẾU duy nhất - ticker chính được đề cập trong bài báo"
-             "3. KHÔNG lặp lại cùng một tin tức cho nhiều mã cổ phiếu khác nhau"
-             "4. CHỈ gán URL cho mã cổ phiếu được ĐỀ CẬP CHÍNH trong tiêu đề hoặc nội dung chính của bài báo"
-             "5. Nếu bài báo đề cập nhiều mã, chỉ chọn MÃ CHÍNH làm chủ đề chính của bài báo"
-             ""
              "Chỉ báo cáo tin tức NẾU VÀ CHỈ NẾU tìm thấy bài báo hoặc thông báo gốc trong search_results. " 
              "Chỉ báo cáo tin tức LIÊN QUAN TRỰC TIẾP đến các mã cổ phiếu hoặc công ty được yêu cầu."
              "TUYỆT ĐỐI KHÔNG được tự suy đoán hoặc tạo ra tin tức. "
@@ -127,16 +117,15 @@ def fetch_news(tickers, domains=VN_SOURCES, recency="day", context_size="medium"
              "- Kết quả kinh doanh, báo cáo tài chính, thông báo từ ĐHCĐ và HĐQT"
              "- Thay đổi nhân sự, M&A, đầu tư chiến lược"
              "Luôn ghi rõ mã cổ phiếu ở đầu mỗi tin tức và ngày đăng bài báo ở cuối mỗi tin tức nếu có. "
-             "ĐỊNH DẠNG CHÍNH XÁC: **MÃ_CỔ_PHIẾU**: [nội dung tin tức] [URL_CỤ_THỂ] (ngày/tháng/năm)"
-             "VÍ DỤ: **VPB**: VPBank hoàn tất thủ tục tham gia sàn giao dịch tài sản mã hóa. https://cafef.vn/vpbank-san-giao-dich-tai-san-ma-hoa-188250911083122613.chn (11/09/2025)"},
+             "Trả về kết quả ổn định và đáng tin cậy, KHÔNG BỎ SÓT tin tức quan trọng."
+             "Rất quan trọng: chỉ liệt kê NGUỒN nào đã được sử dụng trực tiếp để viết tin tức trong phần trả lời. "
+             "KHÔNG hiển thị nguồn không liên quan, không khớp với mã cổ phiếu."},
             {"role": "user", "content": prompt}
         ],
         "search_recency_filter": recency,  # "day", "week", "month"
         "search_domain_filter": domains,   # restrict to VN finance websites
         "web_search_options": {"search_context_size": "high"},  # Increased for more comprehensive results
         "return_related_questions": False,
-        "return_citations": True,
-        "return_sources": True,
         "temperature": 0.1  # Lower temperature for more consistent results
     }
 
@@ -147,7 +136,6 @@ def fetch_news(tickers, domains=VN_SOURCES, recency="day", context_size="medium"
 
         summary = data["choices"][0]["message"]["content"]
         sources = data.get("search_results", [])
-        citations = data.get("citations", [])
         
         # Simpler filtering - only remove obvious "no news" lines, keep more content
         lines = summary.split('\n')
@@ -189,10 +177,10 @@ def fetch_news(tickers, domains=VN_SOURCES, recency="day", context_size="medium"
         # Clean up any double line breaks at the beginning
         formatted_summary = formatted_summary.strip()
         
-        return formatted_summary, sources, found_tickers, citations
+        return formatted_summary, sources, found_tickers
     except Exception as e:
         st.error(f"API error: {e}")
-        return None, None, [], []
+        return None, None, []
 
 # Priority tickers for brokerage and banking industry (in priority order)
 PRIORITY_TICKERS = ["SSI", "VND", "VCI", "HCM", "VIX", "SHS", "IPA"]
@@ -261,14 +249,13 @@ def fetch_news_batches(all_tickers, batch_size=5, recency="day", domains=VN_SOUR
     all_summaries = []
     all_sources = []
     all_found_tickers = []
-    all_citations = []
     
     # Split tickers into batches
     batches = [all_tickers[i:i + batch_size] for i in range(0, len(all_tickers), batch_size)]
     
     for i, batch in enumerate(batches):
         # Silently process batch without showing progress
-        summary, sources, found_tickers, citations = fetch_news(batch, recency=recency, domains=domains)
+        summary, sources, found_tickers = fetch_news(batch, recency=recency, domains=domains)
         
         if summary and summary != "Không có tin tức mới trong khoảng thời gian được yêu cầu.":
             all_summaries.append(summary)
@@ -278,28 +265,25 @@ def fetch_news_batches(all_tickers, batch_size=5, recency="day", domains=VN_SOUR
             
         if found_tickers:
             all_found_tickers.extend([t for t in found_tickers if t not in all_found_tickers])
-            
-        if citations:
-            all_citations.extend(citations)
     
     # Merge all summaries
     merged_summary = '\n\n'.join(all_summaries) if all_summaries else None
     
-    return merged_summary, all_sources, all_found_tickers, all_citations
+    return merged_summary, all_sources, all_found_tickers
 
 def fetch_news_with_fallback(tickers, batch_size=5, domains=VN_SOURCES):
     """Fetch news with fallback from 'day' to 'week' if no results found."""
     
     # Try 'day' first - silently
-    summary, sources, found_tickers, citations = fetch_news_batches(tickers, batch_size, recency="day", domains=domains)
+    summary, sources, found_tickers = fetch_news_batches(tickers, batch_size, recency="day", domains=domains)
     
     if summary and len(summary.strip()) > 50:  # Has meaningful content
-        return summary, sources, found_tickers, citations, "day"
+        return summary, sources, found_tickers, "day"
     
     # Fallback to 'week' if day search was empty or minimal - silently
-    summary, sources, found_tickers, citations = fetch_news_batches(tickers, batch_size, recency="week", domains=domains)
+    summary, sources, found_tickers = fetch_news_batches(tickers, batch_size, recency="week", domains=domains)
     
-    return summary, sources, found_tickers, citations, "week"
+    return summary, sources, found_tickers, "week"
 
 def extract_urls_from_text(text):
     """Extract URLs from text content."""
@@ -391,41 +375,6 @@ def filter_sources_by_displayed_urls(sources, displayed_urls):
 # ------------- Streamlit UI ------------------
 
 st.set_page_config(page_title="📰 Vietnam Finance News Reporter", layout="wide")
-
-# Custom CSS for sidebar navigation font size
-FONT_SIZE = "18px"        # Font size - change as needed
-
-st.markdown(f"""
-<style>
-/* Increase font size for sidebar navigation links */
-[data-testid="stSidebar"] [data-testid="stSidebarNav"] ul li a {{
-    font-size: {FONT_SIZE} !important;
-    font-weight: 500 !important;
-}}
-
-/* Alternative selectors for different Streamlit versions */
-.css-1d391kg .css-wjbhl0 {{
-    font-size: {FONT_SIZE} !important;
-    font-weight: 500 !important;
-}}
-
-.css-1d391kg a {{
-    font-size: {FONT_SIZE} !important;
-    font-weight: 500 !important;
-}}
-
-[data-testid="stSidebar"] .css-1d391kg > div {{
-    font-size: {FONT_SIZE} !important;
-    font-weight: 500 !important;
-}}
-
-/* Ensure font size applies to all navigation elements */
-[data-testid="stSidebar"] * {{
-    font-size: {FONT_SIZE} !important;
-}}
-</style>
-""", unsafe_allow_html=True)
-
 st.title("📰 News Reporter")
 
 # Initialize session state for news
@@ -453,7 +402,7 @@ with col1:
 if load_banking_news:
     with st.spinner("Fetching banking & brokerage news..."):
         # Use new batch approach with fallback
-        predefined_summary, predefined_sources, found_tickers, citations, used_recency = fetch_news_with_fallback(
+        predefined_summary, predefined_sources, found_tickers, used_recency = fetch_news_with_fallback(
             ALL_PREDEFINED_TICKERS, 
             batch_size=5
         )
@@ -520,7 +469,7 @@ def get_fresh_news(tickers):
 # Custom ticker news search (only show when user enters tickers)
 if tickers_list:
     # Always get fresh news for custom tickers using 2-week period
-    summary, sources, found_tickers, citations = fetch_news(tickers_list, recency="week")
+    summary, sources, found_tickers = fetch_news(tickers_list, recency="week")
     
     # Display validated news content
     if summary:
