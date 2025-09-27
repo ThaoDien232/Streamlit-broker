@@ -3,6 +3,40 @@ import toml
 import requests
 import pandas as pd
 import plotly.express as px
+
+# Custom CSS for sidebar navigation font size
+FONT_SIZE = "18px"        # Font size - change as needed
+
+st.markdown(f"""
+<style>
+/* Increase font size for sidebar navigation links */
+[data-testid="stSidebar"] [data-testid="stSidebarNav"] ul li a {{
+    font-size: {FONT_SIZE} !important;
+    font-weight: 500 !important;
+}}
+
+/* Alternative selectors for different Streamlit versions */
+.css-1d391kg .css-wjbhl0 {{
+    font-size: {FONT_SIZE} !important;
+    font-weight: 500 !important;
+}}
+
+.css-1d391kg a {{
+    font-size: {FONT_SIZE} !important;
+    font-weight: 500 !important;
+}}
+
+[data-testid="stSidebar"] .css-1d391kg > div {{
+    font-size: {FONT_SIZE} !important;
+    font-weight: 500 !important;
+}}
+
+/* Ensure font size applies to all navigation elements */
+[data-testid="stSidebar"] * {{
+    font-size: {FONT_SIZE} !important;
+}}
+</style>
+""", unsafe_allow_html=True)
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -91,7 +125,10 @@ def get_metric_display_name(metric_code):
         'BORROWING_BALANCE': 'Borrowing Balance',
         'PBT': 'Profit Before Tax',
         'NPAT': 'Net Profit After Tax',
-        'SGA': 'SG&A Expenses'
+        'SGA': 'SG&A Expenses',
+        'NET_MARGIN_INCOME': 'Net Margin Income',
+        'ROE': 'Return on Equity (ROE)',
+        'ROA': 'Return on Assets (ROA)'
     }
     return metric_names.get(metric_code, metric_code)
 
@@ -156,7 +193,10 @@ else:
         'BORROWING_BALANCE',
         'PBT',
         'NPAT',
-        'SGA'
+        'SGA',
+        'NET_MARGIN_INCOME',
+        'ROE',
+        'ROA'
     ]
 
     # Filter available metrics to only those that exist in data
@@ -254,8 +294,23 @@ with tab1:
                                 broker_data = metric_data[metric_data['TICKER'] == broker].copy()
                                 
                                 if not broker_data.empty:
-                                    # Convert values to billions for display
-                                    broker_data['VALUE_BILLIONS'] = pd.to_numeric(broker_data['VALUE'], errors='coerce') / 1_000_000_000
+                                    # Check if this is ROE or ROA (percentage metrics)
+                                    if metric in ['ROE', 'ROA']:
+                                        # For ROE/ROA, multiply by 100 to convert to percentage
+                                        broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce') * 100
+                                        
+                                        # Annualize quarterly values by multiplying by 4
+                                        # Only annualize if it's quarterly data (LENGTHREPORT != 5)
+                                        quarterly_mask = broker_data['LENGTHREPORT'] != 5
+                                        broker_data.loc[quarterly_mask, 'DISPLAY_VALUE'] *= 4
+                                        
+                                        y_values = broker_data['DISPLAY_VALUE']
+                                        hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}}%<br><extra></extra>"
+                                    else:
+                                        # Convert other values to billions for display
+                                        broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce') / 1_000_000_000
+                                        y_values = broker_data['DISPLAY_VALUE']
+                                        hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.3f}}B VND<br><extra></extra>"
                                     
                                     # Sort by period to ensure consistent ordering
                                     broker_data = broker_data.sort_values(['YEARREPORT', 'LENGTHREPORT'])
@@ -263,19 +318,27 @@ with tab1:
                                     fig.add_trace(
                                         go.Bar(
                                             x=broker_data['Quarter_Label'],
-                                            y=broker_data['VALUE_BILLIONS'],
+                                            y=y_values,
                                             name=broker,
                                             marker_color=colors[j % len(colors)],
-                                            hovertemplate=f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.3f}}B VND<br><extra></extra>"
+                                            hovertemplate=hover_template
                                         )
                                     )
+                            
+                            # Set y-axis title and format based on metric type
+                            if metric in ['ROE', 'ROA']:
+                                yaxis_title = "Percentage (%)"
+                                tick_format = ".2f"
+                            else:
+                                yaxis_title = "Value (Billions VND)"
+                                tick_format = ".0f"
                             
                             # Update layout
                             fig.update_layout(
                                 height=400,
                                 title=f"{get_metric_display_name(metric)} - {timeframe_type} Comparison",
                                 xaxis_title="Period",
-                                yaxis_title="Value (Billions VND)",
+                                yaxis_title=yaxis_title,
                                 hovermode='x unified',
                                 showlegend=True,
                                 legend=dict(
@@ -287,7 +350,7 @@ with tab1:
                                 ),
                                 barmode='group'
                             )
-                            fig.update_yaxes(tickformat=".0f")
+                            fig.update_yaxes(tickformat=tick_format)
                             st.plotly_chart(fig, use_container_width=True)
                         else:
                             st.warning(f"No data available for {get_metric_display_name(metric)} with current filters.")

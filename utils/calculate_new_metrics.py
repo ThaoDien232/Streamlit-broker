@@ -80,8 +80,8 @@ def calculate_financial_metrics_vectorized(pivot_df, keycode_map):
         ticker = row['TICKER']
         year = row['YEARREPORT']
         quarter = row['LENGTHREPORT']
-        start_date = row['STARTDATE'] if pd.notna(row['STARTDATE']) else ''
-        end_date = row['ENDDATE'] if pd.notna(row['ENDDATE']) else ''
+        start_date = row['STARTDATE'] if pd.notna(row['STARTDATE']) and row['STARTDATE'] != '' else ''
+        end_date = row['ENDDATE'] if pd.notna(row['ENDDATE']) and row['ENDDATE'] != '' else ''
         quarter_label = f'Q{quarter}' if quarter in [1,2,3,4] else 'Annual'
         
         # Skip if this period already has calculated metrics
@@ -217,6 +217,30 @@ def calculate_financial_metrics_vectorized(pivot_df, keycode_map):
         if margin_balance != 0:
             metrics_to_calculate.append(('MARGIN_BALANCE', 'Margin Balance', margin_balance))
         
+        # 22. Total Assets - Formula from IRIS_KEYCODE: BS.92
+        total_assets = get_col('BS.92').iloc[idx]
+        if total_assets != 0:
+            metrics_to_calculate.append(('TOTAL_ASSETS', 'Total Assets', total_assets))
+        
+        # 23. Total Equity - Formula from IRIS_KEYCODE: BS.142
+        total_equity = get_col('BS.142').iloc[idx]
+        if total_equity != 0:
+            metrics_to_calculate.append(('TOTAL_EQUITY', 'Total Equity', total_equity))
+        
+        # 24. Net Margin Income with 10% provision rule
+        # Components: Income from loans and receivables (IS.6) + Provision for losses (IS.30)
+        loans_income = get_col('IS.6').iloc[idx]
+        provision_losses = get_col('IS.30').iloc[idx]
+        
+        # Apply 10% rule: If provision/loans > 10%, use loans income only
+        if loans_income != 0 and abs(provision_losses / loans_income) > 0.1:
+            net_margin_income = loans_income  # Use loans income only
+        else:
+            net_margin_income = loans_income + provision_losses  # Use both
+            
+        if net_margin_income != 0 or loans_income != 0:
+            metrics_to_calculate.append(('NET_MARGIN_INCOME', 'Net Margin Income', net_margin_income))
+        
         # Add all calculated metrics for this period
         for metric_code, metric_name, value in metrics_to_calculate:
             calculated_records.append({
@@ -286,6 +310,102 @@ def calculate_sector_metrics(calculated_records):
     calculated_records.extend(sector_records)
     
     return calculated_records
+
+def calculate_ratios(calculated_metrics):
+    """
+    Calculate ROE and ROA ratios that require previous period data.
+    """
+    print("Calculating ROE and ROA ratios...")
+    
+    # Convert to DataFrame for easier processing
+    df = pd.DataFrame(calculated_metrics)
+    
+    if df.empty:
+        return calculated_metrics
+    
+    ratio_records = []
+    
+    # Group by ticker for ratio calculations
+    for ticker in df['TICKER'].unique():
+        ticker_data = df[df['TICKER'] == ticker].sort_values(['YEARREPORT', 'LENGTHREPORT'])
+        
+        # Get NPAT, Total Equity, and Total Assets by period
+        npat_data = {}
+        equity_data = {}
+        assets_data = {}
+        
+        for _, row in ticker_data.iterrows():
+            key = (row['YEARREPORT'], row['LENGTHREPORT'])
+            
+            if row['METRIC_CODE'] == 'NPAT':
+                npat_data[key] = row['VALUE']
+            elif row['METRIC_CODE'] == 'TOTAL_EQUITY':
+                equity_data[key] = row['VALUE']
+            elif row['METRIC_CODE'] == 'TOTAL_ASSETS':
+                assets_data[key] = row['VALUE']
+        
+        # Calculate ROE and ROA for each period
+        periods = sorted(set(npat_data.keys()) | set(equity_data.keys()) | set(assets_data.keys()))
+        
+        for i, period in enumerate(periods):
+            year, quarter = period
+            npat = npat_data.get(period, 0)
+            current_equity = equity_data.get(period, 0)
+            current_assets = assets_data.get(period, 0)
+            
+            # Get previous period data
+            if i > 0:
+                prev_period = periods[i-1]
+                prev_equity = equity_data.get(prev_period, current_equity)
+                prev_assets = assets_data.get(prev_period, current_assets)
+            else:
+                prev_equity = current_equity
+                prev_assets = current_assets
+            
+            # Calculate ROE
+            avg_equity = (current_equity + prev_equity) / 2 if prev_equity > 0 else current_equity
+            if avg_equity > 0 and npat != 0:
+                roe = npat / avg_equity
+                ratio_records.append({
+                    'TICKER': ticker,
+                    'YEARREPORT': year,
+                    'LENGTHREPORT': quarter,
+                    'STARTDATE': '',
+                    'ENDDATE': '',
+                    'NOTE': 'Calculated from utils/data.py formulas',
+                    'STATEMENT_TYPE': 'CALC',
+                    'METRIC_CODE': 'ROE',
+                    'VALUE': float(roe),
+                    'KEYCODE': 'ROE',
+                    'KEYCODE_NAME': 'ROE',
+                    'QUARTER_LABEL': f'Q{quarter}' if quarter in [1,2,3,4] else 'Annual'
+                })
+            
+            # Calculate ROA
+            avg_assets = (current_assets + prev_assets) / 2 if prev_assets > 0 else current_assets
+            if avg_assets > 0 and npat != 0:
+                roa = npat / avg_assets
+                ratio_records.append({
+                    'TICKER': ticker,
+                    'YEARREPORT': year,
+                    'LENGTHREPORT': quarter,
+                    'STARTDATE': '',
+                    'ENDDATE': '',
+                    'NOTE': 'Calculated from utils/data.py formulas',
+                    'STATEMENT_TYPE': 'CALC',
+                    'METRIC_CODE': 'ROA',
+                    'VALUE': float(roa),
+                    'KEYCODE': 'ROA',
+                    'KEYCODE_NAME': 'ROA',
+                    'QUARTER_LABEL': f'Q{quarter}' if quarter in [1,2,3,4] else 'Annual'
+                })
+    
+    print(f"Calculated {len(ratio_records):,} ratio records (ROE/ROA)")
+    
+    # Add ratio records to the original list
+    calculated_metrics.extend(ratio_records)
+    
+    return calculated_metrics
 
 def append_to_combined_file(calculated_metrics):
     """Append calculated metrics to the Combined_Financial_Data.csv file."""
@@ -401,6 +521,9 @@ if __name__ == "__main__":
     
     # Calculate Sector metrics by summing individual broker metrics
     calculated_metrics = calculate_sector_metrics(calculated_metrics)
+    
+    # Calculate ROE and ROA ratios
+    calculated_metrics = calculate_ratios(calculated_metrics)
     
     if calculated_metrics:
         # Append to combined file

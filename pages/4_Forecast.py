@@ -1,6 +1,40 @@
 import streamlit as st
 import toml
 
+# Custom CSS for sidebar navigation font size
+FONT_SIZE = "18px"        # Font size - change as needed
+
+st.markdown(f"""
+<style>
+/* Increase font size for sidebar navigation links */
+[data-testid="stSidebar"] [data-testid="stSidebarNav"] ul li a {{
+    font-size: {FONT_SIZE} !important;
+    font-weight: 500 !important;
+}}
+
+/* Alternative selectors for different Streamlit versions */
+.css-1d391kg .css-wjbhl0 {{
+    font-size: {FONT_SIZE} !important;
+    font-weight: 500 !important;
+}}
+
+.css-1d391kg a {{
+    font-size: {FONT_SIZE} !important;
+    font-weight: 500 !important;
+}}
+
+[data-testid="stSidebar"] .css-1d391kg > div {{
+    font-size: {FONT_SIZE} !important;
+    font-weight: 500 !important;
+}}
+
+/* Ensure font size applies to all navigation elements */
+[data-testid="stSidebar"] * {{
+    font-size: {FONT_SIZE} !important;
+}}
+</style>
+""", unsafe_allow_html=True)
+
 # Load theme from config.toml
 theme_config = toml.load("utils/config.toml")
 theme = theme_config["theme"]
@@ -47,6 +81,8 @@ df_index, df_bs, df_is, df_note, df_forecast, df_turnover = load_data()
 
 from datetime import datetime
 current_year = datetime.now().year
+forecast_year = current_year  # Current year for forecast (e.g., 2025)
+following_year = current_year + 1  # Following year (e.g., 2026)
 
 def split_historical_forecast(df, year_col='Year', current_year=current_year):
     historical = df[df[year_col] < current_year]
@@ -71,21 +107,21 @@ if not df_index.empty:
         index=0
     )
     
-    # Add 2026 forecast button
-    show_2026 = st.sidebar.button("Include 2026 Forecast", key="include_2026")
+    # Add following year forecast button
+    show_following_year = st.sidebar.button(f"Include {following_year} Forecast", key=f"include_{following_year}")
     
-    # Store 2026 state in session state
-    if 'show_2026_forecast' not in st.session_state:
-        st.session_state.show_2026_forecast = False
+    # Store following year state in session state
+    if 'show_following_year_forecast' not in st.session_state:
+        st.session_state.show_following_year_forecast = False
     
-    if show_2026:
-        st.session_state.show_2026_forecast = not st.session_state.show_2026_forecast
+    if show_following_year:
+        st.session_state.show_following_year_forecast = not st.session_state.show_following_year_forecast
 
-    # Filter for selected broker and years 2020-2025/2026
-    max_year = 2026 if st.session_state.show_2026_forecast else 2025
-    df_broker_hist = df_forecast[(df_forecast['TICKER'] == selected_broker) & (df_forecast['DATE'] >= 2020) & (df_forecast['DATE'] < 2025)]
-    df_broker_forecast = df_forecast[(df_forecast['TICKER'] == selected_broker) & (df_forecast['DATE'] == 2025)]
-    df_broker_forecast_2026 = df_forecast[(df_forecast['TICKER'] == selected_broker) & (df_forecast['DATE'] == 2026)]
+    # Filter for selected broker and years 2020-forecast_year/following_year
+    max_year = following_year if st.session_state.show_following_year_forecast else forecast_year
+    df_broker_hist = df_forecast[(df_forecast['TICKER'] == selected_broker) & (df_forecast['DATE'] >= 2020) & (df_forecast['DATE'] < forecast_year)]
+    df_broker_forecast = df_forecast[(df_forecast['TICKER'] == selected_broker) & (df_forecast['DATE'] == forecast_year)]
+    df_broker_forecast_following = df_forecast[(df_forecast['TICKER'] == selected_broker) & (df_forecast['DATE'] == following_year)]
 
     # Example: Add your custom calculations below (filtered by selected broker)
 
@@ -129,59 +165,80 @@ if not df_index.empty:
     pbt = income_statement_items['pbt']
     NPAT = income_statement_items['NPAT']
     margin_balance = income_statement_items['margin_balance']
+    total_equity = income_statement_items['total_equity']
+    investment_asset_balance = income_statement_items['investment_asset_balance']
+    investment_return = income_statement_items['investment_return']
     # Add more custom calculations and manipulations as needed
 
     # Calculate average daily market turnover and trading days using the utility function
-    market_turnover_by_year, trading_days_2025 = calculate_market_turnover_and_trading_days(df_index, current_year=2024)
+    market_turnover_by_year, trading_days_forecast = calculate_market_turnover_and_trading_days(df_index, current_year=forecast_year-1)
 
-    # Calculate defaults: market share from 2024 actual, others from 2025 forecast
+    # Calculate defaults: market share from previous year actual, others from current year forecast
     def get_forecast_value(keycodename):
         d = df_broker_forecast[df_broker_forecast['KEYCODENAME'] == keycodename]
         return d['VALUE'].sum() if not d.empty else 0
     
-    # Market share from 2024 actual data
-    turnover_2024 = df_turnover[(df_turnover['Year'] == 2024) & (df_turnover['Ticker'] == selected_broker)]
-    market_share_2024_default = (turnover_2024['Company turnover'].iloc[0] / turnover_2024['Market turnover'].iloc[0] / 2) * 100
+    # Market share from previous year actual data
+    turnover_prev_year = df_turnover[(df_turnover['Year'] == forecast_year-1) & (df_turnover['Ticker'] == selected_broker)]
+    market_share_prev_year_default = (turnover_prev_year['Company turnover'].iloc[0] / turnover_prev_year['Market turnover'].iloc[0] / 2) * 100 if not turnover_prev_year.empty else 5.0
     
-    # Others from 2025 forecast
-    market_turnover_daily_2024_default = market_turnover_by_year[market_turnover_by_year['Year'] == 2024]['avg_daily_turnover'].iloc[0] / 1e9
-    net_fee_2024_default = net_brokerage[net_brokerage['Year'] == 2024]['Net Brokerage Income'].iloc[0] / (turnover_2024['Company turnover'].iloc[0] * 1e9)
-    margin_2024_default = get_forecast_value('Margin lending book') / 1e9
+    # Others from current year forecast
+    # Set baseline market turnover to 30,000 as default
+    market_turnover_daily_prev_year_default = 30000.0
+    net_fee_prev_year_default = net_brokerage[net_brokerage['Year'] == forecast_year-1]['Net Brokerage Income'].iloc[0] / (turnover_prev_year['Company turnover'].iloc[0] * 1e9) if not net_brokerage[net_brokerage['Year'] == forecast_year-1].empty and not turnover_prev_year.empty else 0.02
+    margin_prev_year_default = get_forecast_value('Margin lending book') / 1e9
+    # Use baseline 2025 forecast for equity default instead of previous year
+    equity_baseline_2025_default = get_forecast_value("Owner's equity") / 1e9
+    equity_prev_year_default = equity_baseline_2025_default if equity_baseline_2025_default > 0 else (total_equity[total_equity['Year'] == forecast_year-1]['Total Equity'].iloc[0] / 1e9 if not total_equity[total_equity['Year'] == forecast_year-1].empty else 0)
     
-    # CIR calculation with safety check - use baseline forecast for 2025 default
+    # CIR calculation with safety check - use baseline forecast for current year default
     sga_value = abs(get_forecast_value('SG&A'))
     total_op_income = get_forecast_value('Total Operating Income')
     net_inv_income = get_forecast_value('Net Investment Income')
     denominator = total_op_income - net_inv_income
-    cir_2025_default = sga_value / denominator if denominator > 0 else 0.0
+    cir_forecast_year_default = sga_value / denominator if denominator > 0 else 0.0
     
     # For display purposes, convert to percentage
-    cir_2025_default_percent = cir_2025_default * 100
+    cir_forecast_year_default_percent = cir_forecast_year_default * 100
 
     # Initialize default values (will be updated by controls in respective segments)
-    market_share_adj = market_share_2024_default
-    market_turnover_daily_adj = market_turnover_daily_2024_default
-    net_fee_adj = net_fee_2024_default * 100
-    margin_adj = margin_2024_default
-    cir_adj = cir_2025_default_percent
+    market_share_adj = market_share_prev_year_default
+    market_turnover_daily_adj = market_turnover_daily_prev_year_default
+    net_fee_adj = net_fee_prev_year_default * 100
+    margin_adj = margin_prev_year_default
+    cir_adj = cir_forecast_year_default_percent
     
-    # Initialize 2026 visibility state
-    show_2026 = False
+    # Get baseline forecast values for adjustment inputs
+    baseline_ib_income_2024 = ib_inc[ib_inc['Year'] == forecast_year-1]['Net IB Income'].iloc[0] if not ib_inc[ib_inc['Year'] == forecast_year-1].empty else 0
+    baseline_ib_income_2025 = get_forecast_value('Net IB Income')
+    baseline_ib_yoy_growth_default = ((baseline_ib_income_2025 - baseline_ib_income_2024) / baseline_ib_income_2024 * 100) if baseline_ib_income_2024 != 0 else 0.0
+    
+    # Get baseline investment return from forecast
+    baseline_investment_return_default = get_forecast_value('Investment yield')
+    
+    # Initialize input adjustment variables with baseline forecast values
+    ib_yoy_growth = baseline_ib_yoy_growth_default
+    ib_following_yoy_growth = 0.0
+    investment_return_adj = baseline_investment_return_default
+    investment_return_following_adj = 0.0
+    
+    # Initialize following year visibility state
+    show_following_year_initialized = False
 
-    # For 2025, use adjustment values to set market share and market turnover
-    market_share_2025 = market_share_adj / 100.0
-    market_turnover_2025 = market_turnover_daily_adj * trading_days_2025  # Convert from bn to actual value
-    company_turnover_2025 = market_share_2025 * market_turnover_2025 * 2
-    net_fee_2025 = net_fee_adj / 100.0  # Convert back to decimal for calculations
-    cir_2025 = cir_adj / 100.0
+    # For forecast year, use adjustment values to set market share and market turnover
+    market_share_forecast_year = market_share_adj / 100.0
+    market_turnover_forecast_year = market_turnover_daily_adj * trading_days_forecast  # Convert from bn to actual value
+    company_turnover_forecast_year = market_share_forecast_year * market_turnover_forecast_year * 2
+    net_fee_forecast_year = net_fee_adj / 100.0  # Convert back to decimal for calculations
+    cir_forecast_year = cir_adj / 100.0
     
-    # Initialize 2026 values with same defaults as 2025
-    market_share_2026 = market_share_2025
-    market_turnover_2026 = market_turnover_2025  # Same as 2025 by default
-    company_turnover_2026 = market_share_2026 * market_turnover_2026 * 2
-    net_fee_2026 = net_fee_2025
-    cir_2026 = cir_2025
-    margin_2026 = margin_adj
+    # Initialize following year values with same defaults as forecast year
+    market_share_following_year = market_share_forecast_year
+    market_turnover_following_year = market_turnover_forecast_year  # Same as forecast year by default
+    company_turnover_following_year = market_share_following_year * market_turnover_following_year * 2
+    net_fee_following_year = net_fee_forecast_year
+    cir_following_year = cir_forecast_year
+    margin_following_year = margin_adj
 
     # You can add more calculation functions below and use more sliders for other metrics
 
@@ -277,54 +334,70 @@ if not df_index.empty:
         'PBT': None,  # Will be calculated in the function
         'Tax expense': lambda d: d['Tax expense'].values[0] if 'Tax expense' in d.columns and not d.empty else (d.loc[d['KEYCODENAME'] == 'Tax expense', 'VALUE'].sum() if 'KEYCODENAME' in d.columns else 0),
         'NPAT': None, # Will be calculated in the function
+        'Total Equity': None, # Will be calculated in the function
+        'ROE': None, # Will be calculated in the function
+        'Investment Asset Balance': None, # Will be calculated in the function
+        'Investment Return %': None, # Will be calculated in the function
         # Add more items as needed
     }
 
     def get_value(df, year, col, keycodename=None):
         # For forecast years, use KEYCODENAME/VALUE from FORECAST.csv
-        if year in [2025, 2026] and keycodename is not None:
-            d = df[(df['DATE'] == year) & (df['KEYCODENAME'] == keycodename)]
+        if year in [forecast_year, following_year] and keycodename is not None:
+            d = df[(df['DATE'] == year) & (df['KEYCODENAME'] == keycodename) & (df['TICKER'] == selected_broker)]
             return d['VALUE'].sum() if not d.empty else 0
         else:
             d = df[df['DATE'] == year]
             return d[col].values[0] if col in d.columns and not d.empty else 0
 
     # Universal function to build financial statement items (pivoted)
-    def build_financial_statement_pivot(df, items, cir_adj_param=None):
+    def build_financial_statement_pivot(df, items, cir_adj_param=None, equity_adj_param=None, equity_following_year_adj_param=None, ib_yoy_growth_param=0.0, ib_following_yoy_growth_param=0.0, investment_return_adj_param=0.0, investment_return_following_adj_param=0.0, market_turnover_daily_param=None, market_turnover_following_daily_param=None):
         years = sorted(df['DATE'].unique())
         
         # Use the passed parameter or fall back to global variable
         cir_adj_to_use = cir_adj_param if cir_adj_param is not None else cir_adj
+        equity_adj_to_use = equity_adj_param if equity_adj_param is not None else 0
+        equity_following_year_adj_to_use = equity_following_year_adj_param if equity_following_year_adj_param is not None else 0
+        ib_yoy_growth = ib_yoy_growth_param
+        ib_following_yoy_growth = ib_following_yoy_growth_param
+        investment_return_adj = investment_return_adj_param
+        investment_return_following_adj = investment_return_following_adj_param
+        market_turnover_daily_adj_to_use = market_turnover_daily_param if market_turnover_daily_param is not None else market_turnover_daily_prev_year_default
+        market_turnover_following_daily_adj_to_use = market_turnover_following_daily_param if market_turnover_following_daily_param is not None else market_turnover_daily_prev_year_default
         
         # Calculate baseline lending rate for consistency
         def get_value_baseline(df, year, col, keycodename=None):
-            if year == 2025 and keycodename is not None:
+            if year == forecast_year and keycodename is not None:
                 d = df[(df['DATE'] == year) & (df['KEYCODENAME'] == keycodename)]
                 return d['VALUE'].sum() if not d.empty else 0
             else:
                 d = df[df['DATE'] == year]
                 return d[col].values[0] if col in d.columns and not d.empty else 0
         
-        baseline_margin_income_2025 = get_value_baseline(df_broker_forecast, 2025, 'Margin Lending Income', keycodename='Net Margin lending Income')
-        baseline_margin_balance_2025 = get_value_baseline(df_broker_forecast, 2025, 'Margin Balance', keycodename='Margin lending book')
-        margin_balance_2024 = margin_balance[margin_balance['Year'] == 2024]['Margin Balance'].iloc[0] if not margin_balance[margin_balance['Year'] == 2024].empty else 0
-        baseline_avg_balance = (margin_balance_2024 + baseline_margin_balance_2025) / 2
+        baseline_margin_income_forecast = get_value_baseline(df_broker_forecast, forecast_year, 'Margin Lending Income', keycodename='Net Margin lending Income')
+        baseline_margin_balance_forecast = get_value_baseline(df_broker_forecast, forecast_year, 'Margin Balance', keycodename='Margin lending book')
+        margin_balance_prev_year = margin_balance[margin_balance['Year'] == forecast_year-1]['Margin Balance'].iloc[0] if not margin_balance[margin_balance['Year'] == forecast_year-1].empty else 0
+        baseline_avg_balance = (margin_balance_prev_year + baseline_margin_balance_forecast) / 2
         
         if baseline_avg_balance != 0:
-            baseline_lending_rate = baseline_margin_income_2025 / baseline_avg_balance
+            baseline_lending_rate = baseline_margin_income_forecast / baseline_avg_balance
         else:
             baseline_lending_rate = 0.15
         
         data = {}
         for item_name, filter_func in items.items():
             if item_name == 'Market Turnover':
-                # Use INDEX file for historical, sidebar for forecast years
+                # Use INDEX file for historical, dynamic parameters for forecast years
                 values = []
                 for year in years:
-                    if year == 2025:
-                        values.append(market_turnover_2025)
-                    elif year == 2026:
-                        values.append(market_turnover_2026)
+                    if year == forecast_year:
+                        # Use dynamic market turnover parameter
+                        market_turnover_forecast = market_turnover_daily_adj_to_use * trading_days_forecast
+                        values.append(market_turnover_forecast)
+                    elif year == following_year:
+                        # Use dynamic market turnover parameter for following year
+                        market_turnover_following = market_turnover_following_daily_adj_to_use * trading_days_forecast
+                        values.append(market_turnover_following)
                     else:
                         mt_row = market_turnover_by_year[market_turnover_by_year['Year'] == year]
                         if not mt_row.empty:
@@ -338,12 +411,12 @@ if not df_index.empty:
             elif item_name == 'Net Brokerage Income':
                 values = []
                 for year in years:
-                    if year == 2025:
-                        # Use sidebar-adjusted formula for 2025
-                        values.append(net_fee_2025 * company_turnover_2025 * 1e9)
-                    elif year == 2026:
-                        # Use sidebar-adjusted formula for 2026
-                        values.append(net_fee_2026 * company_turnover_2026 * 1e9)
+                    if year == forecast_year:
+                        # Use sidebar-adjusted formula for forecast year
+                        values.append(net_fee_forecast_year * company_turnover_forecast_year * 1e9)
+                    elif year == following_year:
+                        # Use sidebar-adjusted formula for following year
+                        values.append(net_fee_following_year * company_turnover_following_year * 1e9)
                     else:
                         # Use column value for historical years if present
                         row = df[df['DATE'] == year]
@@ -360,12 +433,12 @@ if not df_index.empty:
                 values = []
                 debug_rows = []
                 for year in years:
-                    if year == 2025:
-                        values.append(company_turnover_2025)
-                        debug_rows.append({'Year': year, 'Value': company_turnover_2025, 'Source': 'Sidebar'})
-                    elif year == 2026:
-                        values.append(company_turnover_2026)
-                        debug_rows.append({'Year': year, 'Value': company_turnover_2026, 'Source': 'Sidebar'})
+                    if year == forecast_year:
+                        values.append(company_turnover_forecast_year)
+                        debug_rows.append({'Year': year, 'Value': company_turnover_forecast_year, 'Source': 'Sidebar'})
+                    elif year == following_year:
+                        values.append(company_turnover_following_year)
+                        debug_rows.append({'Year': year, 'Value': company_turnover_following_year, 'Source': 'Sidebar'})
                     else:
                         row = df_turnover[(df_turnover['Year'] == year) & (df_turnover[broker_col] == selected_broker)]
                         if not row.empty and company_col in row.columns:
@@ -381,10 +454,10 @@ if not df_index.empty:
                 market_col = 'Market turnover'
                 shares = []
                 for year in years:
-                    if year == 2025:
-                        shares.append(market_share_2025)
-                    elif year == 2026:
-                        shares.append(market_share_2026)
+                    if year == forecast_year:
+                        shares.append(market_share_forecast_year)
+                    elif year == following_year:
+                        shares.append(market_share_following_year)
                     else:
                         row = df_turnover[(df_turnover['Year'] == year) & (df_turnover[broker_col] == selected_broker)]
                         company_turnover = row[company_col].values[0] if not row.empty else 0
@@ -398,10 +471,10 @@ if not df_index.empty:
             elif item_name == 'Net Brokerage Fee':
                 fee = []
                 for i, year in enumerate(years):
-                    if year == 2025:
+                    if year == forecast_year:
                         fee.append(net_fee_adj / 100)
-                    elif year == 2026:
-                        fee.append(net_fee_2026 if 'net_fee_2026' in locals() else net_fee_2025)
+                    elif year == following_year:
+                        fee.append(net_fee_following_year)
                     else:
                         nbi = data.get('Net Brokerage Income', [None]*len(years))[i]
                         ct = data.get('Company Turnover', [None]*len(years))[i]
@@ -419,7 +492,7 @@ if not df_index.empty:
             elif item_name == 'Net Fees Income':
                 values = []
                 for year in years:
-                    if year == 2025:
+                    if year == forecast_year:
                         # For forecast year, calculate from components using data dictionary
                         nbi = data.get('Net Brokerage Income', [0]*len(years))[years.index(year)]
                         ib = data.get('Net IB Income', [0]*len(years))[years.index(year)]
@@ -436,8 +509,8 @@ if not df_index.empty:
             elif item_name == 'Lending rate':
                 values = []
                 for i, year in enumerate(years):
-                    if year == 2025:
-                        # Use baseline lending rate for 2025 regardless of balance adjustments
+                    if year == forecast_year:
+                        # Use baseline lending rate for forecast year regardless of balance adjustments
                         values.append(baseline_lending_rate)
                     else:
                         # For historical years, calculate based on actual data
@@ -462,39 +535,67 @@ if not df_index.empty:
             elif item_name == 'Margin Lending Income':
                 values = []
                 for i, year in enumerate(years):
-                    if year == 2025:
-                        margin_balance_2025 = margin_adj * 1e9
-                        # Get 2024 margin balance from historical data, not from data dictionary
-                        margin_balance_2024 = margin_balance[margin_balance['Year'] == 2024]['Margin Balance'].iloc[0] if not margin_balance[margin_balance['Year'] == 2024].empty else 0
-                        avg_balance = (margin_balance_2024 + margin_balance_2025) / 2
-                        margin_income_2025 = baseline_lending_rate * avg_balance
-                        values.append(margin_income_2025)
-                    elif year == 2026:
-                        margin_balance_2026_val = margin_2026 * 1e9 if 'margin_2026' in locals() else margin_adj * 1e9
-                        margin_balance_2025_val = margin_adj * 1e9
-                        avg_balance_2026 = (margin_balance_2025_val + margin_balance_2026_val) / 2
-                        margin_income_2026 = baseline_lending_rate * avg_balance_2026
-                        values.append(margin_income_2026)
+                    if year == forecast_year:
+                        margin_balance_forecast_year = margin_adj * 1e9
+                        # Get previous year margin balance from historical data, not from data dictionary
+                        margin_balance_prev_year = margin_balance[margin_balance['Year'] == forecast_year-1]['Margin Balance'].iloc[0] if not margin_balance[margin_balance['Year'] == forecast_year-1].empty else 0
+                        avg_balance = (margin_balance_prev_year + margin_balance_forecast_year) / 2
+                        margin_income_forecast_year = baseline_lending_rate * avg_balance
+                        values.append(margin_income_forecast_year)
+                    elif year == following_year:
+                        margin_balance_following_year_val = margin_following_year * 1e9
+                        margin_balance_forecast_year_val = margin_adj * 1e9
+                        avg_balance_following_year = (margin_balance_forecast_year_val + margin_balance_following_year_val) / 2
+                        margin_income_following_year = baseline_lending_rate * avg_balance_following_year
+                        values.append(margin_income_following_year)
                     else:
                         values.append(get_value(df, year, 'Margin Lending Income', keycodename='Net Margin lending Income'))
                 data[item_name] = values
             elif item_name == 'Net Investment Income':
                 values = []
                 for year in years:
-                    values.append(get_value(df, year, 'Net Investment Income', keycodename='Net Investment Income'))
+                    if year == forecast_year:
+                        # Calculate dynamically using investment return input
+                        # Get current year investment assets from FORECAST.csv (Total investment)
+                        investment_asset_current = get_value(df, year, None, keycodename='Total investment')
+                        # Get previous year investment assets from historical data
+                        investment_asset_prev = investment_asset_balance[investment_asset_balance['Year'] == forecast_year-1]['Investment Asset Balance'].iloc[0] if not investment_asset_balance[investment_asset_balance['Year'] == forecast_year-1].empty else 0
+                        avg_investment_assets = (investment_asset_current + investment_asset_prev) / 2
+                        net_inv_income = investment_return_adj * avg_investment_assets
+                        values.append(net_inv_income)
+                    elif year == following_year:
+                        # Calculate for following year using following year investment return
+                        investment_asset_current = get_value(df, year, None, keycodename='Total investment')
+                        investment_asset_prev = get_value(df, forecast_year, None, keycodename='Total investment')
+                        avg_investment_assets = (investment_asset_current + investment_asset_prev) / 2
+                        net_inv_income = investment_return_following_adj * avg_investment_assets
+                        values.append(net_inv_income)
+                    else:
+                        values.append(get_value(df, year, 'Net Investment Income', keycodename='Net Investment Income'))
                 data[item_name] = values
             elif item_name == 'Net IB Income':
                 values = []
                 for year in years:
-                    values.append(get_value(df, year, 'Net IB Income', keycodename='Net IB Income'))
+                    if year == forecast_year:
+                        # Calculate dynamically using YoY growth input
+                        ib_income_prev_year = ib_inc[ib_inc['Year'] == forecast_year-1]['Net IB Income'].iloc[0] if not ib_inc[ib_inc['Year'] == forecast_year-1].empty else 0
+                        net_ib_income = ib_income_prev_year * (1 + ib_yoy_growth / 100.0)
+                        values.append(net_ib_income)
+                    elif year == following_year:
+                        # Calculate for following year using following year YoY growth
+                        ib_income_forecast_year = data.get('Net IB Income', [0]*len(years))[years.index(forecast_year)] if 'Net IB Income' in data else 0
+                        net_ib_income_following = ib_income_forecast_year * (1 + ib_following_yoy_growth / 100.0)
+                        values.append(net_ib_income_following)
+                    else:
+                        values.append(get_value(df, year, 'Net IB Income', keycodename='Net IB Income'))
                 data[item_name] = values
             elif item_name == 'Margin Balance':
                 values = []
                 for year in years:
-                    if year == 2025:
+                    if year == forecast_year:
                         values.append(margin_adj * 1e9)  # Convert from billions to actual units
-                    elif year == 2026:
-                        values.append(margin_2026 * 1e9 if 'margin_2026' in locals() else margin_adj * 1e9)
+                    elif year == following_year:
+                        values.append(margin_following_year * 1e9)
                     else:
                         values.append(get_value(df, year, 'Margin Balance', keycodename='Margin lending book'))
                 data[item_name] = values
@@ -541,8 +642,8 @@ if not df_index.empty:
             elif item_name == 'Borrowing balance':
                 values = []
                 for year in years:
-                    if year == 2025:
-                        # For 2025, calculate as sum of short-term and long-term borrowing from FORECAST.csv
+                    if year == forecast_year:
+                        # For forecast year, calculate as sum of short-term and long-term borrowing from FORECAST.csv
                         short_term_borrowing = get_value(df_broker_forecast, year, None, keycodename='Short-term borrowing')
                         long_term_borrowing = get_value(df_broker_forecast, year, None, keycodename='Long-term borrowing')
                         total_borrowing = short_term_borrowing + long_term_borrowing
@@ -559,10 +660,11 @@ if not df_index.empty:
             elif item_name == 'CIR':
                 values = []
                 for year in years:
-                    if year == 2025:
-                        values.append(cir_adj/100)
-                    elif year == 2026:
-                        values.append(cir_2026 if 'cir_2026' in locals() else cir_adj/100)
+                    if year == forecast_year:
+                        # Use user's CIR adjustment input (cir_adj_to_use is already in decimal form)
+                        values.append(cir_adj_to_use / 100.0)
+                    elif year == following_year:
+                        values.append(cir_following_year)
                     else:
                         # For historical years: CIR = SG&A / (Total operating income - Investment income)
                         sga = get_value(df, year, 'SG&A', keycodename='SG&A')
@@ -579,7 +681,7 @@ if not df_index.empty:
                 values = []
                 for i, year in enumerate(years):
                     toi = data.get('Total Operating Income', [0]*len(years))[i] if 'Total Operating Income' in data else 0
-                    # Use already-calculated SG&A value from data dict for consistency (especially for 2025 dynamic calculation)
+                    # Use already-calculated SG&A value from data dict for consistency (especially for forecast year dynamic calculation)
                     sga = data.get('SG&A', [0]*len(years))[i] if 'SG&A' in data else get_value(df, year, 'SG&A', keycodename='SG&A')
                     # Use already-calculated value for 'Other incomes' from data dict
                     others = data.get('Other incomes', [0]*len(years))[i] if 'Other incomes' in data else 0
@@ -593,10 +695,99 @@ if not df_index.empty:
                     tax = get_value(df, year, 'Tax expense', keycodename='Tax expense')
                     values.append(pbt + tax)
                 data[item_name] = values
+            elif item_name == 'Total Equity':
+                values = []
+                for year in years:
+                    if year in [forecast_year, following_year]:
+                        # Use adjustment values for forecast years
+                        if year == forecast_year:
+                            # Always use the adjustment value (which defaults to baseline forecast from FORECAST.csv)
+                            values.append(equity_adj_to_use * 1e9)
+                        else:  # following year
+                            # Use following year adjustment, or fall back to baseline if 0
+                            values.append(equity_following_year_adj_to_use * 1e9 if equity_following_year_adj_to_use > 0 else get_value(df, year, 'Total Equity', keycodename="Owner's equity"))
+                    else:
+                        # For historical years, use the historical data from utils/data.py calculation
+                        values.append(get_value(df, year, 'Total Equity', keycodename=None))
+                data[item_name] = values
+            elif item_name == 'ROE':
+                values = []
+                for i, year in enumerate(years):
+                    # Get NPAT for current year
+                    npat = data.get('NPAT', [0]*len(years))[i] if 'NPAT' in data else 0
+                    
+                    # Get current and previous year equity for average calculation
+                    current_equity = data.get('Total Equity', [0]*len(years))[i] if 'Total Equity' in data else 0
+                    
+                    # Get previous year equity
+                    if i > 0:
+                        prev_equity = data.get('Total Equity', [0]*len(years))[i-1]
+                    else:
+                        # For first year, use current equity only or find previous year data
+                        prev_year = year - 1
+                        prev_equity = get_value(df, prev_year, 'Total Equity', keycodename='Total Equity') if prev_year >= min(years) else current_equity
+                    
+                    # Calculate average equity
+                    if isinstance(current_equity, str) and current_equity != "-":
+                        try:
+                            current_equity = float(str(current_equity).replace(",", "")) * 1e9
+                        except:
+                            current_equity = 0
+                    elif current_equity == "-":
+                        current_equity = 0
+                        
+                    if isinstance(prev_equity, str) and prev_equity != "-":
+                        try:
+                            prev_equity = float(str(prev_equity).replace(",", "")) * 1e9
+                        except:
+                            prev_equity = 0
+                    elif prev_equity == "-":
+                        prev_equity = 0
+                        
+                    if isinstance(npat, str) and npat != "-":
+                        try:
+                            npat_val = float(str(npat).replace(",", "")) * 1e9
+                        except:
+                            npat_val = 0
+                    elif npat == "-":
+                        npat_val = 0
+                    else:
+                        npat_val = npat
+                    
+                    avg_equity = (current_equity + prev_equity) / 2 if prev_equity > 0 else current_equity
+                    
+                    # Calculate ROE
+                    roe = npat_val / avg_equity if avg_equity > 0 else 0
+                    values.append(roe)
+                data[item_name] = values
+            elif item_name == 'Investment Asset Balance':
+                values = []
+                for year in years:
+                    if year in [forecast_year, following_year]:
+                        # For forecast years, use Total_Investment from FORECAST.csv
+                        total_investment = get_value(df, year, None, keycodename='Total investment')
+                        values.append(total_investment)
+                    else:
+                        # For historical years, use the calculated investment asset balance from utils/data.py
+                        historical_value = investment_asset_balance[investment_asset_balance['Year'] == year]['Investment Asset Balance'].iloc[0] if not investment_asset_balance[investment_asset_balance['Year'] == year].empty else 0
+                        values.append(historical_value)
+                data[item_name] = values
+            elif item_name == 'Investment Return %':
+                values = []
+                for i, year in enumerate(years):
+                    if year in [forecast_year, following_year]:
+                        # For forecast years, use Investment_Yield from FORECAST.csv
+                        investment_yield = get_value(df, year, None, keycodename='Investment yield')
+                        values.append(investment_yield)
+                    else:
+                        # For historical years, use calculated data from utils/data.py
+                        historical_return = investment_return[investment_return['Year'] == year]['Investment Return %'].iloc[0] if not investment_return[investment_return['Year'] == year].empty else 0
+                        values.append(historical_return)
+                data[item_name] = values
             elif item_name == 'Capital Income':
                 values = []
                 for i, year in enumerate(years):
-                    if year == 2025:
+                    if year == forecast_year:
                         # For forecast year, calculate from components using dynamically calculated values
                         investment = get_value(df, year, None, keycodename='Net Investment Income')
                         margin = data.get('Margin Lending Income', [0]*len(years))[i]  # Use the dynamically calculated margin income
@@ -618,21 +809,21 @@ if not df_index.empty:
             elif item_name == 'SG&A':
                 values = []
                 for i, year in enumerate(years):
-                    if year == 2025:
+                    if year == forecast_year:
                         # Calculate SG&A dynamically using CIR formula: SG&A = CIR × (Total Operating Income - Net Investment Income)
-                        total_op_income_2025 = data.get('Total Operating Income', [0]*len(years))[i]
-                        net_inv_income_2025 = data.get('Net Investment Income', [0]*len(years))[i]                       
-                        sga_calculated = (cir_adj_to_use / 100.0) * (total_op_income_2025 - net_inv_income_2025)
+                        total_op_income_forecast_year = data.get('Total Operating Income', [0]*len(years))[i]
+                        net_inv_income_forecast_year = data.get('Net Investment Income', [0]*len(years))[i]                       
+                        sga_calculated_forecast_year = (cir_adj_to_use / 100.0) * (total_op_income_forecast_year - net_inv_income_forecast_year)
                         
-                        values.append(-abs(sga_calculated))  # SG&A is typically negative
-                    elif year == 2026:
-                        # Calculate SG&A for 2026 using 2026 CIR
-                        total_op_income_2026 = data.get('Total Operating Income', [0]*len(years))[i]
-                        net_inv_income_2026 = data.get('Net Investment Income', [0]*len(years))[i]
-                        cir_2026_val = cir_2026 if 'cir_2026' in locals() else cir_adj_to_use / 100.0
-                        sga_calculated_2026 = cir_2026_val * (total_op_income_2026 - net_inv_income_2026)
+                        values.append(-abs(sga_calculated_forecast_year))  # SG&A is typically negative
+                    elif year == following_year:
+                        # Calculate SG&A for following year using following year CIR
+                        total_op_income_following_year = data.get('Total Operating Income', [0]*len(years))[i]
+                        net_inv_income_following_year = data.get('Net Investment Income', [0]*len(years))[i]
+                        cir_following_year_val = cir_following_year
+                        sga_calculated_following_year = cir_following_year_val * (total_op_income_following_year - net_inv_income_following_year)
                         
-                        values.append(-abs(sga_calculated_2026))  # SG&A is typically negative
+                        values.append(-abs(sga_calculated_following_year))  # SG&A is typically negative
                     else:
                         values.append(get_value(df, year, 'SG&A', keycodename='SG&A'))
                 data[item_name] = values
@@ -690,7 +881,7 @@ if not df_index.empty:
                         val_num = val
                     # Only divide by 1e9 for 2025 (last column)
                     if pd.notnull(val_num) and pd.api.types.is_number(val_num):
-                        if col == '2025':
+                        if col == str(forecast_year):
                             result.at[item, col] = f"{val_num:,.0f}"
                         else:
                             result.at[item, col] = f"{val_num:,.0f}"
@@ -704,6 +895,20 @@ if not df_index.empty:
                     else:
                         result.at[item, col] = "-"
             elif item == 'CIR':
+                for col in result.columns:
+                    val = result.at[item, col]
+                    if pd.notnull(val) and pd.api.types.is_number(val):
+                        result.at[item, col] = f"{val:.2%}"
+                    else:
+                        result.at[item, col] = "-"
+            elif item == 'ROE':
+                for col in result.columns:
+                    val = result.at[item, col]
+                    if pd.notnull(val) and pd.api.types.is_number(val):
+                        result.at[item, col] = f"{val:.2%}"
+                    else:
+                        result.at[item, col] = "-"
+            elif item == 'Investment Return %':
                 for col in result.columns:
                     val = result.at[item, col]
                     if pd.notnull(val) and pd.api.types.is_number(val):
@@ -760,12 +965,15 @@ if not df_index.empty:
         'Minority expense': align_by_year(filtered_is.groupby('Year')[['IS.70']].sum().reset_index().rename(columns={'IS.70': 'Minority expense'}), 'Minority expense', years_to_display),
         'Margin Balance': align_by_year(margin_balance, 'Margin Balance', years_to_display),
         'FX gain/loss': align_by_year(fx_gain_loss_by_year, 'FX gain/loss', years_to_display),
+        'Total Equity': align_by_year(total_equity, 'Total Equity', years_to_display),
+        'Investment Asset Balance': align_by_year(investment_asset_balance, 'Investment Asset Balance', years_to_display),
+        'Investment Return %': align_by_year(investment_return, 'Investment Return %', years_to_display),
         # Add more items as needed from your calculated DataFrames
     }
     df_broker_hist_custom = pd.DataFrame(historical_data)
     # For forecast year, keep using FORECAST.csv/sidebar logic
-    if st.session_state.show_2026_forecast:
-        df_broker_all = pd.concat([df_broker_hist_custom, df_broker_forecast, df_broker_forecast_2026], ignore_index=True)
+    if st.session_state.show_following_year_forecast:
+        df_broker_all = pd.concat([df_broker_hist_custom, df_broker_forecast, df_broker_forecast_following], ignore_index=True)
     else:
         df_broker_all = pd.concat([df_broker_hist_custom, df_broker_forecast], ignore_index=True)
 
@@ -828,7 +1036,7 @@ if not df_index.empty:
     st.dataframe(turnover_df.T)
 
     # --- Financial Statement ---
-    statement_pivot = build_financial_statement_pivot(df_broker_all, items)
+    statement_pivot = build_financial_statement_pivot(df_broker_all, items, equity_adj_param=equity_prev_year_default, ib_yoy_growth_param=ib_yoy_growth, ib_following_yoy_growth_param=ib_following_yoy_growth, investment_return_adj_param=investment_return_adj, investment_return_following_adj_param=investment_return_following_adj, market_turnover_daily_param=market_turnover_daily_prev_year_default, market_turnover_following_daily_param=market_turnover_daily_prev_year_default)
     
     # Hide specified rows from display
     rows_to_hide = [
@@ -870,6 +1078,8 @@ if not df_index.empty:
     other_income_chunk = [
         'Net IB Income',
         'Net Investment Income',
+        'Investment Asset Balance',
+        'Investment Return %',
         'Net other operating income',  # Will be hidden
         'FX gain/loss',                # Will be hidden
         'Deposit income',              # Will be hidden
@@ -881,7 +1091,9 @@ if not df_index.empty:
     summary_chunk = [
         'Total Operating Income',
         'PBT',
-        'NPAT'
+        'NPAT',
+        'Total Equity',
+        'ROE'
     ]
     
     # Function to filter out hidden rows from chunks
@@ -894,87 +1106,171 @@ if not df_index.empty:
     # Brokerage adjustment controls
     col1, col2, col3 = st.columns(3)
     with col1:
-        market_share_adj = st.number_input("Company Market Share (%)", value=market_share_2024_default, format="%.1f", key="market_share_brokerage")
+        market_share_text = st.text_input("Company Market Share (%)", value=f"{market_share_prev_year_default:.1f}", key="market_share_brokerage")
+        try:
+            market_share_adj = float(market_share_text)
+            if market_share_adj < 0 or market_share_adj > 100:
+                st.error("Market share must be between 0 and 100%")
+                market_share_adj = market_share_prev_year_default
+        except ValueError:
+            st.error("Please enter a valid number for market share")
+            market_share_adj = market_share_prev_year_default
     with col2:
-        market_turnover_daily_adj = st.number_input("Market Turnover per Day (VNDbn)", min_value=0.0, max_value=100000.0, value=market_turnover_daily_2024_default, step=100.0, format="%.0f", key="market_turnover_brokerage")
+        market_turnover_daily_adj = st.number_input("Market Turnover per Day (VNDbn)", min_value=0.0, max_value=100000.0, value=market_turnover_daily_prev_year_default, step=100.0, format="%.0f", key="market_turnover_brokerage")
     with col3:
-        net_fee_adj = st.number_input("Net Brokerage Fee (%)", value=net_fee_2024_default * 100, format="%.2f", key="net_fee_brokerage")
+        net_fee_text = st.text_input("Net Brokerage Fee (%)", value=f"{net_fee_prev_year_default * 100:.2f}", key="net_fee_brokerage")
+        try:
+            net_fee_adj = float(net_fee_text)
+            if net_fee_adj < 0 or net_fee_adj > 100:
+                st.error("Net brokerage fee must be between 0 and 100%")
+                net_fee_adj = net_fee_prev_year_default * 100
+        except ValueError:
+            st.error("Please enter a valid number for net brokerage fee")
+            net_fee_adj = net_fee_prev_year_default * 100
     
-    # 2026 Brokerage controls (conditional)
-    if st.session_state.show_2026_forecast:
-        st.write("**2026 Adjustments**")
-        col1_2026, col2_2026, col3_2026 = st.columns(3)
-        with col1_2026:
-            market_share_2026_adj = st.number_input("2026 Market Share (%)", value=market_share_2024_default, format="%.1f", key="market_share_2026_brokerage")
-        with col2_2026:
-            market_turnover_2026_daily_adj = st.number_input("2026 Market Turnover/Day (VNDbn)", min_value=0.0, max_value=100000.0, value=market_turnover_daily_2024_default, step=100.0, format="%.0f", key="market_turnover_2026_brokerage")
-        with col3_2026:
-            net_fee_2026_adj = st.number_input("2026 Net Brokerage Fee (%)", value=net_fee_2024_default * 100, format="%.2f", key="net_fee_2026_brokerage")
+    # Following year Brokerage controls (conditional)
+    if st.session_state.show_following_year_forecast:
+        st.write(f"**{following_year} Adjustments**")
+        col1_following, col2_following, col3_following = st.columns(3)
+        with col1_following:
+            market_share_following_year_text = st.text_input(f"{following_year} Market Share (%)", value="0.0", key=f"market_share_{following_year}_brokerage")
+            try:
+                market_share_following_year_adj = float(market_share_following_year_text)
+                if market_share_following_year_adj < 0 or market_share_following_year_adj > 100:
+                    st.error(f"{following_year} market share must be between 0 and 100%")
+                    market_share_following_year_adj = market_share_prev_year_default
+            except ValueError:
+                st.error("Please enter a valid number for 2026 market share")
+                market_share_following_year_adj = market_share_prev_year_default
+        with col2_following:
+            market_turnover_following_year_daily_adj = st.number_input(f"{following_year} Market Turnover/Day (VNDbn)", min_value=0.0, max_value=100000.0, value=0.0, step=100.0, format="%.0f", key=f"market_turnover_{following_year}_brokerage")
+        with col3_following:
+            net_fee_following_year_text = st.text_input(f"{following_year} Net Brokerage Fee (%)", value="0.0", key=f"net_fee_{following_year}_brokerage")
+            try:
+                net_fee_following_year_adj = float(net_fee_following_year_text)
+                if net_fee_following_year_adj < 0 or net_fee_following_year_adj > 100:
+                    st.error(f"{following_year} net brokerage fee must be between 0 and 100%")
+                    net_fee_following_year_adj = net_fee_prev_year_default * 100
+            except ValueError:
+                st.error("Please enter a valid number for 2026 net brokerage fee")
+                net_fee_following_year_adj = net_fee_prev_year_default * 100
     else:
         # Set default values when 2026 is not shown
-        market_share_2026_adj = market_share_2024_default
-        market_turnover_2026_daily_adj = market_turnover_daily_2024_default
-        net_fee_2026_adj = net_fee_2024_default * 100
+        market_share_following_year_adj = market_share_prev_year_default
+        market_turnover_following_year_daily_adj = market_turnover_daily_prev_year_default
+        net_fee_following_year_adj = net_fee_prev_year_default * 100
     
     # Update calculated values based on user inputs
-    market_share_2025 = market_share_adj / 100.0
-    market_turnover_2025 = market_turnover_daily_adj * trading_days_2025
-    company_turnover_2025 = market_share_2025 * market_turnover_2025 * 2
-    net_fee_2025 = net_fee_adj / 100.0
+    market_share_forecast_year = market_share_adj / 100.0
+    market_turnover_forecast_year = market_turnover_daily_adj * trading_days_forecast
+    company_turnover_forecast_year = market_share_forecast_year * market_turnover_forecast_year * 2
+    net_fee_forecast_year = net_fee_adj / 100.0
     
-    # Update 2026 calculated values
-    market_share_2026 = market_share_2026_adj / 100.0
-    market_turnover_2026 = market_turnover_2026_daily_adj * trading_days_2025  # Assume same trading days
-    company_turnover_2026 = market_share_2026 * market_turnover_2026 * 2
-    net_fee_2026 = net_fee_2026_adj / 100.0
+    # Update following year calculated values
+    market_share_following_year = market_share_following_year_adj / 100.0
+    market_turnover_following_year = market_turnover_following_year_daily_adj * trading_days_forecast
+    company_turnover_following_year = market_share_following_year * market_turnover_following_year * 2
+    net_fee_following_year = net_fee_following_year_adj / 100.0
     
     # Rebuild the statement pivot with updated values
-    statement_pivot = build_financial_statement_pivot(df_broker_all, items)
+    statement_pivot = build_financial_statement_pivot(df_broker_all, items, equity_adj_param=equity_prev_year_default, ib_yoy_growth_param=ib_yoy_growth, ib_following_yoy_growth_param=ib_following_yoy_growth, investment_return_adj_param=investment_return_adj, investment_return_following_adj_param=investment_return_following_adj, market_turnover_daily_param=market_turnover_daily_adj, market_turnover_following_daily_param=market_turnover_following_year_daily_adj)
     
     net_brokerage_filtered = filter_chunk(net_brokerage_chunk, rows_to_hide)
     net_brokerage_data = statement_pivot.loc[statement_pivot.index.intersection(net_brokerage_filtered)]
     if not net_brokerage_data.empty:
-        st.dataframe(net_brokerage_data, height=210)
+        # Height = (number of rows + 1 for header) * 35 + 10 for padding
+        height = (len(net_brokerage_data) + 1) * 35 + 10
+        st.dataframe(net_brokerage_data, height=height)
     
     st.subheader("Margin Lending")
     
     # Margin lending adjustment control
-    margin_adj = st.number_input("Margin Balance (VNDbn)", min_value=0.0, max_value=100000.0, value=margin_2024_default, step=100.0, format="%.0f", key="margin_lending")
+    margin_adj = st.number_input("Margin Balance (VNDbn)", min_value=0.0, max_value=100000.0, value=margin_prev_year_default, step=100.0, format="%.0f", key="margin_lending")
     
     # 2026 Margin Lending controls (conditional)
-    if st.session_state.show_2026_forecast:
+    if st.session_state.show_following_year_forecast:
         st.write("**2026 Adjustments**")
-        margin_2026_adj = st.number_input("2026 Margin Balance (VNDbn)", min_value=0.0, max_value=100000.0, value=margin_2024_default, step=100.0, format="%.0f", key="margin_2026_lending")
+        margin_following_year_adj = st.number_input(f"{following_year} Margin Balance (VNDbn)", min_value=0.0, max_value=100000.0, value=0.0, step=100.0, format="%.0f", key=f"margin_{following_year}_lending")
     else:
-        # Set default value when 2026 is not shown
-        margin_2026_adj = margin_2024_default
+        # Set default value when following year is not shown
+        margin_following_year_adj = margin_prev_year_default
     
     # Update 2026 margin value
-    margin_2026 = margin_2026_adj
+    margin_following_year = margin_following_year_adj
     
     # Rebuild the statement pivot again with updated margin balance
-    statement_pivot = build_financial_statement_pivot(df_broker_all, items)
+    statement_pivot = build_financial_statement_pivot(df_broker_all, items, equity_adj_param=equity_prev_year_default, ib_yoy_growth_param=ib_yoy_growth, ib_following_yoy_growth_param=ib_following_yoy_growth, investment_return_adj_param=investment_return_adj, investment_return_following_adj_param=investment_return_following_adj)
+    
+    # Metrics calculation will be moved to after all controls are defined
+    
+    margin_lending_filtered = filter_chunk(margin_lending_chunk, rows_to_hide)
+    margin_lending_data = statement_pivot.loc[statement_pivot.index.intersection(margin_lending_filtered)]
+    if not margin_lending_data.empty:
+        height = (len(margin_lending_data) + 1) * 35 + 10
+        st.dataframe(margin_lending_data, height=height)
+    
+    # Rebuild the statement pivot with default equity
+    statement_pivot = build_financial_statement_pivot(df_broker_all, items, equity_adj_param=equity_prev_year_default, ib_yoy_growth_param=ib_yoy_growth, ib_following_yoy_growth_param=ib_following_yoy_growth, investment_return_adj_param=investment_return_adj, investment_return_following_adj_param=investment_return_following_adj)
+    
+    st.subheader("Expenses")
+    cir_text = st.text_input("CIR (%)", value=f"{float(cir_forecast_year_default_percent):.1f}", key="cir_expenses")
+    try:
+        cir_adj = float(cir_text)
+        if cir_adj < 0 or cir_adj > 100:
+            st.error("CIR must be between 0 and 100%")
+            cir_adj = float(cir_forecast_year_default_percent)
+    except ValueError:
+        st.error("Please enter a valid number for CIR")
+        cir_adj = float(cir_forecast_year_default_percent)
+    
+    # 2026 CIR controls (conditional)
+    if st.session_state.show_following_year_forecast:
+        st.write("**2026 Adjustments**")
+        cir_following_year_text = st.text_input(f"{following_year} CIR (%)", value="0.0", key=f"cir_{following_year}_expenses")
+        try:
+            cir_following_year_adj = float(cir_following_year_text)
+            if cir_following_year_adj < 0 or cir_following_year_adj > 100:
+                st.error(f"{following_year} CIR must be between 0 and 100%")
+                cir_following_year_adj = float(cir_forecast_year_default_percent)
+        except ValueError:
+            st.error(f"Please enter a valid number for {following_year} CIR")
+            cir_following_year_adj = float(cir_forecast_year_default_percent)
+    else:
+        # Set default value when following year is not shown
+        cir_following_year_adj = cir_forecast_year_default_percent
+    
+    # Update following year CIR value
+    cir_following_year = cir_following_year_adj / 100.0
+    
+    # Initialize equity variables with defaults (will be overridden later in Summary section)
+    equity_adj = equity_prev_year_default
+    equity_following_year_adj = 0.0
+    
+    # Rebuild statement_pivot with the CIR adjustment
+    statement_pivot = build_financial_statement_pivot(df_broker_all, items, cir_adj_param=cir_adj, equity_adj_param=equity_adj, equity_following_year_adj_param=equity_following_year_adj, ib_yoy_growth_param=ib_yoy_growth, ib_following_yoy_growth_param=ib_following_yoy_growth, investment_return_adj_param=investment_return_adj, investment_return_following_adj_param=investment_return_following_adj, market_turnover_daily_param=market_turnover_daily_adj, market_turnover_following_daily_param=market_turnover_following_year_daily_adj)
     
     # Now calculate and display the key metrics with all user adjustments
-    # Get current adjusted PBT for 2025
-    current_pbt_2025 = statement_pivot.loc['PBT', '2025'] if 'PBT' in statement_pivot.index else 0
+    # Get current adjusted PBT directly from the calculation data (before formatting)
+    # Get PBT from the same statement_pivot used by Summary chunk to ensure consistency
+    current_pbt_formatted = statement_pivot.loc['PBT', str(forecast_year)] if 'PBT' in statement_pivot.index else "0"
+    # Convert formatted value back to number
     try:
-        current_pbt_value = float(str(current_pbt_2025).replace(",", "")) * 1e9  # Convert to actual value
-        current_pbt_display = current_pbt_value / 1e9  # Convert to billions for display
+        current_pbt_value = float(str(current_pbt_formatted).replace(",", "")) * 1e9 if str(current_pbt_formatted) != "-" else 0
+        current_pbt_display = current_pbt_value / 1e9
     except:
         current_pbt_value = 0
         current_pbt_display = 0
     
-    # Get 2024 PBT for YoY growth calculation
-    pbt_2024 = statement_pivot.loc['PBT', '2024'] if 'PBT' in statement_pivot.index and '2024' in statement_pivot.columns else 0
+    # Get previous year PBT for YoY growth calculation
+    prev_year_pbt_formatted = statement_pivot.loc['PBT', str(forecast_year-1)] if 'PBT' in statement_pivot.index else "0"
     try:
-        pbt_2024_value = float(str(pbt_2024).replace(",", "")) * 1e9 if pbt_2024 != 0 else 0
-        yoy_growth = ((current_pbt_value - pbt_2024_value) / pbt_2024_value * 100) if pbt_2024_value != 0 else 0
+        pbt_prev_year_value = float(str(prev_year_pbt_formatted).replace(",", "")) * 1e9 if str(prev_year_pbt_formatted) != "-" else 0
+        yoy_growth = ((current_pbt_value - pbt_prev_year_value) / pbt_prev_year_value * 100) if pbt_prev_year_value != 0 else 0
     except:
         yoy_growth = 0
     
     # Get baseline PBT from FORECAST.csv
-    baseline_pbt_header = get_value(df_broker_forecast, 2025, 'PBT', keycodename='PBT')
+    baseline_pbt_header = get_value(df_broker_forecast, forecast_year, 'PBT', keycodename='PBT')
     baseline_change = ((current_pbt_value - baseline_pbt_header) / baseline_pbt_header * 100) if baseline_pbt_header != 0 else 0
     
     # Update the metrics placeholder with actual calculated values
@@ -982,12 +1278,12 @@ if not df_index.empty:
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric(
-                label="2025 Baseline PBT",
+                label=f"{forecast_year} Baseline PBT",
                 value=f"{baseline_pbt_header/1e9:,.0f}B",
             )
         with col2:
             st.metric(
-                label="2025 Adjusted PBT",
+                label=f"{forecast_year} Adjusted PBT",
                 value=f"{current_pbt_display:,.0f}B",
                 delta=f"{baseline_change:+.1f}% vs baseline"
             )
@@ -995,47 +1291,110 @@ if not df_index.empty:
             st.metric(
                 label="YoY Growth",
                 value=f"{yoy_growth:+.1f}%",
-                delta="vs 2024"
+                delta=f"vs {forecast_year-1}"
             )
     
-    margin_lending_filtered = filter_chunk(margin_lending_chunk, rows_to_hide)
-    margin_lending_data = statement_pivot.loc[statement_pivot.index.intersection(margin_lending_filtered)]
-    if not margin_lending_data.empty:
-        st.dataframe(margin_lending_data, height=140)
-    
-    st.subheader("Expenses")
-    cir_adj = st.number_input("CIR (%)", value=cir_2025_default_percent, format="%.1f", key="cir_expenses")
-    
-    # 2026 CIR controls (conditional)
-    if st.session_state.show_2026_forecast:
-        st.write("**2026 Adjustments**")
-        cir_2026_adj = st.number_input("2026 CIR (%)", value=cir_2025_default_percent, format="%.1f", key="cir_2026_expenses")
-    else:
-        # Set default value when 2026 is not shown
-        cir_2026_adj = cir_2025_default_percent
-    
-    # Update 2026 CIR value
-    cir_2026 = cir_2026_adj / 100.0
-    
-    # Rebuild statement_pivot with the CIR adjustment
-    statement_pivot = build_financial_statement_pivot(df_broker_all, items, cir_adj_param=cir_adj)
+    # This duplicate block has been removed - PBT calculation is done above
     
     expense_filtered = filter_chunk(expense_chunk, rows_to_hide)
     expense_data = statement_pivot.loc[statement_pivot.index.intersection(expense_filtered)]
     if not expense_data.empty:
-        st.dataframe(expense_data, height=200)
+        height = (len(expense_data) + 1) * 35 + 10
+        st.dataframe(expense_data, height=height)
 
     st.subheader("Other Income Items")
+    
+    # IB Income and Investment Return adjustment controls
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write("**Net IB Income Adjustments**")
+        ib_yoy_growth_text = st.text_input("IB Income YoY Growth (%)", value=f"{baseline_ib_yoy_growth_default:.1f}", key="ib_yoy_growth")
+        try:
+            ib_yoy_growth = float(ib_yoy_growth_text)
+        except ValueError:
+            st.error("Please enter a valid number for IB Income YoY growth")
+            ib_yoy_growth = 0.0
+    with col2:
+        st.write("**Investment Return Adjustments**")
+        investment_return_adj_text = st.text_input("Investment Return (%)", value=f"{baseline_investment_return_default*100:.1f}", key="investment_return_adj")
+        try:
+            investment_return_adj = float(investment_return_adj_text) / 100.0  # Convert from percentage to decimal
+        except ValueError:
+            st.error("Please enter a valid number for Investment Return")
+            investment_return_adj = baseline_investment_return_default
+    
+    # Following year IB Income and Investment Return controls (conditional)
+    if st.session_state.show_following_year_forecast:
+        col1_following, col2_following = st.columns(2)
+        with col1_following:
+            st.write(f"**{following_year} IB Income Adjustments**")
+            ib_following_yoy_growth_text = st.text_input(f"{following_year} IB Income YoY Growth (%)", value=f"{baseline_ib_yoy_growth_default:.1f}", key=f"ib_{following_year}_yoy_growth")
+            try:
+                ib_following_yoy_growth = float(ib_following_yoy_growth_text)
+            except ValueError:
+                st.error(f"Please enter a valid number for {following_year} IB Income YoY growth")
+                ib_following_yoy_growth = 0.0
+        with col2_following:
+            st.write(f"**{following_year} Investment Return Adjustments**")
+            investment_return_following_adj_text = st.text_input(f"{following_year} Investment Return (%)", value=f"{baseline_investment_return_default*100:.1f}", key=f"investment_return_{following_year}_adj")
+            try:
+                investment_return_following_adj = float(investment_return_following_adj_text) / 100.0  # Convert from percentage to decimal
+            except ValueError:
+                st.error(f"Please enter a valid number for {following_year} Investment Return")
+                investment_return_following_adj = baseline_investment_return_default
+    else:
+        # Set default values when following year is not shown
+        ib_following_yoy_growth = baseline_ib_yoy_growth_default
+        investment_return_following_adj = baseline_investment_return_default
+    
+    # Rebuild statement_pivot with updated IB and Investment income inputs (equity still uses defaults at this point)
+    statement_pivot = build_financial_statement_pivot(df_broker_all, items, cir_adj_param=cir_adj, equity_adj_param=equity_prev_year_default, equity_following_year_adj_param=0.0, ib_yoy_growth_param=ib_yoy_growth, ib_following_yoy_growth_param=ib_following_yoy_growth, investment_return_adj_param=investment_return_adj, investment_return_following_adj_param=investment_return_following_adj, market_turnover_daily_param=market_turnover_daily_adj, market_turnover_following_daily_param=market_turnover_following_year_daily_adj)
+    
     other_income_filtered = filter_chunk(other_income_chunk, rows_to_hide)
     others_data = statement_pivot.loc[statement_pivot.index.intersection(other_income_filtered)]
     if not others_data.empty:
-        st.dataframe(others_data, height=107)
+        height = (len(others_data) + 1) * 35 + 10
+        st.dataframe(others_data, height=height)
     
     st.subheader("Summary")
+    
+    # Total Equity adjustment controls
+    col1, col2 = st.columns(2)
+    with col1:
+        equity_adj = st.number_input("Total Equity (VNDbn)", min_value=0.0, max_value=100000.0, value=equity_prev_year_default, step=100.0, format="%.0f", key="total_equity")
+    with col2:
+        equity_yoy_growth_text = st.text_input("Equity YoY Growth (%)", value="0.0", key="equity_yoy_growth")
+        try:
+            equity_yoy_growth = float(equity_yoy_growth_text)
+        except ValueError:
+            st.error("Please enter a valid number for Total Equity YoY growth")
+            equity_yoy_growth = 0.0
+    
+    # Following year Total Equity controls (conditional)
+    if st.session_state.show_following_year_forecast:
+        st.write(f"**{following_year} Adjustments**")
+        col1_following, col2_following = st.columns(2)
+        with col1_following:
+            equity_following_year_adj = st.number_input(f"{following_year} Total Equity (VNDbn)", min_value=0.0, max_value=100000.0, value=0.0, step=100.0, format="%.0f", key=f"equity_{following_year}")
+        with col2_following:
+            equity_following_yoy_growth_text = st.text_input(f"{following_year} Equity YoY Growth (%)", value="0.0", key=f"equity_{following_year}_yoy_growth")
+            try:
+                equity_following_yoy_growth = float(equity_following_yoy_growth_text)
+            except ValueError:
+                st.error(f"Please enter a valid number for {following_year} Total Equity YoY growth")
+                equity_following_yoy_growth = 0.0
+    else:
+        equity_following_year_adj = 0.0
+        equity_following_yoy_growth = 0.0
+    
+    # Final rebuild of statement_pivot with all user inputs
+    statement_pivot = build_financial_statement_pivot(df_broker_all, items, cir_adj_param=cir_adj, equity_adj_param=equity_adj, equity_following_year_adj_param=equity_following_year_adj, ib_yoy_growth_param=ib_yoy_growth, ib_following_yoy_growth_param=ib_following_yoy_growth, investment_return_adj_param=investment_return_adj, investment_return_following_adj_param=investment_return_following_adj, market_turnover_daily_param=market_turnover_daily_adj, market_turnover_following_daily_param=market_turnover_following_year_daily_adj)
+    
     summary_filtered = filter_chunk(summary_chunk, rows_to_hide)
     summary_data = statement_pivot.loc[statement_pivot.index.intersection(summary_filtered)]
     if not summary_data.empty:
-        st.dataframe(summary_data, height=143)
+        height = (len(summary_data) + 1) * 35 + 10
+        st.dataframe(summary_data, height=height)
     
 else:
     st.warning("No data available for the selected period.")
