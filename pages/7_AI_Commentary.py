@@ -196,7 +196,7 @@ if generate_button and selected_ticker and selected_quarter:
 
                 if commentary.startswith("Error"):
                     st.error(commentary)
-                    st.info("💡 **Tips:**\n- Check your OpenAI API key in .env file\n- Ensure you have API credits\n- Try a different model")
+                    st.info("💡 **Tips:**\n- Check your OpenAI API key in .streamlit/secrets.toml file\n- Ensure you have API credits\n- Try a different model")
                 else:
                     st.success("✅ Analysis generated successfully!")
 
@@ -251,9 +251,10 @@ with st.sidebar:
         st.markdown("""
         **Required:**
         1. Get OpenAI API key from [platform.openai.com](https://platform.openai.com/api-keys)
-        2. Add to `.env` file:
+        2. Add to `.streamlit/secrets.toml` file:
            ```
-           OPENAI_API_KEY="your-api-key-here"
+           [openai]
+           api_key = "your-api-key-here"
            ```
         3. Install OpenAI package:
            ```

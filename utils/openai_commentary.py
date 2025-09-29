@@ -14,10 +14,14 @@ import openai
 load_dotenv()
 
 def get_openai_client():
-    """Initialize OpenAI client with API key from environment."""
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY not found in environment variables. Please add it to your .env file.")
+    """Initialize OpenAI client with API key from Streamlit secrets."""
+    try:
+        api_key = st.secrets["openai"]["api_key"]
+    except KeyError:
+        # Fallback to environment variable for backward compatibility
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OpenAI API key not found. Please add it to .streamlit/secrets.toml under [openai] api_key or as OPENAI_API_KEY environment variable.")
 
     return openai.OpenAI(api_key=api_key)
 
