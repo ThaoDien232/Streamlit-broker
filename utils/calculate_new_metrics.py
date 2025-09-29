@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from keycode_matcher import load_keycode_map
+from utils.keycode_matcher import load_keycode_map
 
 def load_keycode_mapping():
     """Load the DWHCode to KeyCode mapping from IRIS_KEYCODE.csv"""
@@ -227,18 +227,11 @@ def calculate_financial_metrics_vectorized(pivot_df, keycode_map):
         if total_equity != 0:
             metrics_to_calculate.append(('TOTAL_EQUITY', 'Total Equity', total_equity))
         
-        # 24. Net Margin Income with 10% provision rule
-        # Components: Income from loans and receivables (IS.6) + Provision for losses (IS.30)
-        loans_income = get_col('IS.6').iloc[idx]
-        provision_losses = get_col('IS.30').iloc[idx]
-        
-        # Apply 10% rule: If provision/loans > 10%, use loans income only
-        if loans_income != 0 and abs(provision_losses / loans_income) > 0.1:
-            net_margin_income = loans_income  # Use loans income only
-        else:
-            net_margin_income = loans_income + provision_losses  # Use both
-            
-        if net_margin_income != 0 or loans_income != 0:
+        # 24. Net Margin Income - use the already calculated margin lending income (IS.7 + IS.30)
+        # This is the same as the margin_lending calculation above, so we use that value
+        net_margin_income = margin_lending  # margin_lending = IS.7 + IS.30 from line 164
+
+        if net_margin_income != 0:
             metrics_to_calculate.append(('NET_MARGIN_INCOME', 'Net Margin Income', net_margin_income))
         
         # Add all calculated metrics for this period

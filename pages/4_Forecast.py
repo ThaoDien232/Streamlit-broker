@@ -1,39 +1,6 @@
 import streamlit as st
 import toml
 
-# Custom CSS for sidebar navigation font size
-FONT_SIZE = "18px"        # Font size - change as needed
-
-st.markdown(f"""
-<style>
-/* Increase font size for sidebar navigation links */
-[data-testid="stSidebar"] [data-testid="stSidebarNav"] ul li a {{
-    font-size: {FONT_SIZE} !important;
-    font-weight: 500 !important;
-}}
-
-/* Alternative selectors for different Streamlit versions */
-.css-1d391kg .css-wjbhl0 {{
-    font-size: {FONT_SIZE} !important;
-    font-weight: 500 !important;
-}}
-
-.css-1d391kg a {{
-    font-size: {FONT_SIZE} !important;
-    font-weight: 500 !important;
-}}
-
-[data-testid="stSidebar"] .css-1d391kg > div {{
-    font-size: {FONT_SIZE} !important;
-    font-weight: 500 !important;
-}}
-
-/* Ensure font size applies to all navigation elements */
-[data-testid="stSidebar"] * {{
-    font-size: {FONT_SIZE} !important;
-}}
-</style>
-""", unsafe_allow_html=True)
 
 # Load theme from config.toml
 theme_config = toml.load("utils/config.toml")
