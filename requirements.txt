@@ -5,3 +5,4 @@ python-dotenv
 pymssql
 sqlalchemy
 openai
+plotly
