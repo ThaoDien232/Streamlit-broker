@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Read(//c/Users/Thao Dien/**)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git remote remove:*)"
     ],
     "deny": [],
     "ask": []
