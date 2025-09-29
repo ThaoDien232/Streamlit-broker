@@ -101,126 +101,6 @@ def calculate_income_statement_items(filtered_is, filtered_bs):
     # Margin balance
     margin_balance = filtered_bs.sort_values('ENDDATE').groupby('Year').tail(1)[['Year', 'BS.8']].rename(columns={'BS.8': 'Margin Balance'})
     
-    # Total equity from BS_security using OWNER'S EQUITY (BS.142)
-    total_equity = filtered_bs.groupby('Year')[['BS.142']].sum().reset_index().rename(columns={'BS.142': 'Total Equity'})
-    
-    # Investment asset balance = short-term investments + available-for-sale assets + available-for-sale securities + held-to-maturity assets
-    short_term_investments = filtered_bs.groupby('Year')[['BS.6']].sum().reset_index().rename(columns={'BS.6': 'Short-term Investments'})
-    available_for_sale_assets = filtered_bs.groupby('Year')[['BS.9']].sum().reset_index().rename(columns={'BS.9': 'Available-for-Sale Assets'})
-    available_for_sale_securities = filtered_bs.groupby('Year')[['BS.58']].sum().reset_index().rename(columns={'BS.58': 'Available-for-Sale Securities'})
-    held_to_maturity_short = filtered_bs.groupby('Year')[['BS.7']].sum().reset_index().rename(columns={'BS.7': 'Held-to-Maturity Short'})
-    held_to_maturity_long = filtered_bs.groupby('Year')[['BS.59']].sum().reset_index().rename(columns={'BS.59': 'Held-to-Maturity Long'})
-    
-    # Combine all investment asset components
-    investment_asset_balance = short_term_investments.merge(available_for_sale_assets, on='Year', how='outer').merge(
-        available_for_sale_securities, on='Year', how='outer').merge(
-        held_to_maturity_short, on='Year', how='outer').merge(
-        held_to_maturity_long, on='Year', how='outer')
-    investment_asset_balance = investment_asset_balance.fillna(0)
-    investment_asset_balance['Investment Asset Balance'] = (
-        investment_asset_balance['Short-term Investments'] + 
-        investment_asset_balance['Available-for-Sale Assets'] + 
-        investment_asset_balance['Available-for-Sale Securities'] + 
-        investment_asset_balance['Held-to-Maturity Short'] + 
-        investment_asset_balance['Held-to-Maturity Long']
-    )
-    
-    # Investment return % = net investment income / average (this year investment asset + previous year investment asset)
-    inv_return = inv_inc.merge(investment_asset_balance[['Year', 'Investment Asset Balance']], on='Year', how='outer')
-    inv_return = inv_return.fillna(0)
-    inv_return['Investment Return %'] = 0.0  # Initialize
-    
-    # Calculate Investment Return % using average of current and previous year assets
-    for idx, row in inv_return.iterrows():
-        current_year_assets = row['Investment Asset Balance']
-        net_investment_income = row['Net Investment Income']
-        
-        # Get previous year assets
-        if idx > 0:
-            previous_year_assets = inv_return.iloc[idx-1]['Investment Asset Balance']
-        else:
-            previous_year_assets = current_year_assets  # For first year, use current year
-        
-        # Calculate average investment assets
-        average_investment_assets = (current_year_assets + previous_year_assets) / 2 if previous_year_assets > 0 else current_year_assets
-        
-        # Calculate investment return percentage (as decimal for percentage formatting)
-        if average_investment_assets > 0:
-            inv_return.at[idx, 'Investment Return %'] = net_investment_income / average_investment_assets
-    
-    investment_return = inv_return[['Year', 'Investment Return %']]
-    
-    # Net Margin Income with 10% provision rule
-    # Components: Income from loans and receivables (IS.6) + Provision for losses (IS.30)
-    loans_income = filtered_is.groupby('Year')[['IS.6']].sum().reset_index().rename(columns={'IS.6': 'Income from loans and receivables'})
-    provision_losses = filtered_is.groupby('Year')[['IS.30']].sum().reset_index().rename(columns={'IS.30': 'Provision for losses'})
-    
-    # Merge the two components
-    net_margin_base = loans_income.merge(provision_losses, on='Year', how='outer')
-    net_margin_base = net_margin_base.fillna(0)
-    
-    # Apply 10% rule: If provision/loans > 10%, use loans income only
-    net_margin_base['Net Margin Income'] = net_margin_base.apply(
-        lambda row: row['Income from loans and receivables'] 
-        if (row['Income from loans and receivables'] != 0 and 
-            abs(row['Provision for losses'] / row['Income from loans and receivables']) > 0.1)
-        else row['Income from loans and receivables'] + row['Provision for losses'], 
-        axis=1
-    )
-    
-    net_margin_income = net_margin_base[['Year', 'Net Margin Income']]
-    
-    # Total Assets for ROA calculation
-    total_assets = filtered_bs.groupby('Year')[['BS.92']].sum().reset_index().rename(columns={'BS.92': 'Total Assets'})
-    
-    # ROE = NPAT / average (this year + last year Total equity)
-    roe_data = NPAT.merge(total_equity, on='Year', how='outer')
-    roe_data = roe_data.fillna(0)
-    roe_data['ROE'] = 0.0  # Initialize
-    
-    for idx, row in roe_data.iterrows():
-        current_equity = row['Total Equity']
-        npat = row['NPAT']
-        
-        # Get previous year equity
-        if idx > 0:
-            previous_equity = roe_data.iloc[idx-1]['Total Equity']
-        else:
-            previous_equity = current_equity  # For first year, use current year
-        
-        # Calculate average equity
-        average_equity = (current_equity + previous_equity) / 2 if previous_equity > 0 else current_equity
-        
-        # Calculate ROE
-        if average_equity > 0:
-            roe_data.at[idx, 'ROE'] = npat / average_equity
-    
-    roe = roe_data[['Year', 'ROE']]
-    
-    # ROA = NPAT / average (this year + last year Total assets)
-    roa_data = NPAT.merge(total_assets, on='Year', how='outer')
-    roa_data = roa_data.fillna(0)
-    roa_data['ROA'] = 0.0  # Initialize
-    
-    for idx, row in roa_data.iterrows():
-        current_assets = row['Total Assets']
-        npat = row['NPAT']
-        
-        # Get previous year assets
-        if idx > 0:
-            previous_assets = roa_data.iloc[idx-1]['Total Assets']
-        else:
-            previous_assets = current_assets  # For first year, use current year
-        
-        # Calculate average assets
-        average_assets = (current_assets + previous_assets) / 2 if previous_assets > 0 else current_assets
-        
-        # Calculate ROA
-        if average_assets > 0:
-            roa_data.at[idx, 'ROA'] = npat / average_assets
-    
-    roa = roa_data[['Year', 'ROA']]
-    
     return {
         'fx_gain_loss_by_year': fx_gain_loss_by_year,
         'affiliates': affiliates,
@@ -242,14 +122,7 @@ def calculate_income_statement_items(filtered_is, filtered_bs):
         'sga': sga,
         'pbt': pbt,
         'NPAT': NPAT,
-        'margin_balance': margin_balance,
-        'total_equity': total_equity,
-        'investment_asset_balance': investment_asset_balance,
-        'investment_return': investment_return,
-        'net_margin_income': net_margin_income,
-        'total_assets': total_assets,
-        'roe': roe,
-        'roa': roa
+        'margin_balance': margin_balance
     }
 
 
