@@ -7,99 +7,31 @@ from sqlalchemy import create_engine, text
 import urllib.parse
 import os
 
-def _get_connection_string() -> str:
-    """Get connection string from secrets or environment"""
-    # Try to get from secrets first (using the 'url' key you have)
-    try:
-        if hasattr(st, 'secrets') and 'db' in st.secrets:
-            # Check if there's a direct connection string
-            if 'url' in st.secrets['db']:
-                return st.secrets['db']['url']
-
-            # Build connection string from individual components
-            db_config = st.secrets["db"]
-            conn_str = (
-                f"SERVER={db_config['server']};"
-                f"DATABASE={db_config['database']};"
-                f"UID={db_config['username']};"
-                f"PWD={db_config['password']};"
-            )
-            if 'port' in db_config:
-                # For Azure SQL, server format should include port
-                server = f"{db_config['server']},{db_config['port']}"
-                conn_str = conn_str.replace(f"SERVER={db_config['server']};", f"SERVER={server};")
-
-            return conn_str
-    except Exception:
-        pass
-
-    # Fallback to environment variable
-    conn_str = os.getenv("TARGET_DB_CONNECTION_STRING")
-    if conn_str:
-        return conn_str
-
-    raise RuntimeError("Connection information not found in secrets or environment variables")
-
-def _parse_connection_string(conn_str: str) -> dict:
-    """Parse connection string into components"""
-    params = {}
-
-    # Handle both connection string formats
-    if conn_str.startswith('mssql+'):
-        # SQLAlchemy URL format - extract server, database, etc.
-        # For now, try to build individual params from secrets
-        try:
-            db_config = st.secrets["db"]
-            return {
-                'SERVER': db_config['server'],
-                'DATABASE': db_config['database'],
-                'UID': db_config['username'],
-                'PWD': db_config['password'],
-                'PORT': db_config.get('port', '1433')
-            }
-        except:
-            pass
-    else:
-        # Standard connection string format
-        tokens = []
-        current = []
-        in_quotes = False
-        for ch in conn_str.strip():
-            if ch == '"':
-                in_quotes = not in_quotes
-            if ch == ';' and not in_quotes:
-                token = ''.join(current).strip()
-                if token:
-                    tokens.append(token)
-                current = []
-            else:
-                current.append(ch)
-        if current:
-            token = ''.join(current).strip()
-            if token:
-                tokens.append(token)
-
-        for token in tokens:
-            if '=' not in token:
-                continue
-            key, value = token.split('=', 1)
-            key = key.strip().upper()
-            if key == 'DRIVER':
-                continue
-            params[key] = value.strip().strip('"')
-
-    return params
+# Remove unused helper functions that were causing issues outside Streamlit context
 
 @contextmanager
 def get_connection():
-    """Create database connection with fallback strategy"""
+    """Create database connection with proper Streamlit secrets handling"""
     connection = None
 
     try:
+        # Check if we're in Streamlit context and have proper secrets
+        if not hasattr(st, 'secrets'):
+            raise RuntimeError("Not running in Streamlit context - st.secrets not available")
+
+        if "db" not in st.secrets:
+            raise RuntimeError("Database configuration missing from Streamlit secrets. Please add [db] section to secrets.toml")
+
+        db_config = st.secrets["db"]
+
+        # Validate required database configuration
+        required_keys = ['server', 'database', 'username', 'password']
+        missing_keys = [key for key in required_keys if key not in db_config]
+        if missing_keys:
+            raise RuntimeError(f"Missing required database configuration keys: {missing_keys}")
+
         # Method 1: Try pyodbc with SQL Server driver (most compatible with Azure SQL)
         try:
-            db_config = st.secrets["db"]
-
             # Build ODBC connection string for Azure SQL
             connection_string = (
                 f"DRIVER={{SQL Server}};"
@@ -113,18 +45,12 @@ def get_connection():
             )
 
             connection = pyodbc.connect(connection_string, timeout=30)
-            print("✓ Connected using pyodbc + SQL Server driver")
 
         except Exception as pyodbc_error:
-            print(f"pyodbc failed: {pyodbc_error}")
-
             # Method 2: Fallback to pymssql (for non-Azure SQL Server)
             try:
-                conn_str = _get_connection_string()
-                params = _parse_connection_string(conn_str)
-
-                server = params.get('SERVER', '')
-                port = int(params.get('PORT', 1433))
+                server = db_config['server']
+                port = int(db_config.get('port', 1433))
 
                 # Handle server,port format
                 if ',' in server:
@@ -137,31 +63,33 @@ def get_connection():
 
                 connection = pymssql.connect(
                     server=server,
-                    user=params['UID'],
-                    password=params['PWD'],
-                    database=params['DATABASE'],
+                    user=db_config['username'],
+                    password=db_config['password'],
+                    database=db_config['database'],
                     port=port,
                     charset='UTF-8',
                     autocommit=False,
                     timeout=30,
                     login_timeout=30
                 )
-                print("✓ Connected using pymssql")
 
             except Exception as pymssql_error:
                 # Method 3: Last resort - SQLAlchemy with original URL
                 try:
-                    connection_url = st.secrets["db"]["url"]
+                    if "url" not in db_config:
+                        raise RuntimeError("No 'url' key found in database configuration")
+
+                    connection_url = db_config["url"]
                     # Fix driver name in URL
                     fixed_url = connection_url.replace("ODBC+Driver+18+for+SQL+Server", "SQL+Server")
 
                     engine = create_engine(fixed_url, pool_pre_ping=True)
                     connection = engine.connect()
-                    print("✓ Connected using SQLAlchemy")
 
                 except Exception as sqlalchemy_error:
                     raise RuntimeError(
-                        f"All connection methods failed:\n"
+                        f"All database connection methods failed. Please check your database configuration.\n"
+                        f"Errors:\n"
                         f"  pyodbc: {pyodbc_error}\n"
                         f"  pymssql: {pymssql_error}\n"
                         f"  sqlalchemy: {sqlalchemy_error}"
@@ -175,7 +103,7 @@ def get_connection():
                 connection.close()
 
     except Exception as e:
-        st.error(f"Failed to create database connection: {e}")
+        st.error(f"Database connection failed: {e}")
         raise
 
 def run_query(sql: str, params: dict | None = None) -> pd.DataFrame:
