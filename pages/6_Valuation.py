@@ -96,19 +96,18 @@ with st.sidebar:
         st.error("No valuation metrics found in data")
         st.stop()
 
-    # Metric selection - ONLY valuation metrics (no financial statement items)
+    # Metric selection - ONLY P/E and P/B valuation metrics
     metric_display_names = {
         'PE': 'Price-to-Earnings (P/E)',
-        'PB': 'Price-to-Book (P/B)',
-        'PS': 'Price-to-Sales (P/S)',
-        'EV_EBITDA': 'EV/EBITDA'
+        'PB': 'Price-to-Book (P/B)'
     }
 
-    # Create options for selectbox
+    # Create options for selectbox - only include PE and PB if available
     metric_options = []
-    for metric in available_metrics:
-        display_name = metric_display_names.get(metric, metric)
-        metric_options.append(display_name)
+    for metric in ['PE', 'PB']:
+        if metric in available_metrics:
+            display_name = metric_display_names[metric]
+            metric_options.append(display_name)
 
     selected_metric_display = st.selectbox(
         "Valuation Metric:",
@@ -474,92 +473,71 @@ st.subheader("📊 Valuation Statistics Summary")
 stats_df = prepare_statistics_table(df, metric_col, metric_type)
 
 if not stats_df.empty:
-    # Create interactive table using Plotly
+    # Create sortable table using st.dataframe with built-in sorting
     table_df = stats_df.copy()
 
     # Remove Type column for display
     if 'Type' in table_df.columns:
         table_df = table_df.drop('Type', axis=1)
 
-    # Prepare formatted values for display
-    def format_table_value(val, metric_type):
+    # Format numeric columns for better display
+    def format_table_value(val, col_name):
         if pd.isna(val):
-            return "N/A"
-        if metric_type in ['ROE', 'ROA']:
-            return f"{val*100:.2f}%"
-        elif metric_type in ['NPAT', 'TOTAL_EQUITY', 'TOTAL_ASSETS']:
-            return f"{val/1e9:.1f}B" if val >= 1e9 else f"{val/1e6:.0f}M"
+            return None
+        if col_name in ['Current', 'Mean']:
+            if metric_type in ['ROE', 'ROA']:
+                return f"{val*100:.2f}%"
+            elif metric_type in ['NPAT', 'TOTAL_EQUITY', 'TOTAL_ASSETS']:
+                return f"{val/1e9:.1f}B" if val >= 1e9 else f"{val/1e6:.0f}M"
+            else:
+                return round(val, 2)
+        elif col_name == 'CDF (%)':
+            return f"{val:.1f}%"
+        elif col_name == 'Z-Score':
+            return round(val, 2)
         else:
-            return f"{val:.2f}"
+            return val
 
-    formatted_current = table_df['Current'].apply(lambda x: format_table_value(x, metric_type))
-    formatted_mean = table_df['Mean'].apply(lambda x: format_table_value(x, metric_type))
-    formatted_cdf = table_df['CDF (%)'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else "N/A")
-    formatted_zscore = table_df['Z-Score'].apply(lambda x: f"{x:.2f}" if pd.notna(x) else "N/A")
+    # Format the dataframe for display
+    display_df = table_df.copy()
+    for col in ['Current', 'Mean', 'CDF (%)', 'Z-Score']:
+        if col in display_df.columns:
+            display_df[col] = display_df[col].apply(lambda x: format_table_value(x, col))
 
-    # Prepare colors for status column
-    status_colors = []
-    for status in table_df['Status']:
-        if status in ["Very Cheap", "Excellent"]:
-            status_colors.append('#90EE90')
-        elif status in ["Cheap", "Good"]:
-            status_colors.append('#B8E6B8')
-        elif status in ["Fair", "Average"]:
-            status_colors.append('#FFFFCC')
-        elif status in ["Expensive", "Below Average"]:
-            status_colors.append('#FFD4A3')
-        elif status in ["Very Expensive", "Poor"]:
-            status_colors.append('#FFB3B3')
-        else:
-            status_colors.append('white')
-
-    # Identify sector rows for highlighting
-    row_colors = []
-    for ticker in table_df['Ticker']:
-        if ticker in ['All_Brokers', 'Listed', 'Unlisted', 'Sector']:
-            row_colors.append('#E8E8E8')
-        else:
-            row_colors.append('white')
-
-    # Create the main table figure
-    fig_table = go.Figure(data=[go.Table(
-        header=dict(
-            values=['Ticker', 'Current', 'Mean', 'CDF (%)', 'Z-Score', 'Status'],
-            fill_color=primary_color,
-            font=dict(color='white', size=12),
-            align='left',
-            height=30
-        ),
-        cells=dict(
-            values=[
-                table_df['Ticker'],
-                formatted_current,
-                formatted_mean,
-                formatted_cdf,
-                formatted_zscore,
-                table_df['Status']
-            ],
-            fill_color=[
-                row_colors,  # Ticker column
-                row_colors,  # Current column
-                row_colors,  # Mean column
-                row_colors,  # CDF column
-                row_colors,  # Z-Score column
-                status_colors  # Status column with custom colors
-            ],
-            align='left',
-            height=25,
-            font=dict(size=13)
-        )
-    )])
-
-    fig_table.update_layout(
-        height=min(600, len(table_df) * 30 + 100),
-        margin=dict(l=0, r=0, t=0, b=0)
+    # Display sortable dataframe with color coding
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        height=min(600, len(display_df) * 35 + 100),
+        column_config={
+            "Ticker": st.column_config.TextColumn(
+                "Ticker",
+                help="Click column header to sort",
+                width="small"
+            ),
+            "Current": st.column_config.TextColumn(
+                "Current",
+                help="Current valuation metric"
+            ),
+            "Mean": st.column_config.TextColumn(
+                "Mean",
+                help="Historical average"
+            ),
+            "CDF (%)": st.column_config.TextColumn(
+                "CDF (%)",
+                help="Percentile ranking"
+            ),
+            "Z-Score": st.column_config.TextColumn(
+                "Z-Score",
+                help="Standard deviations from mean"
+            ),
+            "Status": st.column_config.TextColumn(
+                "Status",
+                help="Valuation assessment"
+            )
+        }
     )
 
-    # Display the main table
-    st.plotly_chart(fig_table, use_container_width=True)
 
     # Summary statistics
     st.markdown("---")
