@@ -504,9 +504,35 @@ if not stats_df.empty:
         if col in display_df.columns:
             display_df[col] = display_df[col].apply(lambda x: format_table_value(x, col))
 
+    # Create a function to assign colors based on status
+    def get_status_color(status):
+        if status in ["Very Cheap", "Excellent"]:
+            return "#90EE90"  # Light green
+        elif status in ["Cheap", "Good"]:
+            return "#B8E6B8"  # Lighter green
+        elif status in ["Fair", "Average"]:
+            return "#FFFFCC"  # Light yellow
+        elif status in ["Expensive", "Below Average"]:
+            return "#FFD4A3"  # Light orange
+        elif status in ["Very Expensive", "Poor"]:
+            return "#FFB3B3"  # Light red
+        else:
+            return None
+
+    # Apply styling with color-coding
+    def style_status(row):
+        color = get_status_color(row['Status'])
+        if color:
+            return [f'background-color: {color}'] * len(row)
+        else:
+            return [''] * len(row)
+
+    # Apply the styling
+    styled_df = display_df.style.apply(style_status, axis=1)
+
     # Display sortable dataframe with color coding
     st.dataframe(
-        display_df,
+        styled_df,
         use_container_width=True,
         height=min(600, len(display_df) * 35 + 100),
         column_config={
