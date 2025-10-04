@@ -7,28 +7,55 @@ from sqlalchemy import create_engine, text
 import urllib.parse
 import os
 
-# Remove unused helper functions that were causing issues outside Streamlit context
+def _get_db_config():
+    """Get database configuration from Streamlit secrets or environment variables"""
+
+    # Method 1: Try Streamlit secrets (preferred for Streamlit Cloud)
+    if hasattr(st, 'secrets') and "db" in st.secrets:
+        return dict(st.secrets["db"])
+
+    # Method 2: Try environment variables (fallback for other deployments)
+    env_config = {
+        'server': os.getenv('DB_SERVER'),
+        'database': os.getenv('DB_DATABASE'),
+        'username': os.getenv('DB_USERNAME'),
+        'password': os.getenv('DB_PASSWORD'),
+        'port': os.getenv('DB_PORT', '1433'),
+        'url': os.getenv('DB_URL')
+    }
+
+    # Check if we have the minimum required environment variables
+    if env_config['server'] and env_config['database'] and env_config['username'] and env_config['password']:
+        return env_config
+
+    # Method 3: Check if we're in Streamlit context but missing secrets
+    if hasattr(st, 'secrets'):
+        raise RuntimeError(
+            "Database configuration missing from Streamlit secrets. "
+            "Please add [db] section to your Streamlit Cloud app secrets."
+        )
+
+    # Method 4: Not in Streamlit context and no environment variables
+    raise RuntimeError(
+        "Database configuration not found. Please set environment variables:\n"
+        "DB_SERVER, DB_DATABASE, DB_USERNAME, DB_PASSWORD\n"
+        "Or configure secrets in Streamlit Cloud dashboard."
+    )
 
 @contextmanager
 def get_connection():
-    """Create database connection with proper Streamlit secrets handling"""
+    """Create database connection with multiple configuration sources"""
     connection = None
 
     try:
-        # Check if we're in Streamlit context and have proper secrets
-        if not hasattr(st, 'secrets'):
-            raise RuntimeError("Not running in Streamlit context - st.secrets not available")
-
-        if "db" not in st.secrets:
-            raise RuntimeError("Database configuration missing from Streamlit secrets. Please add [db] section to secrets.toml")
-
-        db_config = st.secrets["db"]
+        # Get database configuration from available sources
+        db_config = _get_db_config()
 
         # Validate required database configuration
         required_keys = ['server', 'database', 'username', 'password']
-        missing_keys = [key for key in required_keys if key not in db_config]
+        missing_keys = [key for key in required_keys if not db_config.get(key)]
         if missing_keys:
-            raise RuntimeError(f"Missing required database configuration keys: {missing_keys}")
+            raise RuntimeError(f"Missing required database configuration: {missing_keys}")
 
         # Method 1: Try pyodbc with SQL Server driver (most compatible with Azure SQL)
         try:
@@ -74,10 +101,10 @@ def get_connection():
                 )
 
             except Exception as pymssql_error:
-                # Method 3: Last resort - SQLAlchemy with original URL
+                # Method 3: Last resort - SQLAlchemy with URL (if available)
                 try:
-                    if "url" not in db_config:
-                        raise RuntimeError("No 'url' key found in database configuration")
+                    if not db_config.get("url"):
+                        raise RuntimeError("No 'url' found in database configuration")
 
                     connection_url = db_config["url"]
                     # Fix driver name in URL
@@ -103,7 +130,10 @@ def get_connection():
                 connection.close()
 
     except Exception as e:
-        st.error(f"Database connection failed: {e}")
+        if hasattr(st, 'error'):
+            st.error(f"Database connection failed: {e}")
+        else:
+            print(f"Database connection failed: {e}")
         raise
 
 def run_query(sql: str, params: dict | None = None) -> pd.DataFrame:
