@@ -1,7 +1,10 @@
 import streamlit as st
 import pandas as pd
 import pymssql
+import pyodbc
 from contextlib import contextmanager
+from sqlalchemy import create_engine, text
+import urllib.parse
 import os
 
 def _get_connection_string() -> str:
@@ -89,42 +92,87 @@ def _parse_connection_string(conn_str: str) -> dict:
 
 @contextmanager
 def get_connection():
-    """Create direct pymssql connection for SQL Server"""
+    """Create database connection with fallback strategy"""
+    connection = None
+
     try:
-        conn_str = _get_connection_string()
-        params = _parse_connection_string(conn_str)
+        # Method 1: Try pyodbc with SQL Server driver (most compatible with Azure SQL)
+        try:
+            db_config = st.secrets["db"]
 
-        server = params.get('SERVER', '')
-        port = None
+            # Build ODBC connection string for Azure SQL
+            connection_string = (
+                f"DRIVER={{SQL Server}};"
+                f"SERVER={db_config['server']};"
+                f"DATABASE={db_config['database']};"
+                f"UID={db_config['username']};"
+                f"PWD={db_config['password']};"
+                f"Encrypt=yes;"
+                f"TrustServerCertificate=no;"
+                f"Connection Timeout=30;"
+            )
 
-        # Handle Azure SQL server format
-        if ',' in server:
-            host_part, port_part = server.split(',', 1)
-            server = host_part
+            connection = pyodbc.connect(connection_string, timeout=30)
+            print("✓ Connected using pyodbc + SQL Server driver")
+
+        except Exception as pyodbc_error:
+            print(f"pyodbc failed: {pyodbc_error}")
+
+            # Method 2: Fallback to pymssql (for non-Azure SQL Server)
             try:
-                port = int(port_part)
-            except ValueError:
-                port = 1433
-        else:
-            port = int(params.get('PORT', 1433))
+                conn_str = _get_connection_string()
+                params = _parse_connection_string(conn_str)
 
-        # Create direct pymssql connection (no ODBC drivers needed)
-        connection = pymssql.connect(
-            server=server,
-            user=params['UID'],
-            password=params['PWD'],
-            database=params['DATABASE'],
-            port=port,
-            charset='UTF-8',
-            autocommit=False,
-            timeout=30,
-            login_timeout=30
-        )
+                server = params.get('SERVER', '')
+                port = int(params.get('PORT', 1433))
 
+                # Handle server,port format
+                if ',' in server:
+                    host_part, port_part = server.split(',', 1)
+                    server = host_part
+                    try:
+                        port = int(port_part)
+                    except ValueError:
+                        port = 1433
+
+                connection = pymssql.connect(
+                    server=server,
+                    user=params['UID'],
+                    password=params['PWD'],
+                    database=params['DATABASE'],
+                    port=port,
+                    charset='UTF-8',
+                    autocommit=False,
+                    timeout=30,
+                    login_timeout=30
+                )
+                print("✓ Connected using pymssql")
+
+            except Exception as pymssql_error:
+                # Method 3: Last resort - SQLAlchemy with original URL
+                try:
+                    connection_url = st.secrets["db"]["url"]
+                    # Fix driver name in URL
+                    fixed_url = connection_url.replace("ODBC+Driver+18+for+SQL+Server", "SQL+Server")
+
+                    engine = create_engine(fixed_url, pool_pre_ping=True)
+                    connection = engine.connect()
+                    print("✓ Connected using SQLAlchemy")
+
+                except Exception as sqlalchemy_error:
+                    raise RuntimeError(
+                        f"All connection methods failed:\n"
+                        f"  pyodbc: {pyodbc_error}\n"
+                        f"  pymssql: {pymssql_error}\n"
+                        f"  sqlalchemy: {sqlalchemy_error}"
+                    )
+
+        # Yield the connection
         try:
             yield connection
         finally:
-            connection.close()
+            if connection:
+                connection.close()
 
     except Exception as e:
         st.error(f"Failed to create database connection: {e}")
@@ -134,19 +182,45 @@ def run_query(sql: str, params: dict | None = None) -> pd.DataFrame:
     """Execute SQL query and return results as DataFrame"""
     try:
         with get_connection() as conn:
-            # Convert dict params to tuple format for pymssql
-            if params:
-                # Convert named parameters to positional for pymssql
-                # Replace :param with %s and extract values
-                formatted_sql = sql
-                param_values = []
-                for key, value in params.items():
-                    formatted_sql = formatted_sql.replace(f":{key}", "%s")
-                    param_values.append(value)
-                result = pd.read_sql(formatted_sql, conn, params=param_values)
+            # Detect connection type and handle accordingly
+            connection_type = type(conn).__name__
+
+            if connection_type == 'Connection' and hasattr(conn, 'execute'):
+                # SQLAlchemy connection
+                if params:
+                    # Use SQLAlchemy text() for named parameters
+                    result = pd.read_sql(text(sql), conn, params=params)
+                else:
+                    result = pd.read_sql(text(sql), conn)
+
+            elif hasattr(conn, 'cursor'):
+                # pyodbc or pymssql connection
+                if params:
+                    # Convert named parameters (:param) to positional (%s or ?)
+                    formatted_sql = sql
+                    param_values = []
+
+                    # Determine parameter style based on connection
+                    if 'pyodbc' in str(type(conn)):
+                        # pyodbc uses ? placeholders
+                        for key, value in params.items():
+                            formatted_sql = formatted_sql.replace(f":{key}", "?")
+                            param_values.append(value)
+                    else:
+                        # pymssql uses %s placeholders
+                        for key, value in params.items():
+                            formatted_sql = formatted_sql.replace(f":{key}", "%s")
+                            param_values.append(value)
+
+                    result = pd.read_sql(formatted_sql, conn, params=param_values)
+                else:
+                    result = pd.read_sql(sql, conn)
             else:
-                result = pd.read_sql(sql, conn)
+                # Direct pandas read_sql
+                result = pd.read_sql(sql, conn, params=params)
+
             return result
+
     except Exception as e:
         st.error(f"Database query failed: {e}")
         print(f"SQL Query error: {e}")
@@ -160,10 +234,24 @@ def test_connection() -> bool:
     """Test database connection and return True if successful"""
     try:
         with get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1 as test")
-            result = cursor.fetchone()
-            cursor.close()
+            # Handle different connection types
+            connection_type = type(conn).__name__
+
+            if connection_type == 'Connection' and hasattr(conn, 'execute'):
+                # SQLAlchemy connection
+                result = conn.execute(text("SELECT 1 as test"))
+                result.fetchone()
+            elif hasattr(conn, 'cursor'):
+                # pyodbc or pymssql connection
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 as test")
+                result = cursor.fetchone()
+                cursor.close()
+            else:
+                # Try direct execution
+                result = conn.execute("SELECT 1 as test")
+                result.fetchone()
+
             return True
     except Exception as e:
         st.error(f"Database connection test failed: {e}")
