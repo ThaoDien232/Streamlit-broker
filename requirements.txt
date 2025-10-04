@@ -3,6 +3,8 @@ pandas
 openpyxl
 python-dotenv
 pymssql
+pyodbc
 sqlalchemy
 openai
 plotly
+toml

@@ -1,12 +1,367 @@
 import streamlit as st
 import pandas as pd
-from sqlalchemy import create_engine, text
+import pymssql
+from contextlib import contextmanager
+import os
 
-@st.cache_resource
-def get_engine():
-    return create_engine(st.secrets["db"]["url"], pool_pre_ping=True)
+def _get_connection_string() -> str:
+    """Get connection string from secrets or environment"""
+    # Try to get from secrets first (using the 'url' key you have)
+    try:
+        if hasattr(st, 'secrets') and 'db' in st.secrets:
+            # Check if there's a direct connection string
+            if 'url' in st.secrets['db']:
+                return st.secrets['db']['url']
+
+            # Build connection string from individual components
+            db_config = st.secrets["db"]
+            conn_str = (
+                f"SERVER={db_config['server']};"
+                f"DATABASE={db_config['database']};"
+                f"UID={db_config['username']};"
+                f"PWD={db_config['password']};"
+            )
+            if 'port' in db_config:
+                # For Azure SQL, server format should include port
+                server = f"{db_config['server']},{db_config['port']}"
+                conn_str = conn_str.replace(f"SERVER={db_config['server']};", f"SERVER={server};")
+
+            return conn_str
+    except Exception:
+        pass
+
+    # Fallback to environment variable
+    conn_str = os.getenv("TARGET_DB_CONNECTION_STRING")
+    if conn_str:
+        return conn_str
+
+    raise RuntimeError("Connection information not found in secrets or environment variables")
+
+def _parse_connection_string(conn_str: str) -> dict:
+    """Parse connection string into components"""
+    params = {}
+
+    # Handle both connection string formats
+    if conn_str.startswith('mssql+'):
+        # SQLAlchemy URL format - extract server, database, etc.
+        # For now, try to build individual params from secrets
+        try:
+            db_config = st.secrets["db"]
+            return {
+                'SERVER': db_config['server'],
+                'DATABASE': db_config['database'],
+                'UID': db_config['username'],
+                'PWD': db_config['password'],
+                'PORT': db_config.get('port', '1433')
+            }
+        except:
+            pass
+    else:
+        # Standard connection string format
+        tokens = []
+        current = []
+        in_quotes = False
+        for ch in conn_str.strip():
+            if ch == '"':
+                in_quotes = not in_quotes
+            if ch == ';' and not in_quotes:
+                token = ''.join(current).strip()
+                if token:
+                    tokens.append(token)
+                current = []
+            else:
+                current.append(ch)
+        if current:
+            token = ''.join(current).strip()
+            if token:
+                tokens.append(token)
+
+        for token in tokens:
+            if '=' not in token:
+                continue
+            key, value = token.split('=', 1)
+            key = key.strip().upper()
+            if key == 'DRIVER':
+                continue
+            params[key] = value.strip().strip('"')
+
+    return params
+
+@contextmanager
+def get_connection():
+    """Create direct pymssql connection for SQL Server"""
+    try:
+        conn_str = _get_connection_string()
+        params = _parse_connection_string(conn_str)
+
+        server = params.get('SERVER', '')
+        port = None
+
+        # Handle Azure SQL server format
+        if ',' in server:
+            host_part, port_part = server.split(',', 1)
+            server = host_part
+            try:
+                port = int(port_part)
+            except ValueError:
+                port = 1433
+        else:
+            port = int(params.get('PORT', 1433))
+
+        # Create direct pymssql connection (no ODBC drivers needed)
+        connection = pymssql.connect(
+            server=server,
+            user=params['UID'],
+            password=params['PWD'],
+            database=params['DATABASE'],
+            port=port,
+            charset='UTF-8',
+            autocommit=False,
+            timeout=30,
+            login_timeout=30
+        )
+
+        try:
+            yield connection
+        finally:
+            connection.close()
+
+    except Exception as e:
+        st.error(f"Failed to create database connection: {e}")
+        raise
 
 def run_query(sql: str, params: dict | None = None) -> pd.DataFrame:
-    engine = get_engine()
-    with engine.connect() as conn:
-        return pd.read_sql(text(sql), conn, params=params)
+    """Execute SQL query and return results as DataFrame"""
+    try:
+        with get_connection() as conn:
+            # Convert dict params to tuple format for pymssql
+            if params:
+                # Convert named parameters to positional for pymssql
+                # Replace :param with %s and extract values
+                formatted_sql = sql
+                param_values = []
+                for key, value in params.items():
+                    formatted_sql = formatted_sql.replace(f":{key}", "%s")
+                    param_values.append(value)
+                result = pd.read_sql(formatted_sql, conn, params=param_values)
+            else:
+                result = pd.read_sql(sql, conn)
+            return result
+    except Exception as e:
+        st.error(f"Database query failed: {e}")
+        print(f"SQL Query error: {e}")
+        print(f"Query: {sql}")
+        if params:
+            print(f"Parameters: {params}")
+        # Return empty DataFrame instead of raising to prevent app crash
+        return pd.DataFrame()
+
+def test_connection() -> bool:
+    """Test database connection and return True if successful"""
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 as test")
+            result = cursor.fetchone()
+            cursor.close()
+            return True
+    except Exception as e:
+        st.error(f"Database connection test failed: {e}")
+        return False
+
+def get_table_info(table_name: str) -> pd.DataFrame:
+    """Get column information for a specific table"""
+    query = """
+    SELECT
+        COLUMN_NAME,
+        DATA_TYPE,
+        IS_NULLABLE,
+        COLUMN_DEFAULT
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = :table_name
+    ORDER BY ORDINAL_POSITION
+    """
+    return run_query(query, {"table_name": table_name})
+
+def get_available_tables() -> pd.DataFrame:
+    """Get list of available tables in the database"""
+    query = """
+    SELECT
+        TABLE_SCHEMA,
+        TABLE_NAME,
+        TABLE_TYPE
+    FROM INFORMATION_SCHEMA.TABLES
+    WHERE TABLE_TYPE = 'BASE TABLE'
+    ORDER BY TABLE_SCHEMA, TABLE_NAME
+    """
+    return run_query(query)
+
+def get_latest_valuation_data(ticker: str = None) -> pd.DataFrame:
+    """Get latest valuation data (PE, PB, PS, EV_EBITDA) with OHLC prices"""
+    if ticker:
+        query = """
+        SELECT TOP 1
+            TICKER,
+            TRADE_DATE,
+            PE,
+            PB,
+            PS,
+            EV_EBITDA,
+            PX_OPEN,
+            PX_HIGH,
+            PX_LOW,
+            PX_LAST,
+            MKT_CAP
+        FROM Market_Data
+        WHERE TICKER = :ticker
+        ORDER BY TRADE_DATE DESC
+        """
+        params = {"ticker": ticker.upper()}
+    else:
+        query = """
+        WITH LatestDate AS (
+            SELECT MAX(TRADE_DATE) as max_date FROM Market_Data
+        )
+        SELECT
+            m.TICKER,
+            m.TRADE_DATE,
+            m.PE,
+            m.PB,
+            m.PS,
+            m.EV_EBITDA,
+            m.PX_OPEN,
+            m.PX_HIGH,
+            m.PX_LOW,
+            m.PX_LAST,
+            m.MKT_CAP
+        FROM Market_Data m
+        INNER JOIN LatestDate l ON m.TRADE_DATE = l.max_date
+        ORDER BY m.TICKER
+        """
+        params = None
+
+    return run_query(query, params)
+
+def get_valuation_history(ticker: str, days: int = 30) -> pd.DataFrame:
+    """Get historical valuation data for a specific ticker"""
+    query = """
+    SELECT TOP (:days)
+        TICKER,
+        TRADE_DATE,
+        PE,
+        PB,
+        PS,
+        EV_EBITDA,
+        PX_LAST,
+        MKT_CAP
+    FROM Market_Data
+    WHERE TICKER = :ticker
+    ORDER BY TRADE_DATE DESC
+    """
+    params = {"ticker": ticker.upper(), "days": days}
+    return run_query(query, params)
+
+def get_sector_valuation_comparison() -> pd.DataFrame:
+    """Get latest valuation metrics by sector for comparison"""
+    query = """
+    WITH LatestDate AS (
+        SELECT MAX(TRADE_DATE) as max_date FROM Market_Data
+    )
+    SELECT
+        s.Sector,
+        s.L1 as Industry,
+        m.TICKER,
+        m.PE,
+        m.PB,
+        m.PS,
+        m.EV_EBITDA,
+        m.MKT_CAP,
+        s.VNI as VN30_Member
+    FROM Market_Data m
+    INNER JOIN LatestDate l ON m.TRADE_DATE = l.max_date
+    INNER JOIN Sector_Map s ON m.TICKER = s.Ticker
+    WHERE m.PE IS NOT NULL
+    ORDER BY s.Sector, m.PE
+    """
+    return run_query(query)
+
+def get_vn30_valuation() -> pd.DataFrame:
+    """Get valuation metrics for VN30 index constituents"""
+    query = """
+    WITH LatestDate AS (
+        SELECT MAX(TRADE_DATE) as max_date FROM Market_Data
+    )
+    SELECT
+        m.TICKER,
+        s.L1 as Industry,
+        m.PE,
+        m.PB,
+        m.PS,
+        m.EV_EBITDA,
+        m.PX_LAST as Price,
+        m.MKT_CAP
+    FROM Market_Data m
+    INNER JOIN LatestDate l ON m.TRADE_DATE = l.max_date
+    INNER JOIN Sector_Map s ON m.TICKER = s.Ticker
+    WHERE s.VNI = 'Y'
+    ORDER BY m.MKT_CAP DESC
+    """
+    return run_query(query)
+
+def get_valuation_screening(
+    pe_min: float = None, pe_max: float = None,
+    pb_min: float = None, pb_max: float = None,
+    ps_min: float = None, ps_max: float = None,
+    sector: str = None
+) -> pd.DataFrame:
+    """Screen stocks based on valuation criteria"""
+    where_conditions = ["m.PE IS NOT NULL"]
+    params = {}
+
+    if pe_min is not None:
+        where_conditions.append("m.PE >= :pe_min")
+        params["pe_min"] = pe_min
+    if pe_max is not None:
+        where_conditions.append("m.PE <= :pe_max")
+        params["pe_max"] = pe_max
+    if pb_min is not None:
+        where_conditions.append("m.PB >= :pb_min")
+        params["pb_min"] = pb_min
+    if pb_max is not None:
+        where_conditions.append("m.PB <= :pb_max")
+        params["pb_max"] = pb_max
+    if ps_min is not None:
+        where_conditions.append("m.PS >= :ps_min")
+        params["ps_min"] = ps_min
+    if ps_max is not None:
+        where_conditions.append("m.PS <= :ps_max")
+        params["ps_max"] = ps_max
+    if sector:
+        where_conditions.append("s.Sector = :sector")
+        params["sector"] = sector
+
+    where_clause = " AND ".join(where_conditions)
+
+    query = f"""
+    WITH LatestDate AS (
+        SELECT MAX(TRADE_DATE) as max_date FROM Market_Data
+    )
+    SELECT
+        m.TICKER,
+        s.Sector,
+        s.L1 as Industry,
+        m.PE,
+        m.PB,
+        m.PS,
+        m.EV_EBITDA,
+        m.PX_LAST as Price,
+        m.MKT_CAP,
+        s.VNI as VN30_Member
+    FROM Market_Data m
+    INNER JOIN LatestDate l ON m.TRADE_DATE = l.max_date
+    INNER JOIN Sector_Map s ON m.TICKER = s.Ticker
+    WHERE {where_clause}
+    ORDER BY m.PE
+    """
+
+    return run_query(query, params)
