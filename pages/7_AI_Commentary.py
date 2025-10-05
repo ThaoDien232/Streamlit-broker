@@ -221,8 +221,7 @@ def get_calc_metric_value(df, ticker, year, quarter, metric_code):
     return 0
 
 # Title and description
-st.title("🤖 AI-Powered Business Commentary")
-st.markdown("Generate intelligent quarterly analysis of broker financial performance using advanced AI")
+st.title("AI-Powered Commentary")
 
 # Manual refresh control
 with st.sidebar:
@@ -269,7 +268,7 @@ if cache_exists:
         cache_df = pd.read_csv(cache_file)
         total_cached = len(cache_df)
         unique_tickers = cache_df['TICKER'].nunique()
-        st.sidebar.success(f"📚 Cache: {total_cached} commentaries for {unique_tickers} brokers")
+        st.sidebar.success(f"Cache: {total_cached} commentaries for {unique_tickers} brokers")
     except:
         cache_exists = False
 
@@ -335,7 +334,7 @@ if selected_ticker and selected_quarter:
         analysis_table = create_analysis_table(ticker_data, calculated_metrics, selected_quarter)
 
         # Display the data processing results
-        st.subheader(f"📊 Financial Analysis: {selected_ticker} - {selected_quarter}")
+        st.subheader(f"Financial Analysis: {selected_ticker} - {selected_quarter}")
 
         # Show calculated metrics
         if not calculated_metrics.empty and not analysis_table.empty:
@@ -402,7 +401,7 @@ if selected_ticker and selected_quarter:
             st.dataframe(display_table, use_container_width=True)
 
             # Show raw metrics for debugging (expandable)
-            with st.expander("🔍 Detailed Calculation Data"):
+            with st.expander("Detailed Calculation Data"):
                 st.write("**Raw Historical Data (last 10 quarters):**")
                 recent_quarters = sort_quarters_chronologically([q for q in ticker_data['QUARTER_LABEL'].unique() if pd.notna(q)])[-10:]
                 recent_data = ticker_data[ticker_data['QUARTER_LABEL'].isin(recent_quarters)]
@@ -461,7 +460,7 @@ if selected_ticker and selected_quarter:
                         latest_cached = cached_analysis.iloc[-1]
                         generated_date = pd.to_datetime(latest_cached['GENERATED_DATE']).strftime('%Y-%m-%d %H:%M')
 
-                        st.success(f"📋 Cached analysis available (Generated: {generated_date})")
+                        st.success(f"Cached analysis available (Generated: {generated_date})")
 
                         # Display cached commentary
                         st.subheader(f"AI Analysis: {selected_ticker} - {selected_quarter}")
@@ -483,11 +482,11 @@ if selected_ticker and selected_quarter:
 col1, col2, col3 = st.columns([1, 1, 2])
 
 with col1:
-    generate_button = st.button("🚀 Generate Analysis", type="primary")
+    generate_button = st.button("Generate Analysis", type="primary")
 
 with col2:
     if cache_exists:
-        view_cache_button = st.button("📚 View All Cached")
+        view_cache_button = st.button("View All Cached")
     else:
         view_cache_button = False
 
@@ -510,7 +509,7 @@ if generate_button and selected_ticker and selected_quarter:
                     commentary = generate_commentary(
                         ticker=selected_ticker,
                         year_quarter=selected_quarter,
-                        df=analysis_table,  # Pass the processed analysis table instead of raw data
+                        df=df,  # Pass the full Combined_Financial_Data DataFrame
                         model=model_choice,
                         force_regenerate=force_regenerate
                     )
@@ -519,7 +518,7 @@ if generate_button and selected_ticker and selected_quarter:
                         st.error(commentary)
                         st.info("💡 **Tips:**\n- Check your OpenAI API key in .streamlit/secrets.toml file\n- Ensure you have API credits\n- Try a different model")
                     else:
-                        st.success("✅ Analysis generated successfully!")
+                        st.success("Analysis generated successfully!")
 
                         # Display the generated commentary
                         st.subheader(f"AI Analysis: {selected_ticker} - {selected_quarter}")
