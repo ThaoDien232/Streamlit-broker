@@ -289,7 +289,8 @@ def generate_commentary(ticker: str, year_quarter: str, df: pd.DataFrame,
                        model: str = "gpt-4", force_regenerate: bool = False,
                        analysis_table: pd.DataFrame = None,
                        market_share_table: pd.DataFrame = None,
-                       prop_holdings_table: pd.DataFrame = None) -> str:
+                       prop_holdings_table: pd.DataFrame = None,
+                       return_prompt: bool = False) -> str:
     """
     Generate AI commentary for a broker's quarterly performance using prepared analysis table.
 
@@ -302,9 +303,10 @@ def generate_commentary(ticker: str, year_quarter: str, df: pd.DataFrame,
         analysis_table: Pre-built analysis table with last 6 quarters (optional, will build if not provided)
         market_share_table: Market share table (optional)
         prop_holdings_table: Proprietary holdings table (optional)
+        return_prompt: If True, returns tuple (commentary, prompt) instead of just commentary
 
     Returns:
-        Generated commentary string
+        Generated commentary string, or tuple (commentary, prompt) if return_prompt=True
     """
 
     # Check for cached commentary first (if not forcing regeneration)
@@ -439,10 +441,16 @@ Format Guidelines:
         except Exception as e:
             print(f"Could not save to cache: {e}")
 
+        # Return tuple if prompt requested, else just commentary
+        if return_prompt:
+            return (commentary, prompt)
         return commentary
 
     except Exception as e:
-        return f"Error generating commentary: {str(e)}"
+        error_msg = f"Error generating commentary: {str(e)}"
+        if return_prompt:
+            return (error_msg, prompt if 'prompt' in locals() else "Prompt not generated due to error")
+        return error_msg
 
 def get_available_tickers(df: pd.DataFrame) -> list:
     """Get list of available broker tickers from the data."""

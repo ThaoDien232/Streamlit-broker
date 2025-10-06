@@ -731,7 +731,8 @@ if generate_button and selected_ticker and selected_quarter:
                     # Convert analysis table to string for OpenAI
                     analysis_text = analysis_table.to_string(index=False)
 
-                    commentary = generate_commentary(
+                    # Generate commentary and get the prompt
+                    result = generate_commentary(
                         ticker=selected_ticker,
                         year_quarter=selected_quarter,
                         df=df,  # Pass the full Combined_Financial_Data DataFrame
@@ -739,8 +740,12 @@ if generate_button and selected_ticker and selected_quarter:
                         force_regenerate=force_regenerate,
                         analysis_table=analysis_table,  # Pass the pre-built analysis table
                         market_share_table=market_share_table,  # Pass market share table
-                        prop_holdings_table=prop_holdings_table  # Pass prop holdings table
+                        prop_holdings_table=prop_holdings_table,  # Pass prop holdings table
+                        return_prompt=True  # Request the prompt to be returned
                     )
+
+                    # Unpack result
+                    commentary, full_prompt = result
 
                     if commentary.startswith("Error"):
                         st.error(commentary)
@@ -763,6 +768,16 @@ if generate_button and selected_ticker and selected_quarter:
                         st.markdown(formatted_commentary)
 
                         st.caption(f"Generated with {model_choice} on {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+
+                        # Display the full prompt sent to OpenAI
+                        with st.expander("📝 View Full Prompt Sent to OpenAI"):
+                            st.markdown("### System Message:")
+                            st.code("You are an expert financial analyst specializing in Vietnamese securities and brokerage firms. You MUST follow the exact structure provided in the prompt. Do not deviate from the requested format.")
+
+                            st.markdown("### User Prompt:")
+                            st.text(full_prompt)
+
+                            st.caption(f"Model: {model_choice} | Max Tokens: 800 | Temperature: 0.5")
 
                 except Exception as e:
                     st.error(f"Error generating commentary: {e}")
