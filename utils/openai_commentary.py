@@ -104,6 +104,7 @@ def get_broker_data(ticker: str, year_quarter: str, df: pd.DataFrame) -> dict:
         'net_ib_income': get_calc_metric_value(df, ticker, year, quarter_num, 'NET_IB_INCOME'),
         'fee_income': get_calc_metric_value(df, ticker, year, quarter_num, 'FEE_INCOME'),
         'net_investment_income': get_calc_metric_value(df, ticker, year, quarter_num, 'NET_INVESTMENT_INCOME'),
+        'margin_lending_income': get_calc_metric_value(df, ticker, year, quarter_num, 'MARGIN_LENDING_INCOME'),
 
         # Profitability
         'net_profit': get_calc_metric_value(df, ticker, year, quarter_num, 'NPAT'),
@@ -118,6 +119,7 @@ def get_broker_data(ticker: str, year_quarter: str, df: pd.DataFrame) -> dict:
         'total_assets': get_calc_metric_value(df, ticker, year, quarter_num, 'TOTAL_ASSETS'),
         'total_equity': get_calc_metric_value(df, ticker, year, quarter_num, 'TOTAL_EQUITY'),
         'borrowing_balance': get_calc_metric_value(df, ticker, year, quarter_num, 'BORROWING_BALANCE'),
+        'margin_balance': get_calc_metric_value(df, ticker, year, quarter_num, 'MARGIN_BALANCE'),
     }
 
     # Calculate revenue for compatibility (sum of main income streams)
@@ -128,6 +130,58 @@ def get_broker_data(ticker: str, year_quarter: str, df: pd.DataFrame) -> dict:
     )
 
     return metrics
+
+def get_last_6_quarters_data(ticker: str, current_quarter: str, df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Get data for the last 6 quarters including the current quarter.
+
+    Args:
+        ticker: Broker ticker
+        current_quarter: Current quarter like '1Q24'
+        df: Combined_Financial_Data DataFrame
+
+    Returns:
+        DataFrame with last 6 quarters of data including absolute values and growth rates
+    """
+    # Get all available quarters for this ticker (sorted newest first)
+    available_quarters = get_available_quarters(df, ticker)
+
+    if not available_quarters or current_quarter not in available_quarters:
+        return pd.DataFrame()
+
+    # Find index of current quarter
+    current_index = available_quarters.index(current_quarter)
+
+    # Get last 6 quarters (including current)
+    last_6_quarters = available_quarters[current_index:min(current_index + 6, len(available_quarters))]
+
+    # Collect data for each quarter
+    quarters_data = []
+    for quarter in last_6_quarters:
+        quarter_metrics = get_broker_data(ticker, quarter, df)
+        if quarter_metrics:
+            quarters_data.append(quarter_metrics)
+
+    if not quarters_data:
+        return pd.DataFrame()
+
+    # Convert to DataFrame
+    df_quarters = pd.DataFrame(quarters_data)
+
+    # Calculate growth rates (QoQ and YoY)
+    metrics_to_track = ['total_operating_income', 'net_brokerage_income', 'net_investment_income',
+                        'margin_lending_income', 'pbt', 'roa', 'roe', 'margin_balance']
+
+    for metric in metrics_to_track:
+        if metric in df_quarters.columns:
+            # QoQ growth
+            df_quarters[f'{metric}_qoq'] = df_quarters[metric].pct_change(periods=-1) * 100
+
+            # YoY growth (4 quarters ago)
+            if len(df_quarters) >= 5:
+                df_quarters[f'{metric}_yoy'] = df_quarters[metric].pct_change(periods=-4) * 100
+
+    return df_quarters
 
 def get_comparative_data(ticker: str, current_quarter: str, df: pd.DataFrame) -> dict:
     """
@@ -232,16 +286,22 @@ COMPARATIVE ANALYSIS (vs {comparative.get('previous_quarter', 'Previous Quarter'
     return formatted_data
 
 def generate_commentary(ticker: str, year_quarter: str, df: pd.DataFrame,
-                       model: str = "gpt-4", force_regenerate: bool = False) -> str:
+                       model: str = "gpt-4", force_regenerate: bool = False,
+                       analysis_table: pd.DataFrame = None,
+                       market_share_table: pd.DataFrame = None,
+                       prop_holdings_table: pd.DataFrame = None) -> str:
     """
-    Generate AI commentary for a broker's quarterly performance.
+    Generate AI commentary for a broker's quarterly performance using prepared analysis table.
 
     Args:
         ticker: Broker ticker
-        year_quarter: Quarter (e.g., '2024Q1')
+        year_quarter: Quarter (e.g., '1Q24')
         df: Combined_Financial_Data DataFrame
         model: OpenAI model to use
         force_regenerate: Whether to bypass cache
+        analysis_table: Pre-built analysis table with last 6 quarters (optional, will build if not provided)
+        market_share_table: Market share table (optional)
+        prop_holdings_table: Proprietary holdings table (optional)
 
     Returns:
         Generated commentary string
@@ -259,33 +319,87 @@ def generate_commentary(ticker: str, year_quarter: str, df: pd.DataFrame,
         except:
             pass  # Continue to generate new commentary
 
-    # Get financial data
-    metrics = get_broker_data(ticker, year_quarter, df)
-    if not metrics:
-        return f"No financial data available for {ticker} in {year_quarter}"
+    # Use provided analysis_table or build it
+    if analysis_table is None or analysis_table.empty:
+        # Fallback: build from scratch using old method
+        df_6q = get_last_6_quarters_data(ticker, year_quarter, df)
+        if df_6q.empty:
+            return f"No financial data available for {ticker} in {year_quarter}"
+        display_df = df_6q
+        margin_equity_ratio = 0
+    else:
+        # Use the pre-built table from the page (which has proper formatting/annualization)
+        display_df = analysis_table.copy()
 
-    # Get comparative data
-    comparative = get_comparative_data(ticker, year_quarter, df)
+        # Calculate margin/equity ratio from the latest quarter column
+        # Table structure: Metric | Q1 | Q2 | Q3 | Q4 | Q5 | Q6 | QoQ% | YoY%
+        quarter_cols = [col for col in display_df.columns if col not in ['Metric', 'QoQ Growth %', 'YoY Growth %']]
+        if len(quarter_cols) > 0:
+            latest_quarter_col = quarter_cols[-1]  # Last quarter column (most recent)
 
-    # Format data for AI prompt
-    financial_summary = format_financial_data(metrics, comparative)
+            # Get Margin Balance and calculate ratio
+            margin_row = display_df[display_df['Metric'] == 'Margin Balance']
+            if not margin_row.empty:
+                margin_balance = margin_row[latest_quarter_col].values[0]
+                # For ratio calculation, we'd need equity - but this is optional
+                margin_equity_ratio = 0  # Will be shown from data if available
+            else:
+                margin_equity_ratio = 0
+        else:
+            margin_equity_ratio = 0
 
-    # Create AI prompt
+    # Create AI prompt with improved brokerage-focused structure
     prompt = f"""
-You are a financial analyst specializing in Vietnamese securities brokers. Analyze the quarterly performance data below and provide a comprehensive business commentary.
+You are a financial analyst specializing in the brokerage sector. Analyze quarterly broker results from the provided data (financial metrics and ratios).
 
-{financial_summary}
+IMPORTANT NOTES ABOUT THE DATA:
+- ROE values shown are ALREADY ANNUALIZED (multiplied by 4 for quarterly data)
+- All figures are in VND billions (B VND) unless shown as percentages
+- The table shows the last 6 quarters with growth rates
 
-Please provide a professional analysis covering:
-1. Overall financial performance assessment
-2. Revenue stream analysis (brokerage, trading, margin lending, investment banking)
-3. Profitability and cost efficiency
-4. Key strengths and areas of concern
-5. Outlook and recommendations
+Data for Broker: {ticker} (Quarter: {year_quarter})
+{display_df.to_markdown(index=True, tablefmt='grid')}
+"""
 
-Keep the analysis factual, insightful, and suitable for investors and stakeholders. Focus on the Vietnamese brokerage market context.
+    # Add market share table if available
+    if market_share_table is not None and not market_share_table.empty:
+        prompt += f"""
+Market Share Data:
+{market_share_table.to_markdown(index=False, tablefmt='grid')}
+"""
 
-Limit response to 300-400 words.
+    # Add prop holdings table if available
+    if prop_holdings_table is not None and not prop_holdings_table.empty:
+        prompt += f"""
+Top Proprietary Holdings:
+{prop_holdings_table.to_markdown(index=False, tablefmt='grid')}
+"""
+
+    prompt += """
+Your answer must follow this structure exactly. Do not add or remove sections.
+
+## 1. Conclusion (max 5 bullet points)
+Write these bullets as a story-driven investor takeaway, don't add numbers just yet (Max 5 bullet points).
+Focus on the big picture: what kind of quarter this was, what drove it, and how sustainable it looks (dig into whether the strong/weak profit growth is due to any one-off items or mainly driven by investment income growth).
+Keep numbers supportive, but not the headline. (Example: "Profit growth QoQ/YoY seems strong, but much of it came from one-offs, not core business activities." instead of "PBT +33% QoQ.")
+Tone: succinct, neutral, analytical.
+
+## 2. Profitability
+Present PBT, main income streams (brokerage, margin lending, investment incomes), ROA, ROE trends with interpretation.
+Use the earnings bridge (Revenue, Cost, Non-recurring) to explain what really changed.
+Underlying the income streams, give a brief on the brokers' brokerage market share and margin balance & its growth.
+If the broker has investment income of 30% growth for either YoY or QoQ, add a bullet point on their top 5 stock holdings and the absolute values at the end of the quarter.
+Each bullet must combine data and meaning.
+
+Writing Approach Rules:
+- Conclusion = story first, numbers second.
+- Each bullet across all sections must weave number + meaning in one line.
+- Avoid mechanical breakdowns of every bridge component; focus only on what matters most.
+- Keep style punchy, concise, and investment-oriented.
+
+Format Guidelines:
+- Use one decimal point for percentages (e.g., 15.7%) when citing specific figures
+- Keep analysis factual and data-driven
 """
 
     try:
@@ -295,11 +409,11 @@ Limit response to 300-400 words.
         response = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": "You are an expert financial analyst specializing in Vietnamese securities and brokerage firms."},
+                {"role": "system", "content": "You are an expert financial analyst specializing in Vietnamese securities and brokerage firms. You MUST follow the exact structure provided in the prompt. Do not deviate from the requested format."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=500,
-            temperature=0.7
+            max_tokens=800,
+            temperature=0.5
         )
 
         commentary = response.choices[0].message.content

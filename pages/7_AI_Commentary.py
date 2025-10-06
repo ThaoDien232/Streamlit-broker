@@ -15,6 +15,7 @@ st.set_page_config(
 import pandas as pd
 import toml
 import os
+import requests
 from datetime import datetime
 
 # Load theme from config.toml
@@ -62,7 +63,8 @@ def calculate_financial_metrics(ticker_data, selected_quarter, ticker):
         'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
         'Margin Income': 'MARGIN_LENDING_INCOME',
         'Investment Income': 'NET_INVESTMENT_INCOME',
-        'PBT': 'PBT',
+        'PBT': 'NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX',
+        'NPAT': 'NET PROFIT/(LOSS) AFTER TAX',
         'Margin Balance': 'MARGIN_BALANCE',
         'ROE': 'ROE'  # Use existing ROE calculation from CSV
     }
@@ -142,73 +144,135 @@ def calculate_financial_metrics(ticker_data, selected_quarter, ticker):
     return pd.DataFrame([metrics_dict])
 
 def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
-    """Step 3: Combine historical data and calculated metrics for OpenAI analysis"""
+    """Step 3: Combine historical data and calculated metrics for OpenAI analysis - Last 6 Quarters"""
 
-    # Get key financial statement items for the selected quarter
-    quarter_data = ticker_data[ticker_data['QUARTER_LABEL'] == selected_quarter]
-
-    # Get dynamic column headers based on actual quarters
+    # Get all quarters sorted chronologically
     quarters = sort_quarters_chronologically([q for q in ticker_data['QUARTER_LABEL'].unique() if pd.notna(q) and q != ''])
 
-    # Find previous quarter and same quarter last year
-    if selected_quarter in quarters:
-        current_idx = quarters.index(selected_quarter)
-        prev_quarter = quarters[current_idx - 1] if current_idx > 0 else "N/A"
-    else:
-        prev_quarter = "N/A"
+    # Find the index of selected quarter and get last 6 quarters
+    if selected_quarter not in quarters:
+        return pd.DataFrame()
 
-    # Calculate same quarter last year
-    try:
-        quarter_num = int(selected_quarter[0])
-        year_str = selected_quarter[-2:]
-        year = 2000 + int(year_str) if int(year_str) < 50 else 1900 + int(year_str)
-        yoy_quarter = f"{quarter_num}Q{(year-1) % 100:02d}"
-    except:
-        yoy_quarter = "N/A"
+    current_idx = quarters.index(selected_quarter)
+    # Get last 6 quarters including current (or fewer if not available)
+    last_6_quarters = quarters[max(0, current_idx - 5):current_idx + 1]
 
-    # Create summary table with dynamic headers
-    analysis_data = {
-        'Metric': [],
-        f'Current Value ({selected_quarter})': [],
-        f'Previous Quarter ({prev_quarter})': [],
-        'QoQ Growth %': [],
-        f'Same Quarter Last Year ({yoy_quarter})': [],
-        'YoY Growth %': []
-    }
+    if len(last_6_quarters) == 0:
+        return pd.DataFrame()
 
-    if not calculated_metrics.empty:
-        metrics_row = calculated_metrics.iloc[0]
+    # Get ticker from ticker_data
+    if ticker_data.empty or 'TICKER' not in ticker_data.columns:
+        return pd.DataFrame()
 
-        # Show only the requested metrics with friendly names
-        display_metrics = ['Net Brokerage Income', 'Margin Income', 'Investment Income', 'PBT', 'Margin Balance', 'ROE']
+    ticker = ticker_data['TICKER'].iloc[0]
 
-        for metric in display_metrics:
-            analysis_data['Metric'].append(metric)
-            analysis_data[f'Current Value ({selected_quarter})'].append(metrics_row.get(f'{metric}_Current', 'N/A'))
+    # Display metrics we want to show
+    display_metrics = ['Net Brokerage Income', 'Margin Income', 'Investment Income', 'PBT', 'NPAT', 'Margin Balance', 'ROE']
 
-            # Don't calculate growth for ROE and ROA, but still show historical data
-            if metric in ['ROE', 'ROA']:
-                analysis_data[f'Previous Quarter ({prev_quarter})'].append(metrics_row.get(f'{metric}_Previous', 'N/A'))
-                analysis_data['QoQ Growth %'].append('N/A')
-                analysis_data[f'Same Quarter Last Year ({yoy_quarter})'].append(metrics_row.get(f'{metric}_YoY', 'N/A'))
-                analysis_data['YoY Growth %'].append('N/A')
-            else:
-                analysis_data[f'Previous Quarter ({prev_quarter})'].append(metrics_row.get(f'{metric}_Previous', 'N/A'))
-                analysis_data['QoQ Growth %'].append(metrics_row.get(f'{metric}_QoQ_Growth', 'N/A'))
-                analysis_data[f'Same Quarter Last Year ({yoy_quarter})'].append(metrics_row.get(f'{metric}_YoY', 'N/A'))
-                analysis_data['YoY Growth %'].append(metrics_row.get(f'{metric}_YoY_Growth', 'N/A'))
+    # Create table structure: Metric as rows, quarters as columns
+    analysis_data = {'Metric': display_metrics}
 
-    return pd.DataFrame(analysis_data)
+    # For each of the last 6 quarters, get the metric values
+    for quarter in last_6_quarters:
+        # Parse quarter to get year and quarter_num
+        try:
+            quarter_num = int(quarter[0])
+            year_str = quarter[-2:]
+            year = 2000 + int(year_str) if int(year_str) < 50 else 1900 + int(year_str)
+        except:
+            continue
+
+        # Get metrics for this quarter
+        quarter_values = []
+        for metric_name in display_metrics:
+            metric_code = {
+                'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
+                'Margin Income': 'MARGIN_LENDING_INCOME',
+                'Investment Income': 'NET_INVESTMENT_INCOME',
+                'PBT': 'NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX',
+                'NPAT': 'NET PROFIT/(LOSS) AFTER TAX',
+                'Margin Balance': 'MARGIN_BALANCE',
+                'ROE': 'ROE'
+            }.get(metric_name)
+
+            value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, metric_code)
+            quarter_values.append(value)
+
+        # Add this quarter's column
+        analysis_data[quarter] = quarter_values
+
+    # Create DataFrame
+    df_analysis = pd.DataFrame(analysis_data)
+
+    # Check if we have any quarter columns besides 'Metric'
+    if len(df_analysis.columns) <= 1:
+        return pd.DataFrame()
+
+    # Now add growth columns for the most recent quarter (selected_quarter)
+    # Add QoQ and YoY growth as additional columns after the last quarter
+    if len(last_6_quarters) >= 2 and selected_quarter in df_analysis.columns:
+        prev_quarter = last_6_quarters[-2]
+        if prev_quarter in df_analysis.columns:
+            qoq_growth = []
+            for metric in display_metrics:
+                if metric in ['ROE', 'ROA']:
+                    qoq_growth.append('N/A')
+                else:
+                    try:
+                        current_val = df_analysis[df_analysis['Metric'] == metric][selected_quarter].values[0]
+                        prev_val = df_analysis[df_analysis['Metric'] == metric][prev_quarter].values[0]
+                        if prev_val != 0 and prev_val != 'N/A' and current_val != 'N/A':
+                            growth = ((current_val - prev_val) / abs(prev_val)) * 100
+                            qoq_growth.append(growth)
+                        else:
+                            qoq_growth.append('N/A')
+                    except (IndexError, KeyError):
+                        qoq_growth.append('N/A')
+
+            df_analysis['QoQ Growth %'] = qoq_growth
+
+    # Add YoY growth if we have at least 5 quarters
+    if len(last_6_quarters) >= 5:
+        yoy_quarter = last_6_quarters[-5]  # 4 quarters ago
+        if yoy_quarter in df_analysis.columns and selected_quarter in df_analysis.columns:
+            yoy_growth = []
+            for metric in display_metrics:
+                if metric in ['ROE', 'ROA']:
+                    yoy_growth.append('N/A')
+                else:
+                    try:
+                        current_val = df_analysis[df_analysis['Metric'] == metric][selected_quarter].values[0]
+                        yoy_val = df_analysis[df_analysis['Metric'] == metric][yoy_quarter].values[0]
+                        if yoy_val != 0 and yoy_val != 'N/A' and current_val != 'N/A':
+                            growth = ((current_val - yoy_val) / abs(yoy_val)) * 100
+                            yoy_growth.append(growth)
+                        else:
+                            yoy_growth.append('N/A')
+                    except (IndexError, KeyError):
+                        yoy_growth.append('N/A')
+
+            df_analysis['YoY Growth %'] = yoy_growth
+
+    return df_analysis
 
 def get_calc_metric_value(df, ticker, year, quarter, metric_code):
     """Get a specific calculated metric value from CALC statement type"""
-    result = df[
-        (df['TICKER'] == ticker) &
-        (df['YEARREPORT'] == year) &
-        (df['LENGTHREPORT'] == quarter) &
-        (df['STATEMENT_TYPE'] == 'CALC') &
-        (df['METRIC_CODE'] == metric_code)
-    ]
+    # For PBT and NPAT, use KEYCODE_NAME instead of METRIC_CODE
+    if metric_code in ['NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX', 'NET PROFIT/(LOSS) AFTER TAX']:
+        result = df[
+            (df['TICKER'] == ticker) &
+            (df['YEARREPORT'] == year) &
+            (df['LENGTHREPORT'] == quarter) &
+            (df['KEYCODE_NAME'] == metric_code)
+        ]
+    else:
+        result = df[
+            (df['TICKER'] == ticker) &
+            (df['YEARREPORT'] == year) &
+            (df['LENGTHREPORT'] == quarter) &
+            (df['STATEMENT_TYPE'] == 'CALC') &
+            (df['METRIC_CODE'] == metric_code)
+        ]
 
     if len(result) > 0:
         value = result.iloc[0]['VALUE']
@@ -219,6 +283,131 @@ def get_calc_metric_value(df, ticker, year, quarter, metric_code):
 
         return value
     return 0
+
+@st.cache_data(ttl=1800)  # Cache for 30 minutes
+def fetch_market_share(ticker, quarter_label):
+    """Fetch market share for a specific broker and quarter from HSX API"""
+    try:
+        # Mapping from our ticker codes to HSX API brokerage codes
+        ticker_to_brokerage_code = {
+            'VCI': 'Vietcap',
+            'HCM': 'HSC',
+            'VND': 'VNDS',
+            'FTS': 'FPTS'
+        }
+
+        # Get the brokerage code for API lookup, default to ticker if not in mapping
+        api_ticker = ticker_to_brokerage_code.get(ticker, ticker)
+
+        # Parse quarter (e.g., "1Q24" -> year=2024, quarter=1)
+        quarter_num = int(quarter_label[0])
+        year_str = quarter_label[-2:]
+        year = 2000 + int(year_str) if int(year_str) < 50 else 1900 + int(year_str)
+
+        url = "https://api.hsx.vn/s/api/v1/1/brokeragemarketshare/top/ten"
+        params = {
+            'pageIndex': 1,
+            'pageSize': 30,
+            'year': year,
+            'period': quarter_num,
+            'dateType': 1
+        }
+
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+
+        if data.get('success') and 'data' in data:
+            brokerage_data = data['data'].get('brokerageStock', [])
+
+            for item in brokerage_data:
+                if item.get('shortenName', '') == api_ticker:
+                    return {
+                        'market_share': item.get('percentage', 0),
+                        'rank': brokerage_data.index(item) + 1
+                    }
+
+        return {'market_share': 0, 'rank': None}
+
+    except Exception as e:
+        return {'market_share': 0, 'rank': None}
+
+@st.cache_data(ttl=1800)
+def get_top_prop_holdings(ticker, quarter_label):
+    """Get top 5 proprietary trading holdings from Prop book.xlsx"""
+    try:
+        prop_df = pd.read_excel('sql/Prop book.xlsx')
+
+        # Filter for the specific broker and quarter
+        broker_data = prop_df[
+            (prop_df['Broker'] == ticker) &
+            (prop_df['Quarter'] == quarter_label)
+        ]
+
+        if broker_data.empty:
+            return []
+
+        # Exclude PBT and Other entries
+        broker_data = broker_data[~broker_data['Ticker'].isin(['PBT', 'Other AFS', 'Other FVTPL', 'Others'])]
+
+        # Calculate total value from both FVTPL and AFS
+        broker_data['Total_Value'] = broker_data['FVTPL value'].fillna(0) + broker_data['AFS value'].fillna(0)
+
+        # Determine the type (FVTPL or AFS) based on which has value
+        def get_holding_type(row):
+            if pd.notna(row['FVTPL value']) and row['FVTPL value'] > 0:
+                return 'FVTPL'
+            elif pd.notna(row['AFS value']) and row['AFS value'] > 0:
+                return 'AFS'
+            return 'Unknown'
+
+        broker_data['Type'] = broker_data.apply(get_holding_type, axis=1)
+
+        # Get top 5 holdings by total value
+        top_holdings = broker_data.nlargest(5, 'Total_Value')[['Ticker', 'Total_Value', 'Type']].to_dict('records')
+
+        return top_holdings
+
+    except Exception as e:
+        return []
+
+def create_summary_tables(ticker, quarter_label):
+    """Step 4: Create separate tables for market share and prop book data"""
+
+    # Fetch market share
+    market_share_data = fetch_market_share(ticker, quarter_label)
+
+    # Fetch top prop holdings
+    prop_holdings = get_top_prop_holdings(ticker, quarter_label)
+
+    # Build market share table
+    market_share_table = pd.DataFrame()
+    if market_share_data['market_share'] > 0:
+        market_data = {
+            'Metric': ['Market Share', 'Market Rank'],
+            'Value': [
+                f"{market_share_data['market_share']:.2f}%",
+                f"#{market_share_data['rank']}" if market_share_data['rank'] else 'N/A'
+            ]
+        }
+        market_share_table = pd.DataFrame(market_data)
+
+    # Build prop holdings table
+    prop_holdings_table = pd.DataFrame()
+    if prop_holdings:
+        holdings_data = {
+            'Ticker': [],
+            'Value (B VND)': [],
+            'Type': []
+        }
+        for holding in prop_holdings:
+            holdings_data['Ticker'].append(holding['Ticker'])
+            holdings_data['Value (B VND)'].append(f"{holding['Total_Value']:.1f}")
+            holdings_data['Type'].append(holding['Type'])
+        prop_holdings_table = pd.DataFrame(holdings_data)
+
+    return market_share_table, prop_holdings_table
 
 # Title and description
 st.title("AI-Powered Commentary")
@@ -331,7 +520,16 @@ if selected_ticker and selected_quarter:
         calculated_metrics = calculate_financial_metrics(ticker_data, selected_quarter, selected_ticker)
 
         # Step 3: Create analysis table for OpenAI
-        analysis_table = create_analysis_table(ticker_data, calculated_metrics, selected_quarter)
+        try:
+            analysis_table = create_analysis_table(ticker_data, calculated_metrics, selected_quarter)
+        except Exception as e:
+            st.error(f"Error in create_analysis_table: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+            analysis_table = pd.DataFrame()
+
+        # Step 4: Create summary tables with market share and prop book data
+        market_share_table, prop_holdings_table = create_summary_tables(selected_ticker, selected_quarter)
 
         # Display the data processing results
         st.subheader(f"Financial Analysis: {selected_ticker} - {selected_quarter}")
@@ -367,38 +565,39 @@ if selected_ticker and selected_quarter:
                     return str(value)
 
             # Display analysis table
-            st.write("**Financial Metrics Summary:**")
+            st.write("**Financial Metrics Summary (Last 6 Quarters):**")
             display_table = analysis_table.copy()
 
             # Format the values based on metric type
+            # New table structure: Metric | Q1 | Q2 | Q3 | Q4 | Q5 | Q6 | QoQ Growth % | YoY Growth %
             for idx, row in display_table.iterrows():
                 metric_name = row['Metric']
 
-                # Format current value column
-                current_col = [col for col in display_table.columns if col.startswith('Current Value')][0]
-                if row[current_col] != 'N/A':
-                    display_table.at[idx, current_col] = format_number(row[current_col], metric_name)
-
-                # Format previous quarter column
-                prev_col = [col for col in display_table.columns if col.startswith('Previous Quarter')][0]
-                if row[prev_col] != 'N/A':
-                    display_table.at[idx, prev_col] = format_number(row[prev_col], metric_name)
-
-                # Format same quarter last year column
-                yoy_col = [col for col in display_table.columns if col.startswith('Same Quarter Last Year')][0]
-                if row[yoy_col] != 'N/A':
-                    display_table.at[idx, yoy_col] = format_number(row[yoy_col], metric_name)
+                # Format all quarter columns (skip 'Metric' and growth columns)
+                for col in display_table.columns:
+                    if col not in ['Metric', 'QoQ Growth %', 'YoY Growth %']:
+                        # This is a quarter column, format as number
+                        if pd.notna(row[col]) and row[col] != 'N/A':
+                            display_table.at[idx, col] = format_number(row[col], metric_name)
 
                 # Format growth columns
-                qoq_col = 'QoQ Growth %'
-                if row[qoq_col] != 'N/A':
-                    display_table.at[idx, qoq_col] = format_growth(row[qoq_col])
+                if 'QoQ Growth %' in display_table.columns and pd.notna(row.get('QoQ Growth %')) and row.get('QoQ Growth %') != 'N/A':
+                    display_table.at[idx, 'QoQ Growth %'] = format_growth(row['QoQ Growth %'])
 
-                yoy_growth_col = 'YoY Growth %'
-                if row[yoy_growth_col] != 'N/A':
-                    display_table.at[idx, yoy_growth_col] = format_growth(row[yoy_growth_col])
+                if 'YoY Growth %' in display_table.columns and pd.notna(row.get('YoY Growth %')) and row.get('YoY Growth %') != 'N/A':
+                    display_table.at[idx, 'YoY Growth %'] = format_growth(row['YoY Growth %'])
 
-            st.dataframe(display_table, use_container_width=True)
+            st.dataframe(display_table, use_container_width=True, hide_index=True)
+
+            # Display market share table
+            if not market_share_table.empty:
+                st.write("**Market Share:**")
+                st.dataframe(market_share_table, use_container_width=True, hide_index=True)
+
+            # Display prop holdings table
+            if not prop_holdings_table.empty:
+                st.write("**Top Proprietary Holdings:**")
+                st.dataframe(prop_holdings_table, use_container_width=True, hide_index=True)
 
             # Show raw metrics for debugging (expandable)
             with st.expander("Detailed Calculation Data"):
@@ -449,8 +648,8 @@ if selected_ticker and selected_quarter:
                 st.write("**Calculated Metrics:**")
                 st.dataframe(calculated_metrics)
 
-            # Check if cached analysis exists
-            if cache_exists and not force_regenerate:
+            # Check if cached analysis exists (just show status, don't display)
+            if cache_exists:
                 try:
                     cached_analysis = cache_df[
                         (cache_df['TICKER'] == selected_ticker) &
@@ -459,15 +658,9 @@ if selected_ticker and selected_quarter:
                     if not cached_analysis.empty:
                         latest_cached = cached_analysis.iloc[-1]
                         generated_date = pd.to_datetime(latest_cached['GENERATED_DATE']).strftime('%Y-%m-%d %H:%M')
-
-                        st.success(f"Cached analysis available (Generated: {generated_date})")
-
-                        # Display cached commentary
-                        st.subheader(f"AI Analysis: {selected_ticker} - {selected_quarter}")
-                        st.markdown(latest_cached['COMMENTARY'])
-                        st.caption(f"Model used: {latest_cached.get('MODEL', 'Unknown')}")
+                        st.info(f"💾 Cached analysis available (Generated: {generated_date}). Click 'Generate Analysis' to view or 'View All Cached' to browse all.")
                     else:
-                        st.info(f"💡 No cached analysis found for {selected_ticker} - {selected_quarter}")
+                        st.info(f"💡 No cached analysis found for {selected_ticker} - {selected_quarter}. Click 'Generate Analysis' to create one.")
                 except Exception as e:
                     st.warning(f"Could not check cache: {e}")
 
@@ -476,10 +669,12 @@ if selected_ticker and selected_quarter:
 
     except Exception as e:
         st.error(f"Error processing data: {e}")
+        import traceback
+        st.code(traceback.format_exc())
         st.stop()
 
 # Generation controls
-col1, col2, col3 = st.columns([1, 1, 2])
+col1, col2, col3 = st.columns([1, 1, 1])
 
 with col1:
     generate_button = st.button("Generate Analysis", type="primary")
@@ -490,6 +685,35 @@ with col2:
     else:
         view_cache_button = False
 
+with col3:
+    # Clear cache button - only for current ticker/quarter
+    if cache_exists and selected_ticker and selected_quarter:
+        # Check if there's a cached entry for this specific ticker/quarter
+        try:
+            cache_df = pd.read_csv(cache_file)
+            has_cache_entry = not cache_df[
+                (cache_df['TICKER'] == selected_ticker) &
+                (cache_df['QUARTER'] == selected_quarter)
+            ].empty
+        except:
+            has_cache_entry = False
+
+        if has_cache_entry:
+            if st.button("🗑️ Clear This Cache", help=f"Delete cached analysis for {selected_ticker} - {selected_quarter}"):
+                try:
+                    cache_df = pd.read_csv(cache_file)
+                    # Remove entries for this specific ticker and quarter
+                    cache_df = cache_df[~(
+                        (cache_df['TICKER'] == selected_ticker) &
+                        (cache_df['QUARTER'] == selected_quarter)
+                    )]
+                    # Save back to file
+                    cache_df.to_csv(cache_file, index=False)
+                    st.success(f"✅ Cleared cache for {selected_ticker} - {selected_quarter}")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error clearing cache: {e}")
+
 # Generate commentary
 if generate_button and selected_ticker and selected_quarter:
     try:
@@ -497,6 +721,7 @@ if generate_button and selected_ticker and selected_quarter:
         ticker_data, pivot_data = filter_ticker_data(df, selected_ticker)
         calculated_metrics = calculate_financial_metrics(ticker_data, selected_quarter, selected_ticker)
         analysis_table = create_analysis_table(ticker_data, calculated_metrics, selected_quarter)
+        market_share_table, prop_holdings_table = create_summary_tables(selected_ticker, selected_quarter)
 
         if analysis_table.empty:
             st.error(f"No financial data available for {selected_ticker} in {selected_quarter}")
@@ -511,7 +736,10 @@ if generate_button and selected_ticker and selected_quarter:
                         year_quarter=selected_quarter,
                         df=df,  # Pass the full Combined_Financial_Data DataFrame
                         model=model_choice,
-                        force_regenerate=force_regenerate
+                        force_regenerate=force_regenerate,
+                        analysis_table=analysis_table,  # Pass the pre-built analysis table
+                        market_share_table=market_share_table,  # Pass market share table
+                        prop_holdings_table=prop_holdings_table  # Pass prop holdings table
                     )
 
                     if commentary.startswith("Error"):
@@ -522,7 +750,18 @@ if generate_button and selected_ticker and selected_quarter:
 
                         # Display the generated commentary
                         st.subheader(f"AI Analysis: {selected_ticker} - {selected_quarter}")
-                        st.markdown(commentary)
+
+                        # Format the commentary to ensure bullets are on separate lines and headers are normal size
+                        formatted_commentary = commentary.replace('• ', '\n• ').strip()
+                        # Convert markdown headers (## or #) to bold text to keep same text size
+                        import re
+                        formatted_commentary = re.sub(r'^##\s+', '**', formatted_commentary, flags=re.MULTILINE)
+                        formatted_commentary = re.sub(r'^#\s+', '**', formatted_commentary, flags=re.MULTILINE)
+                        # Add closing bold tag at end of header lines
+                        formatted_commentary = re.sub(r'\*\*(\d+)\.\s+([^\n]+)', r'**\1. \2**', formatted_commentary)
+
+                        st.markdown(formatted_commentary)
+
                         st.caption(f"Generated with {model_choice} on {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
                 except Exception as e:
@@ -577,6 +816,7 @@ with st.sidebar:
         - Margin Income (QoQ, YoY growth)
         - Investment Income (QoQ, YoY growth)
         - PBT (QoQ, YoY growth)
+        - NPAT (QoQ, YoY growth)
         - Margin Balance (QoQ, YoY growth)
         - ROE (no growth %, shows historical values) - annualized for quarterly data
 
@@ -587,7 +827,6 @@ with st.sidebar:
         - INTEREST_INCOME
         - SGA
         - INTEREST_EXPENSE
-        - NPAT
         - BORROWING_BALANCE
 
         To add more metrics, modify the `key_metrics` dictionary
