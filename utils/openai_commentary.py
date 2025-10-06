@@ -311,13 +311,14 @@ def generate_commentary(ticker: str, year_quarter: str, df: pd.DataFrame,
 
     # Check for cached commentary first (if not forcing regeneration)
     cache_file = "sql/ai_commentary_cache.csv"
+    cached_commentary = None
     if not force_regenerate and os.path.exists(cache_file):
         try:
             cache_df = pd.read_csv(cache_file)
             cached = cache_df[(cache_df['TICKER'] == ticker) &
                              (cache_df['QUARTER'] == year_quarter)]
             if not cached.empty:
-                return cached.iloc[-1]['COMMENTARY']
+                cached_commentary = cached.iloc[-1]['COMMENTARY']
         except:
             pass  # Continue to generate new commentary
 
@@ -403,6 +404,12 @@ Format Guidelines:
 - Use one decimal point for percentages (e.g., 15.7%) when citing specific figures
 - Keep analysis factual and data-driven
 """
+
+    # If we have cached commentary and not forcing regeneration, return it now
+    if cached_commentary is not None:
+        if return_prompt:
+            return (cached_commentary, prompt)
+        return cached_commentary
 
     try:
         # Generate commentary using OpenAI
