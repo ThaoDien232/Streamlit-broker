@@ -950,20 +950,20 @@ if not df_index.empty:
 
     # Temporary placeholder for metrics - will be replaced with actual values later
     temp_metrics_html = f"""
-    <div style="position: sticky; top: 0; z-index: 999; background-color: {background_color}; padding: 20px 0; border-bottom: 2px solid {primary_color}; margin-bottom: 20px;">
-        <h1 style="color: {text_color}; margin: 0 0 15px 0; font-family: {font_family};">{selected_broker}</h1>
-        <div style="display: flex; gap: 20px; justify-content: space-between;">
-            <div style="flex: 1; background-color: {secondary_background_color}; padding: 15px; border-radius: 5px; border-left: 3px solid {primary_color};">
-                <div style="color: {text_color}; opacity: 0.7; font-size: 14px; margin-bottom: 5px;">Loading...</div>
-                <div style="color: {text_color}; font-size: 24px; font-weight: bold;">-</div>
+    <div style="position: sticky; top: 0; z-index: 999; background-color: {background_color}; padding-bottom: 10px;">
+        <h1>{selected_broker}</h1>
+        <div style="display: flex; gap: 20px;">
+            <div style="flex: 1;">
+                <div style="font-size: 14px; margin-bottom: 5px;">Loading...</div>
+                <div style="font-size: 36px; font-weight: 600;">-</div>
             </div>
-            <div style="flex: 1; background-color: {secondary_background_color}; padding: 15px; border-radius: 5px; border-left: 3px solid {primary_color};">
-                <div style="color: {text_color}; opacity: 0.7; font-size: 14px; margin-bottom: 5px;">Loading...</div>
-                <div style="color: {text_color}; font-size: 24px; font-weight: bold;">-</div>
+            <div style="flex: 1;">
+                <div style="font-size: 14px; margin-bottom: 5px;">Loading...</div>
+                <div style="font-size: 36px; font-weight: 600;">-</div>
             </div>
-            <div style="flex: 1; background-color: {secondary_background_color}; padding: 15px; border-radius: 5px; border-left: 3px solid {primary_color};">
-                <div style="color: {text_color}; opacity: 0.7; font-size: 14px; margin-bottom: 5px;">Loading...</div>
-                <div style="color: {text_color}; font-size: 24px; font-weight: bold;">-</div>
+            <div style="flex: 1;">
+                <div style="font-size: 14px; margin-bottom: 5px;">Loading...</div>
+                <div style="font-size: 36px; font-weight: 600;">-</div>
             </div>
         </div>
     </div>
@@ -1264,21 +1264,21 @@ if not df_index.empty:
     yoy_color = "#00cc00" if yoy_growth >= 0 else "#ff4444"
 
     updated_metrics_html = f"""
-    <div style="position: sticky; top: 0; z-index: 999; background-color: {background_color}; padding: 20px 0; border-bottom: 2px solid {primary_color}; margin-bottom: 20px;">
-        <h1 style="color: {text_color}; margin: 0 0 15px 0; font-family: {font_family};">{selected_broker}</h1>
-        <div style="display: flex; gap: 20px; justify-content: space-between;">
-            <div style="flex: 1; background-color: {secondary_background_color}; padding: 15px; border-radius: 5px; border-left: 3px solid {primary_color};">
-                <div style="color: {text_color}; opacity: 0.7; font-size: 14px; margin-bottom: 5px;">{forecast_year} Baseline PBT</div>
-                <div style="color: {text_color}; font-size: 24px; font-weight: bold;">{baseline_pbt_header/1e9:,.0f}B</div>
+    <div style="position: sticky; top: 0; z-index: 999; background-color: {background_color}; padding-bottom: 10px;">
+        <h1>{selected_broker}</h1>
+        <div style="display: flex; gap: 20px;">
+            <div style="flex: 1;">
+                <div style="font-size: 14px; margin-bottom: 5px;">{forecast_year} Baseline PBT</div>
+                <div style="font-size: 36px; font-weight: 600;">{baseline_pbt_header/1e9:,.0f}B</div>
             </div>
-            <div style="flex: 1; background-color: {secondary_background_color}; padding: 15px; border-radius: 5px; border-left: 3px solid {primary_color};">
-                <div style="color: {text_color}; opacity: 0.7; font-size: 14px; margin-bottom: 5px;">{forecast_year} Adjusted PBT</div>
-                <div style="color: {text_color}; font-size: 24px; font-weight: bold;">{current_pbt_display:,.0f}B</div>
+            <div style="flex: 1;">
+                <div style="font-size: 14px; margin-bottom: 5px;">{forecast_year} Adjusted PBT</div>
+                <div style="font-size: 36px; font-weight: 600;">{current_pbt_display:,.0f}B</div>
                 <div style="color: {delta_color}; font-size: 14px; margin-top: 5px;">{baseline_change:+.1f}% vs baseline</div>
             </div>
-            <div style="flex: 1; background-color: {secondary_background_color}; padding: 15px; border-radius: 5px; border-left: 3px solid {primary_color};">
-                <div style="color: {text_color}; opacity: 0.7; font-size: 14px; margin-bottom: 5px;">YoY Growth</div>
-                <div style="color: {text_color}; font-size: 24px; font-weight: bold;">{yoy_growth:+.1f}%</div>
+            <div style="flex: 1;">
+                <div style="font-size: 14px; margin-bottom: 5px;">YoY Growth</div>
+                <div style="font-size: 36px; font-weight: 600;">{yoy_growth:+.1f}%</div>
                 <div style="color: {yoy_color}; font-size: 14px; margin-top: 5px;">vs {forecast_year-1}</div>
             </div>
         </div>
