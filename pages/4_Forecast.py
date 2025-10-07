@@ -950,7 +950,18 @@ if not df_index.empty:
 
     # Temporary placeholder for metrics - will be replaced with actual values later
     temp_metrics_html = f"""
-    <div style="position: sticky; top: 0; z-index: 999; background-color: {background_color}; padding-bottom: 10px;">
+    <style>
+        .sticky-header {{
+            position: -webkit-sticky;
+            position: sticky;
+            top: 60px;
+            z-index: 999;
+            background-color: {background_color};
+            padding: 10px 0;
+            margin-bottom: 20px;
+        }}
+    </style>
+    <div class="sticky-header">
         <h1>{selected_broker}</h1>
         <div style="display: flex; gap: 20px;">
             <div style="flex: 1;">
@@ -1264,7 +1275,18 @@ if not df_index.empty:
     yoy_color = "#00cc00" if yoy_growth >= 0 else "#ff4444"
 
     updated_metrics_html = f"""
-    <div style="position: sticky; top: 0; z-index: 999; background-color: {background_color}; padding-bottom: 10px;">
+    <style>
+        .sticky-header {{
+            position: -webkit-sticky;
+            position: sticky;
+            top: 60px;
+            z-index: 999;
+            background-color: {background_color};
+            padding: 10px 0;
+            margin-bottom: 20px;
+        }}
+    </style>
+    <div class="sticky-header">
         <h1>{selected_broker}</h1>
         <div style="display: flex; gap: 20px;">
             <div style="flex: 1;">
