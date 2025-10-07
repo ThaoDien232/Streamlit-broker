@@ -372,28 +372,45 @@ def get_top_prop_holdings(ticker, quarter_label):
     except Exception as e:
         return []
 
-def create_summary_tables(ticker, quarter_label):
-    """Step 4: Create separate tables for market share and prop book data"""
+def create_summary_tables(ticker, quarter_label, ticker_data):
+    """Step 4: Create separate tables for market share and prop book data - Last 6 Quarters"""
 
-    # Fetch market share
-    market_share_data = fetch_market_share(ticker, quarter_label)
+    # Get all quarters sorted chronologically
+    quarters = sort_quarters_chronologically([q for q in ticker_data['QUARTER_LABEL'].unique() if pd.notna(q) and q != ''])
 
-    # Fetch top prop holdings
-    prop_holdings = get_top_prop_holdings(ticker, quarter_label)
+    # Find the index of selected quarter and get last 6 quarters
+    if quarter_label not in quarters:
+        return pd.DataFrame(), pd.DataFrame()
 
-    # Build market share table
+    current_idx = quarters.index(quarter_label)
+    # Get last 6 quarters including current (or fewer if not available)
+    last_6_quarters = quarters[max(0, current_idx - 5):current_idx + 1]
+
+    # Build market share table for last 6 quarters
     market_share_table = pd.DataFrame()
-    if market_share_data['market_share'] > 0:
-        market_data = {
-            'Metric': ['Market Share', 'Market Rank'],
-            'Value': [
-                f"{market_share_data['market_share']:.2f}%",
-                f"#{market_share_data['rank']}" if market_share_data['rank'] else 'N/A'
-            ]
-        }
+    market_data = {'Quarter': []}
+    market_share_values = []
+    market_rank_values = []
+
+    for quarter in last_6_quarters:
+        market_share_data = fetch_market_share(ticker, quarter)
+        market_data['Quarter'].append(quarter)
+        if market_share_data['market_share'] > 0:
+            market_share_values.append(f"{market_share_data['market_share']:.2f}%")
+            market_rank_values.append(f"#{market_share_data['rank']}" if market_share_data['rank'] else 'N/A')
+        else:
+            market_share_values.append('N/A')
+            market_rank_values.append('N/A')
+
+    if market_data['Quarter']:
+        market_data['Market Share'] = market_share_values
+        market_data['Rank'] = market_rank_values
         market_share_table = pd.DataFrame(market_data)
 
-    # Build prop holdings table
+    # Build prop holdings table for last 6 quarters (top 5 holdings per quarter)
+    # Get prop holdings for current quarter only (showing evolution across quarters would be too complex)
+    prop_holdings = get_top_prop_holdings(ticker, quarter_label)
+
     prop_holdings_table = pd.DataFrame()
     if prop_holdings:
         holdings_data = {
@@ -484,7 +501,7 @@ with col2:
         selected_quarter = st.selectbox(
             "Select Quarter:",
             ticker_quarters,
-            index=0,
+            index=len(ticker_quarters) - 1,  # Default to latest quarter
             help="Choose the quarter to analyze or generate commentary for"
         )
     else:
@@ -529,7 +546,7 @@ if selected_ticker and selected_quarter:
             analysis_table = pd.DataFrame()
 
         # Step 4: Create summary tables with market share and prop book data
-        market_share_table, prop_holdings_table = create_summary_tables(selected_ticker, selected_quarter)
+        market_share_table, prop_holdings_table = create_summary_tables(selected_ticker, selected_quarter, ticker_data)
 
         # Display the data processing results
         st.subheader(f"Financial Analysis: {selected_ticker} - {selected_quarter}")
@@ -721,7 +738,7 @@ if generate_button and selected_ticker and selected_quarter:
         ticker_data, pivot_data = filter_ticker_data(df, selected_ticker)
         calculated_metrics = calculate_financial_metrics(ticker_data, selected_quarter, selected_ticker)
         analysis_table = create_analysis_table(ticker_data, calculated_metrics, selected_quarter)
-        market_share_table, prop_holdings_table = create_summary_tables(selected_ticker, selected_quarter)
+        market_share_table, prop_holdings_table = create_summary_tables(selected_ticker, selected_quarter, ticker_data)
 
         if analysis_table.empty:
             st.error(f"No financial data available for {selected_ticker} in {selected_quarter}")
@@ -808,14 +825,24 @@ if view_cache_button and cache_exists:
             selected_cache = st.selectbox(
                 "Select cached analysis:",
                 options=range(len(cache_df)),
-                format_func=lambda x: f"{cache_df.iloc[x]['TICKER']} - {cache_df.iloc[x]['QUARTER']} ({cache_df.iloc[x]['GENERATED_DATE']})"
+                format_func=lambda x: f"{cache_df.iloc[x]['TICKER']} - {cache_df.iloc[x]['QUARTER']} ({cache_df.iloc[x]['GENERATED_DATE']})",
+                key="cached_commentary_selector"
             )
 
-            if st.button("Show Selected Commentary"):
-                selected_row = cache_df.iloc[selected_cache]
-                st.subheader(f"Analysis: {selected_row['TICKER']} - {selected_row['QUARTER']}")
-                st.markdown(selected_row['COMMENTARY'])
-                st.caption(f"Generated: {selected_row['GENERATED_DATE']} | Model: {selected_row['MODEL']}")
+            # Display selected commentary automatically
+            selected_row = cache_df.iloc[selected_cache]
+            st.subheader(f"Analysis: {selected_row['TICKER']} - {selected_row['QUARTER']}")
+
+            # Format the commentary
+            commentary = selected_row['COMMENTARY']
+            formatted_commentary = commentary.replace('• ', '\n• ').strip()
+            import re
+            formatted_commentary = re.sub(r'^##\s+', '**', formatted_commentary, flags=re.MULTILINE)
+            formatted_commentary = re.sub(r'^#\s+', '**', formatted_commentary, flags=re.MULTILINE)
+            formatted_commentary = re.sub(r'\*\*(\d+)\.\s+([^\n]+)', r'**\1. \2**', formatted_commentary)
+
+            st.markdown(formatted_commentary)
+            st.caption(f"Generated: {selected_row['GENERATED_DATE']} | Model: {selected_row['MODEL']}")
 
     except Exception as e:
         st.error(f"Error loading cached commentaries: {e}")

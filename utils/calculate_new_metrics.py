@@ -82,7 +82,8 @@ def calculate_financial_metrics_vectorized(pivot_df, keycode_map):
         quarter = row['LENGTHREPORT']
         start_date = row['STARTDATE'] if pd.notna(row['STARTDATE']) and row['STARTDATE'] != '' else ''
         end_date = row['ENDDATE'] if pd.notna(row['ENDDATE']) and row['ENDDATE'] != '' else ''
-        quarter_label = f'Q{quarter}' if quarter in [1,2,3,4] else 'Annual'
+        # Format quarter label as "1Q25", "2Q25", etc.
+        quarter_label = f'{quarter}Q{year % 100:02d}' if quarter in [1,2,3,4] else 'Annual'
         
         # Skip if this period already has calculated metrics
         period_key = (ticker, year, quarter)
@@ -371,7 +372,7 @@ def calculate_ratios(calculated_metrics):
                     'VALUE': float(roe),
                     'KEYCODE': 'ROE',
                     'KEYCODE_NAME': 'ROE',
-                    'QUARTER_LABEL': f'Q{quarter}' if quarter in [1,2,3,4] else 'Annual'
+                    'QUARTER_LABEL': f'{quarter}Q{year % 100:02d}' if quarter in [1,2,3,4] else 'Annual'
                 })
             
             # Calculate ROA
@@ -390,7 +391,7 @@ def calculate_ratios(calculated_metrics):
                     'VALUE': float(roa),
                     'KEYCODE': 'ROA',
                     'KEYCODE_NAME': 'ROA',
-                    'QUARTER_LABEL': f'Q{quarter}' if quarter in [1,2,3,4] else 'Annual'
+                    'QUARTER_LABEL': f'{quarter}Q{year % 100:02d}' if quarter in [1,2,3,4] else 'Annual'
                 })
     
     print(f"Calculated {len(ratio_records):,} ratio records (ROE/ROA)")
