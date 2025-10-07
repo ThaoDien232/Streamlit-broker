@@ -100,7 +100,39 @@ def calculate_income_statement_items(filtered_is, filtered_bs):
     
     # Margin balance
     margin_balance = filtered_bs.sort_values('ENDDATE').groupby('Year').tail(1)[['Year', 'BS.8']].rename(columns={'BS.8': 'Margin Balance'})
-    
+
+    # Total Equity (BS.142 - Owner's equity)
+    total_equity = filtered_bs.sort_values('ENDDATE').groupby('Year').tail(1)[['Year', 'BS.142']].rename(columns={'BS.142': 'Total Equity'})
+
+    # Investment Asset Balance (sum of relevant investment accounts)
+    # Using BS.1 (Cash and cash equivalents) + BS.3 (Financial assets at FVTPL) + BS.6 (AFS financial assets) + BS.7 (HTM investments)
+    investment_asset_balance = filtered_bs.groupby('Year')[['BS.3', 'BS.6', 'BS.7']].sum().sum(axis=1).reset_index(name='Investment Asset Balance')
+
+    # Investment Return % (Net Investment Income / Average Investment Asset Balance)
+    investment_return = pd.DataFrame({'Year': [],'Investment Return %': []})
+
+    # Calculate investment return for each year
+    years = sorted(set(inv_inc['Year'].values) | set(investment_asset_balance['Year'].values))
+    for i, year in enumerate(years):
+        net_inv_income = inv_inc[inv_inc['Year'] == year]['Net Investment Income'].values[0] if year in inv_inc['Year'].values else 0
+        current_balance = investment_asset_balance[investment_asset_balance['Year'] == year]['Investment Asset Balance'].values[0] if year in investment_asset_balance['Year'].values else 0
+
+        # Get previous year balance for average calculation
+        if i > 0:
+            prev_year = years[i-1]
+            prev_balance = investment_asset_balance[investment_asset_balance['Year'] == prev_year]['Investment Asset Balance'].values[0] if prev_year in investment_asset_balance['Year'].values else current_balance
+            avg_balance = (current_balance + prev_balance) / 2
+        else:
+            avg_balance = current_balance
+
+        # Calculate return percentage
+        if avg_balance != 0:
+            return_pct = net_inv_income / avg_balance
+        else:
+            return_pct = 0
+
+        investment_return = pd.concat([investment_return, pd.DataFrame({'Year': [year], 'Investment Return %': [return_pct]})], ignore_index=True)
+
     return {
         'fx_gain_loss_by_year': fx_gain_loss_by_year,
         'affiliates': affiliates,
@@ -122,7 +154,10 @@ def calculate_income_statement_items(filtered_is, filtered_bs):
         'sga': sga,
         'pbt': pbt,
         'NPAT': NPAT,
-        'margin_balance': margin_balance
+        'margin_balance': margin_balance,
+        'total_equity': total_equity,
+        'investment_asset_balance': investment_asset_balance,
+        'investment_return': investment_return
     }
 
 
