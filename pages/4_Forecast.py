@@ -951,33 +951,44 @@ if not df_index.empty:
     # Temporary placeholder for metrics - will be replaced with actual values later
     temp_metrics_html = f"""
     <style>
-        .sticky-header {{
-            position: -webkit-sticky;
-            position: sticky;
+        #fixed-header {{
+            position: fixed;
             top: 60px;
-            z-index: 999;
+            left: 280px;
+            right: 0;
+            z-index: 9999;
             background-color: {background_color};
-            padding: 10px 0;
-            margin-bottom: 20px;
+            padding: 10px 20px;
+            margin: 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .header-spacer {{
+            height: 150px;
+        }}
+        @media (max-width: 768px) {{
+            #fixed-header {{
+                left: 0;
+            }}
         }}
     </style>
-    <div class="sticky-header">
-        <h1>{selected_broker}</h1>
-        <div style="display: flex; gap: 20px;">
-            <div style="flex: 1;">
-                <div style="font-size: 14px; margin-bottom: 5px;">Loading...</div>
-                <div style="font-size: 36px; font-weight: 600;">-</div>
+    <div id="fixed-header">
+        <h1 style="margin: 0 0 10px 0;">{selected_broker}</h1>
+        <div style="display: flex; gap: 15px; max-width: 100%;">
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 14px; margin-bottom: 5px;">{forecast_year} Baseline PBT</div>
+                <div style="font-size: 36px; font-weight: 600;">Loading...</div>
             </div>
-            <div style="flex: 1;">
-                <div style="font-size: 14px; margin-bottom: 5px;">Loading...</div>
-                <div style="font-size: 36px; font-weight: 600;">-</div>
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 14px; margin-bottom: 5px;">{forecast_year} Adjusted PBT</div>
+                <div style="font-size: 36px; font-weight: 600;">Loading...</div>
             </div>
-            <div style="flex: 1;">
-                <div style="font-size: 14px; margin-bottom: 5px;">Loading...</div>
-                <div style="font-size: 36px; font-weight: 600;">-</div>
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 14px; margin-bottom: 5px;">YoY Growth</div>
+                <div style="font-size: 36px; font-weight: 600;">Loading...</div>
             </div>
         </div>
     </div>
+    <div class="header-spacer"></div>
     """
     sticky_header_placeholder.markdown(temp_metrics_html, unsafe_allow_html=True)
 
@@ -1276,35 +1287,46 @@ if not df_index.empty:
 
     updated_metrics_html = f"""
     <style>
-        .sticky-header {{
-            position: -webkit-sticky;
-            position: sticky;
+        #fixed-header {{
+            position: fixed;
             top: 60px;
-            z-index: 999;
+            left: 280px;
+            right: 0;
+            z-index: 9999;
             background-color: {background_color};
-            padding: 10px 0;
-            margin-bottom: 20px;
+            padding: 10px 20px;
+            margin: 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .header-spacer {{
+            height: 150px;
+        }}
+        @media (max-width: 768px) {{
+            #fixed-header {{
+                left: 0;
+            }}
         }}
     </style>
-    <div class="sticky-header">
-        <h1>{selected_broker}</h1>
-        <div style="display: flex; gap: 20px;">
-            <div style="flex: 1;">
+    <div id="fixed-header">
+        <h1 style="margin: 0 0 10px 0;">{selected_broker}</h1>
+        <div style="display: flex; gap: 15px; max-width: 100%;">
+            <div style="flex: 1; min-width: 0;">
                 <div style="font-size: 14px; margin-bottom: 5px;">{forecast_year} Baseline PBT</div>
                 <div style="font-size: 36px; font-weight: 600;">{baseline_pbt_header/1e9:,.0f}B</div>
             </div>
-            <div style="flex: 1;">
+            <div style="flex: 1; min-width: 0;">
                 <div style="font-size: 14px; margin-bottom: 5px;">{forecast_year} Adjusted PBT</div>
                 <div style="font-size: 36px; font-weight: 600;">{current_pbt_display:,.0f}B</div>
                 <div style="color: {delta_color}; font-size: 14px; margin-top: 5px;">{baseline_change:+.1f}% vs baseline</div>
             </div>
-            <div style="flex: 1;">
+            <div style="flex: 1; min-width: 0;">
                 <div style="font-size: 14px; margin-bottom: 5px;">YoY Growth</div>
                 <div style="font-size: 36px; font-weight: 600;">{yoy_growth:+.1f}%</div>
                 <div style="color: {yoy_color}; font-size: 14px; margin-top: 5px;">vs {forecast_year-1}</div>
             </div>
         </div>
     </div>
+    <div class="header-spacer"></div>
     """
     sticky_header_placeholder.markdown(updated_metrics_html, unsafe_allow_html=True)
     
