@@ -945,12 +945,31 @@ if not df_index.empty:
         df_broker_all = pd.concat([df_broker_hist_custom, df_broker_forecast], ignore_index=True)
 
     # --- Key Performance Metrics ---
-    # Display broker name at top
-    st.title(f"{selected_broker}")
-    
-    # Create placeholder for metrics that will be updated after all controls
-    metrics_placeholder = st.empty()
-    
+    # Create sticky header container using HTML/CSS
+    sticky_header_placeholder = st.empty()
+
+    # Temporary placeholder for metrics - will be replaced with actual values later
+    temp_metrics_html = f"""
+    <div style="position: sticky; top: 0; z-index: 999; background-color: {background_color}; padding: 20px 0; border-bottom: 2px solid {primary_color}; margin-bottom: 20px;">
+        <h1 style="color: {text_color}; margin: 0 0 15px 0; font-family: {font_family};">{selected_broker}</h1>
+        <div style="display: flex; gap: 20px; justify-content: space-between;">
+            <div style="flex: 1; background-color: {secondary_background_color}; padding: 15px; border-radius: 5px; border-left: 3px solid {primary_color};">
+                <div style="color: {text_color}; opacity: 0.7; font-size: 14px; margin-bottom: 5px;">Loading...</div>
+                <div style="color: {text_color}; font-size: 24px; font-weight: bold;">-</div>
+            </div>
+            <div style="flex: 1; background-color: {secondary_background_color}; padding: 15px; border-radius: 5px; border-left: 3px solid {primary_color};">
+                <div style="color: {text_color}; opacity: 0.7; font-size: 14px; margin-bottom: 5px;">Loading...</div>
+                <div style="color: {text_color}; font-size: 24px; font-weight: bold;">-</div>
+            </div>
+            <div style="flex: 1; background-color: {secondary_background_color}; padding: 15px; border-radius: 5px; border-left: 3px solid {primary_color};">
+                <div style="color: {text_color}; opacity: 0.7; font-size: 14px; margin-bottom: 5px;">Loading...</div>
+                <div style="color: {text_color}; font-size: 24px; font-weight: bold;">-</div>
+            </div>
+        </div>
+    </div>
+    """
+    sticky_header_placeholder.markdown(temp_metrics_html, unsafe_allow_html=True)
+
     st.divider()
     
     # --- Market Turnover Summary ---
@@ -1239,27 +1258,33 @@ if not df_index.empty:
     # Get baseline PBT from FORECAST.csv
     baseline_pbt_header = get_value(df_broker_forecast, forecast_year, 'PBT', keycodename='PBT')
     baseline_change = ((current_pbt_value - baseline_pbt_header) / baseline_pbt_header * 100) if baseline_pbt_header != 0 else 0
-    
-    # Update the metrics placeholder with actual calculated values
-    with metrics_placeholder.container():
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric(
-                label=f"{forecast_year} Baseline PBT",
-                value=f"{baseline_pbt_header/1e9:,.0f}B",
-            )
-        with col2:
-            st.metric(
-                label=f"{forecast_year} Adjusted PBT",
-                value=f"{current_pbt_display:,.0f}B",
-                delta=f"{baseline_change:+.1f}% vs baseline"
-            )
-        with col3:
-            st.metric(
-                label="YoY Growth",
-                value=f"{yoy_growth:+.1f}%",
-                delta=f"vs {forecast_year-1}"
-            )
+
+    # Update the sticky header with actual calculated values using HTML
+    delta_color = "#00cc00" if baseline_change >= 0 else "#ff4444"
+    yoy_color = "#00cc00" if yoy_growth >= 0 else "#ff4444"
+
+    updated_metrics_html = f"""
+    <div style="position: sticky; top: 0; z-index: 999; background-color: {background_color}; padding: 20px 0; border-bottom: 2px solid {primary_color}; margin-bottom: 20px;">
+        <h1 style="color: {text_color}; margin: 0 0 15px 0; font-family: {font_family};">{selected_broker}</h1>
+        <div style="display: flex; gap: 20px; justify-content: space-between;">
+            <div style="flex: 1; background-color: {secondary_background_color}; padding: 15px; border-radius: 5px; border-left: 3px solid {primary_color};">
+                <div style="color: {text_color}; opacity: 0.7; font-size: 14px; margin-bottom: 5px;">{forecast_year} Baseline PBT</div>
+                <div style="color: {text_color}; font-size: 24px; font-weight: bold;">{baseline_pbt_header/1e9:,.0f}B</div>
+            </div>
+            <div style="flex: 1; background-color: {secondary_background_color}; padding: 15px; border-radius: 5px; border-left: 3px solid {primary_color};">
+                <div style="color: {text_color}; opacity: 0.7; font-size: 14px; margin-bottom: 5px;">{forecast_year} Adjusted PBT</div>
+                <div style="color: {text_color}; font-size: 24px; font-weight: bold;">{current_pbt_display:,.0f}B</div>
+                <div style="color: {delta_color}; font-size: 14px; margin-top: 5px;">{baseline_change:+.1f}% vs baseline</div>
+            </div>
+            <div style="flex: 1; background-color: {secondary_background_color}; padding: 15px; border-radius: 5px; border-left: 3px solid {primary_color};">
+                <div style="color: {text_color}; opacity: 0.7; font-size: 14px; margin-bottom: 5px;">YoY Growth</div>
+                <div style="color: {text_color}; font-size: 24px; font-weight: bold;">{yoy_growth:+.1f}%</div>
+                <div style="color: {yoy_color}; font-size: 14px; margin-top: 5px;">vs {forecast_year-1}</div>
+            </div>
+        </div>
+    </div>
+    """
+    sticky_header_placeholder.markdown(updated_metrics_html, unsafe_allow_html=True)
     
     # This duplicate block has been removed - PBT calculation is done above
     
