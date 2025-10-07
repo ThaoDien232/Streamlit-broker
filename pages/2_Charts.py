@@ -343,21 +343,29 @@ with tab1:
 
 with tab2:
     st.header("Brokerage Market Share Data")
-    
-    # Use the same filters as Charts tab - no duplicate filters needed
-    # Market share will use the selected years and quarters from Charts tab
-    
-    # For market share, we'll use the last selected year from Charts tab
-    if selected_years:
-        ms_year = max(selected_years)  # Use the latest selected year
-    else:
-        ms_year = 2025  # Default fallback
-    
-    # Use the selected quarters from Charts tab
-    if timeframe_type == "Quarter" and selected_quarters:
-        ms_quarters = selected_quarters
-    else:
-        ms_quarters = [1, 2, 3, 4]  # Default to all quarters if Annual is selected
+
+    # Add dedicated filters for Market Share tab
+    col_year, col_quarters = st.columns([1, 2])
+
+    with col_year:
+        # Year filter - available years from 2021 to 2025
+        available_years = list(range(2021, 2026))
+        ms_year = st.selectbox(
+            "Select Year",
+            options=available_years,
+            index=len(available_years) - 1,  # Default to latest year (2025)
+            key="market_share_year"
+        )
+
+    with col_quarters:
+        # Quarter filter
+        ms_quarters = st.multiselect(
+            "Select Quarters",
+            options=[1, 2, 3, 4],
+            default=[1, 2, 3, 4],
+            format_func=lambda x: f"Q{x}",
+            key="market_share_quarters"
+        )
     
     if ms_quarters:
         # Only fetch data if we have valid years (2021-2025 range)
