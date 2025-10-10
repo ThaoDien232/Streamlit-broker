@@ -749,17 +749,22 @@ if selected_ticker and selected_quarter:
         st.code(traceback.format_exc())
         st.stop()
 
+# Initialize session state for viewing cache
+if 'show_cache' not in st.session_state:
+    st.session_state.show_cache = False
+
 # Generation controls
 col1, col2, col3 = st.columns([1, 1, 1])
 
 with col1:
     generate_button = st.button("Generate Analysis", type="primary")
+    if generate_button:
+        st.session_state.show_cache = False  # Hide cache when generating
 
 with col2:
     if cache_exists:
-        view_cache_button = st.button("View All Cached")
-    else:
-        view_cache_button = False
+        if st.button("View All Cached"):
+            st.session_state.show_cache = True  # Toggle cache view
 
 with col3:
     # Clear cache button - only for current ticker/quarter
@@ -862,34 +867,49 @@ if generate_button and selected_ticker and selected_quarter:
     except Exception as e:
         st.error(f"Error preparing data for analysis: {e}")
 
-# View cached commentaries
-if view_cache_button and cache_exists:
+# View cached commentaries (using session state to persist view)
+if st.session_state.show_cache and cache_exists:
     st.subheader("📚 Cached AI Commentaries")
+
+    # Add close button
+    if st.button("✖ Close Cache View"):
+        st.session_state.show_cache = False
+        st.rerun()
 
     try:
         cache_df = pd.read_csv(cache_file)
         cache_df['GENERATED_DATE'] = pd.to_datetime(cache_df['GENERATED_DATE']).dt.strftime('%Y-%m-%d %H:%M')
 
+        # Sort by date descending for most recent first
+        cache_df = cache_df.sort_values('GENERATED_DATE', ascending=False).reset_index(drop=True)
+
         # Display summary
         st.write(f"**Total cached analyses:** {len(cache_df)}")
 
-        # Show recent analyses
-        display_df = cache_df[['TICKER', 'QUARTER', 'GENERATED_DATE', 'MODEL']].sort_values('GENERATED_DATE', ascending=False)
+        # Show recent analyses table
+        display_df = cache_df[['TICKER', 'QUARTER', 'GENERATED_DATE', 'MODEL']]
         st.dataframe(display_df, use_container_width=True)
 
         # Allow selection and viewing of specific cached commentary
         if len(cache_df) > 0:
             st.subheader("View Specific Commentary")
 
-            selected_cache = st.selectbox(
+            # Create options list for selectbox
+            options_list = [
+                f"{row['TICKER']} - {row['QUARTER']} ({row['GENERATED_DATE']})"
+                for _, row in cache_df.iterrows()
+            ]
+
+            selected_option = st.selectbox(
                 "Select cached analysis:",
-                options=range(len(cache_df)),
-                format_func=lambda x: f"{cache_df.iloc[x]['TICKER']} - {cache_df.iloc[x]['QUARTER']} ({cache_df.iloc[x]['GENERATED_DATE']})",
+                options=options_list,
                 key="cached_commentary_selector"
             )
 
-            # Display selected commentary automatically
-            selected_row = cache_df.iloc[selected_cache]
+            # Find the selected index
+            selected_index = options_list.index(selected_option)
+            selected_row = cache_df.iloc[selected_index]
+
             st.subheader(f"Analysis: {selected_row['TICKER']} - {selected_row['QUARTER']}")
 
             # Format the commentary
