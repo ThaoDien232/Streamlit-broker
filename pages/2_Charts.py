@@ -17,26 +17,45 @@ font_family = theme["font"]
 
 st.set_page_config(page_title="Financial Charts - CALC Metrics", layout="wide")
 
-# Load Combined Financial Data from database
-@st.cache_data(ttl=3600)
-def load_combined_data():
-    from utils.brokerage_data import load_brokerage_metrics
+# OPTIMIZED: Load only selected data from database
+@st.cache_data(ttl=3600, show_spinner="Loading data...")
+def load_filtered_data(tickers, metrics, years, quarters):
+    """Load only the selected tickers, metrics, years, and quarters"""
+    from utils.brokerage_data_optimized import load_filtered_brokerage_data
 
-    # Load from database (2017 onwards, quarterly only)
-    df = load_brokerage_metrics(start_year=2017, include_annual=False)
-
-    if df.empty:
-        st.error("No data loaded from database")
+    if not tickers or not metrics or not years or not quarters:
         return pd.DataFrame()
 
-    # Ensure YEARREPORT and LENGTHREPORT are integer
+    df = load_filtered_brokerage_data(
+        tickers=tickers,
+        metrics=metrics,
+        years=years,
+        quarters=quarters
+    )
+
+    if df.empty:
+        return pd.DataFrame()
+
+    # Ensure correct data types
     df['YEARREPORT'] = df['YEARREPORT'].astype(int)
     df['LENGTHREPORT'] = df['LENGTHREPORT'].astype(int)
     return df
 
+# Get metadata for filters (lightweight, cached 24 hours)
+@st.cache_data(ttl=86400)
+def get_available_options():
+    """Get available tickers and years for filters - no heavy data loading"""
+    from utils.brokerage_data_optimized import get_available_tickers_fast, get_available_years_fast
+
+    tickers = get_available_tickers_fast()
+    years = get_available_years_fast()
+
+    return tickers, years
+
 def reload_data():
     """Clear cache and reload data"""
-    load_combined_data.clear()
+    load_filtered_data.clear()
+    get_available_options.clear()
     st.rerun()
 
 @st.cache_data
@@ -79,8 +98,6 @@ def fetch_market_share_data(year, quarters):
     
     return pd.DataFrame(all_data)
 
-df_calc = load_combined_data()
-
 def get_metric_display_name(metric_code):
     """Convert metric code to display name"""
     metric_names = {
@@ -94,10 +111,11 @@ def get_metric_display_name(metric_code):
         'NET_IB_INCOME': 'Net IB Income',
         'NET_OTHER_OP_INCOME': 'Net Other Operating Income',
         'BORROWING_BALANCE': 'Borrowing Balance',
-        'NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX': 'Profit Before Tax',
-        'NET PROFIT/(LOSS) AFTER TAX': 'Net Profit After Tax',
+        'PBT': 'Profit Before Tax',
+        'NPAT': 'Net Profit After Tax',
         'SGA': 'SG&A Expenses',
         'NET_MARGIN_INCOME': 'Net Margin Income',
+        'MARGIN_LENDING_INCOME': 'Margin Lending Income',
         'ROE': 'Return on Equity (ROE)',
         'ROA': 'Return on Assets (ROA)'
     }
@@ -125,102 +143,91 @@ with col2:
     if st.sidebar.button("Reload Data", help="Refresh data from Combined_Financial_Data.csv"):
         reload_data()
 
-# Check if CALC data is available and set up shared sidebar controls
-if df_calc.empty:
-    st.warning("No data available. Please ensure Combined_Financial_Data.csv exists in the sql/ directory.")
-    # Set default values for when no data is available
-    selected_brokers = []
-    selected_metrics = []
-    selected_years = []
-    timeframe_type = "Quarter"
-    selected_quarters = []
-else:
-    # Create quarter labels for plotting
+# Get available options (lightweight - no data loading)
+available_brokers, available_years = get_available_options()
+
+# Sidebar filters (set up BEFORE loading data)
+st.sidebar.header("Chart Filters")
+
+# Allowed metrics (all metrics available - no need to check database)
+allowed_metrics = [
+    'NET_BROKERAGE_INCOME',
+    'NET_TRADING_INCOME',
+    'NET_INVESTMENT_INCOME',
+    'FEE_INCOME',
+    'CAPITAL_INCOME',
+    'MARGIN_BALANCE',
+    'TOTAL_OPERATING_INCOME',
+    'NET_IB_INCOME',
+    'NET_OTHER_OP_INCOME',
+    'BORROWING_BALANCE',
+    'PBT',  # Changed from full name
+    'NPAT',  # Changed from full name
+    'SGA',
+    'NET_MARGIN_INCOME',
+    'MARGIN_LENDING_INCOME',
+    'ROE',
+    'ROA'
+]
+
+# Broker selection
+selected_brokers = st.sidebar.multiselect(
+    "Select Brokers:",
+    options=available_brokers,
+    default=available_brokers[:3] if len(available_brokers) >= 3 else available_brokers,
+    key="chart_brokers"
+)
+
+# Metrics selection - NOW ALWAYS AVAILABLE
+selected_metrics = st.sidebar.multiselect(
+    "Select Metrics:",
+    options=allowed_metrics,
+    default=allowed_metrics[:3] if len(allowed_metrics) >= 3 else allowed_metrics,
+    format_func=get_metric_display_name,
+    key="chart_metrics"
+)
+
+# Year selection - from metadata
+available_years_filtered = [year for year in available_years if 2021 <= year <= 2025]
+selected_years = st.sidebar.multiselect(
+    "Select Years:",
+    options=available_years_filtered if available_years_filtered else available_years,
+    default=available_years_filtered[-3:] if len(available_years_filtered) >= 3 else available_years_filtered,
+    key="chart_years"
+)
+
+# Timeframe selection
+timeframe_type = st.sidebar.radio(
+    "Select Timeframe Type:",
+    options=["Quarter", "Annual"],
+    index=0,
+    key="chart_timeframe"
+)
+
+# Quarter selection based on timeframe type
+if timeframe_type == "Quarter":
+    quarter_options = [1, 2, 3, 4]
+    selected_quarters = st.sidebar.multiselect(
+        "Select Quarters:",
+        options=quarter_options,
+        default=quarter_options,  # Default to all quarters
+        format_func=lambda x: f"Q{x}",
+        key="chart_quarters"
+    )
+else:  # Annual
+    selected_quarters = [5]  # Annual data
+
+# NOW load data based on selections (only what's needed)
+df_calc = load_filtered_data(
+    tickers=selected_brokers,
+    metrics=selected_metrics,
+    years=selected_years,
+    quarters=selected_quarters
+)
+
+# Create quarter labels if data loaded
+if not df_calc.empty:
     df_calc['Quarter_Label'] = df_calc.apply(create_quarter_label, axis=1)
-
-    # Sidebar filters (shared between both tabs)
-    st.sidebar.header("Chart Filters")
-
-    # Allowed metrics and mapping (define only once)
-    allowed_metrics = [
-        'NET_BROKERAGE_INCOME',
-        'NET_TRADING_INCOME', 
-        'NET_INVESTMENT_INCOME',
-        'FEE_INCOME',
-        'CAPITAL_INCOME',
-        'MARGIN_BALANCE',
-        'TOTAL_OPERATING_INCOME',
-        'NET_IB_INCOME',
-        'NET_OTHER_OP_INCOME',
-        'BORROWING_BALANCE',
-        'NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX',
-        'NET PROFIT/(LOSS) AFTER TAX',
-        'SGA',
-        'NET_MARGIN_INCOME',
-        'ROE',
-        'ROA'
-    ]
-
-    # Broker selection
-    available_brokers = sorted(df_calc['TICKER'].dropna().astype(str).unique())
-    selected_brokers = st.sidebar.multiselect(
-        "Select Brokers:",
-        options=available_brokers,
-        default=available_brokers[:3] if len(available_brokers) >= 3 else available_brokers,
-        key="chart_brokers"
-    )
-
-    # Build available_metrics: For PBT/NPAT, check KEYCODE_NAME; for others, check METRIC_CODE or KEYCODE_NAME
-    available_metrics = []
-    for metric in allowed_metrics:
-        if metric in ['NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX', 'NET PROFIT/(LOSS) AFTER TAX']:
-            # Always add if present in KEYCODE_NAME
-            if metric in df_calc['KEYCODE_NAME'].values:
-                available_metrics.append(metric)
-        else:
-            # Add if present in either METRIC_CODE or KEYCODE_NAME (for robustness)
-            if (metric in df_calc['METRIC_CODE'].values) or (metric in df_calc['KEYCODE_NAME'].values):
-                available_metrics.append(metric)
-
-    selected_metrics = st.sidebar.multiselect(
-        "Select Metrics:",
-        options=available_metrics,
-        default=available_metrics[:3] if len(available_metrics) >= 3 else available_metrics,
-        format_func=get_metric_display_name,
-        key="chart_metrics"
-    )
-
-    # Year selection - include years from 2021 to 2025 (exclude 2026 as no data available)
-    available_years = sorted(df_calc['YEARREPORT'].unique())
-    # Filter to only include years with actual data, and limit to 2021-2025 range
-    available_years_filtered = [year for year in available_years if 2021 <= year <= 2025]
-    selected_years = st.sidebar.multiselect(
-        "Select Years:",
-        options=available_years_filtered if available_years_filtered else available_years,
-        default=available_years_filtered[-3:] if len(available_years_filtered) >= 3 else available_years_filtered,
-        key="chart_years"
-    )
-
-    # Timeframe selection
-    timeframe_type = st.sidebar.radio(
-        "Select Timeframe Type:",
-        options=["Quarter", "Annual"],
-        index=0,
-        key="chart_timeframe"
-    )
-
-    # Quarter selection based on timeframe type
-    if timeframe_type == "Quarter":
-        quarter_options = [1, 2, 3, 4]
-        selected_quarters = st.sidebar.multiselect(
-            "Select Quarters:",
-            options=quarter_options,
-            default=quarter_options,  # Default to all quarters
-            format_func=lambda x: f"Q{x}",
-            key="chart_quarters"
-        )
-    else:  # Annual
-        selected_quarters = [5]  # Annual data
 
 # Create tabs for different sections
 tab1, tab2 = st.tabs(["📊 Financial Charts", "📈 Market Share Data"])
@@ -228,22 +235,11 @@ tab1, tab2 = st.tabs(["📊 Financial Charts", "📈 Market Share Data"])
 with tab1:
     st.header("Financial Metrics Charts")
     
-    if not df_calc.empty:
-        # Filter data based on selections
-        mask = (
-            df_calc['TICKER'].isin(selected_brokers)
-            & df_calc['YEARREPORT'].isin(selected_years)
-            & df_calc['LENGTHREPORT'].isin(selected_quarters)
-        )
-        metric_mask = pd.Series([False] * len(df_calc))
-        for metric in selected_metrics:
-            if metric in ['NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX', 'NET PROFIT/(LOSS) AFTER TAX']:
-                metric_mask |= (df_calc['KEYCODE_NAME'] == metric)
-            else:
-                metric_mask |= (df_calc['METRIC_CODE'] == metric)
-        filtered_df = df_calc[mask & metric_mask].copy()
+    if not df_calc.empty and selected_metrics and selected_brokers:
+        # Data is already filtered by load_filtered_data, no need to filter again
+        filtered_df = df_calc.copy()
 
-        if selected_metrics and selected_brokers and not filtered_df.empty:
+        if not filtered_df.empty:
             
             # Display 2 charts per row using Streamlit columns
             for idx in range(0, len(selected_metrics), 2):
@@ -261,12 +257,9 @@ with tab1:
                 for i, metric in enumerate(metrics_in_row):
                     with columns[i]:
                         st.subheader(f"{get_metric_display_name(metric)}")
-                        
-                        # Filter data for current metric
-                        if metric in ['NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX', 'NET PROFIT/(LOSS) AFTER TAX']:
-                            metric_data = filtered_df[filtered_df['KEYCODE_NAME'] == metric].copy()
-                        else:
-                            metric_data = filtered_df[filtered_df['METRIC_CODE'] == metric].copy()
+
+                        # Filter data for current metric (METRIC_CODE is already the right format from database)
+                        metric_data = filtered_df[filtered_df['METRIC_CODE'] == metric].copy()
                         
                         if not metric_data.empty:
                             # Sort data chronologically
