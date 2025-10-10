@@ -14,6 +14,22 @@ from utils.keycode_mapping import (
     CALCULATED_METRICS
 )
 
+# ============================================================================
+# EXCLUDED BROKERS (defunct/inactive/small brokers to filter out)
+# ============================================================================
+
+EXCLUDED_TICKERS = [
+    'ABSC', 'APSC', 'ASIAS', 'ATSC', 'AVS', 'BMSC', 'CBVS', 'CLS', 'CVS',
+    'CBVS', 'DDSC', 'DNSC', 'DNSE', 'DTDS', 'ECCS', 'EPS', 'FLCS', 'GBS',
+    'GLS', 'GLSC', 'HASC', 'HBBS', 'HBSC', 'HPC', 'HSSC', 'HRSC', 'HVS',
+    'HVSC', 'IRSC', 'ISC', 'JSI', 'JISC', 'JSIC', 'KLS', 'KEVS', 'LVSC',
+    'MHBS', 'MKSC', 'MSBS', 'MSGS', 'NASC', 'NAVS', 'NHSV', 'NSIC', 'NVSC',
+    'OCSC', 'PBSV', 'PCSC', 'PGSC', 'ROSE', 'RUBSE', 'SJCS', 'SME', 'STSC',
+    'SVS', 'TAS', 'TCSC', 'TFSC', 'TLSC', 'TSSC', 'VCSC', 'VDSE', 'VFSC',
+    'VGSC', 'VIETS', 'VNIS', 'VNSC', 'VPBS', 'VQSC', 'VSEC', 'VSM', 'VSMC',
+    'VTSC'
+]
+
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_brokerage_metrics(
     ticker: Optional[str] = None,
@@ -48,6 +64,11 @@ def load_brokerage_metrics(
 
     if not include_annual:
         where_conditions.append("LENGTHREPORT BETWEEN 1 AND 4")  # Q1-Q4 only
+
+    # Exclude defunct/inactive brokers
+    excluded_list = ','.join([f"'{t}'" for t in EXCLUDED_TICKERS])
+    where_conditions.append(f"TICKER NOT IN ({excluded_list})")
+    where_conditions.append("TICKER != 'Sector'")  # Also exclude Sector aggregate
 
     where_clause = " AND ".join(where_conditions)
 
@@ -259,12 +280,16 @@ def calculate_metric(
 def get_available_tickers() -> List[str]:
     """Get list of available broker tickers from database (2017 onwards)."""
 
-    query = """
+    # Build exclusion list
+    excluded_list = ','.join([f"'{t}'" for t in EXCLUDED_TICKERS])
+
+    query = f"""
     SELECT DISTINCT TICKER
     FROM dbo.BrokerageMetrics
     WHERE YEARREPORT >= 2017
       AND LENGTHREPORT BETWEEN 1 AND 4
       AND TICKER != 'Sector'
+      AND TICKER NOT IN ({excluded_list})
     ORDER BY TICKER
     """
 
@@ -273,7 +298,7 @@ def get_available_tickers() -> List[str]:
     if not df.empty:
         return df['TICKER'].tolist()
 
-    # Fallback to default list
+    # Fallback to default list (active brokers only)
     return ['SSI', 'VCI', 'HCM', 'VIX', 'VND', 'MBS', 'SHS', 'BSI',
             'TCBS', 'FPTS', 'AGR', 'CTS', 'VDS', 'APS', 'ORS', 'PSI',
             'BVS', 'IVS', 'EVS', 'VFS', 'VIG', 'TVS', 'CVT', 'AAS']
@@ -408,6 +433,7 @@ def load_filtered_brokerage_data(
     year_list = ','.join(map(str, years))
     quarter_list = ','.join(map(str, quarters))
     keycode_list = ','.join([f"'{k}'" for k in db_keycodes])
+    excluded_list = ','.join([f"'{t}'" for t in EXCLUDED_TICKERS])
 
     query = f"""
     SELECT
@@ -430,6 +456,8 @@ def load_filtered_brokerage_data(
       AND YEARREPORT IN ({year_list})
       AND LENGTHREPORT IN ({quarter_list})
       AND KEYCODE IN ({keycode_list})
+      AND TICKER NOT IN ({excluded_list})
+      AND TICKER != 'Sector'
     ORDER BY TICKER, YEARREPORT, LENGTHREPORT, KEYCODE
     """
 
