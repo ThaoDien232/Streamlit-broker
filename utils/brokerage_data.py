@@ -347,3 +347,100 @@ def parse_quarter_label(quarter_label: str) -> tuple:
 
     except:
         return (None, None)
+
+# ============================================================================
+# OPTIMIZED FUNCTIONS (for performance)
+# ============================================================================
+
+@st.cache_data(ttl=86400)  # Cache for 24 hours
+def get_available_tickers_fast() -> List[str]:
+    """Get list of available tickers - ultra lightweight query (alias for get_available_tickers)"""
+    return get_available_tickers()
+
+@st.cache_data(ttl=86400)  # Cache for 24 hours
+def get_available_years_fast() -> List[int]:
+    """Get available years - ultra lightweight"""
+    query = """
+    SELECT DISTINCT YEARREPORT
+    FROM dbo.BrokerageMetrics
+    WHERE YEARREPORT >= 2017
+    ORDER BY YEARREPORT DESC
+    """
+    df = run_query(query)
+    return df['YEARREPORT'].tolist() if not df.empty else []
+
+@st.cache_data(ttl=3600, show_spinner="Loading selected data...")
+def load_filtered_brokerage_data(
+    tickers: List[str],
+    metrics: List[str],
+    years: List[int],
+    quarters: List[int]
+) -> pd.DataFrame:
+    """
+    Load ONLY the data needed for current selections.
+    Much faster than loading everything.
+
+    Args:
+        tickers: List of broker tickers to load (e.g., ['SSI', 'VCI'])
+        metrics: List of METRIC_CODEs to load (e.g., ['NET_BROKERAGE_INCOME', 'PBT'])
+        years: List of years to load (e.g., [2024, 2025])
+        quarters: List of quarters to load (e.g., [1, 2, 3, 4])
+
+    Returns:
+        Filtered DataFrame with only requested data
+    """
+
+    if not tickers or not years or not quarters:
+        return pd.DataFrame()
+
+    # Translate metrics to database KEYCODEs
+    db_keycodes = []
+    for metric in metrics:
+        keycode = get_db_keycode(metric)
+        if keycode:
+            db_keycodes.append(keycode)
+
+    if not db_keycodes:
+        return pd.DataFrame()
+
+    # Build optimized query
+    ticker_list = ','.join([f"'{t}'" for t in tickers])
+    year_list = ','.join(map(str, years))
+    quarter_list = ','.join(map(str, quarters))
+    keycode_list = ','.join([f"'{k}'" for k in db_keycodes])
+
+    query = f"""
+    SELECT
+        TICKER,
+        YEARREPORT,
+        LENGTHREPORT,
+        QUARTER_LABEL,
+        KEYCODE as METRIC_CODE,
+        VALUE,
+        KEYCODE,
+        KEYCODE_NAME,
+        CASE
+            WHEN KEYCODE LIKE 'BS.%' THEN 'BS'
+            WHEN KEYCODE LIKE 'IS.%' THEN 'IS'
+            WHEN KEYCODE LIKE '7.%' OR KEYCODE LIKE '8.%' THEN 'NOTE'
+            ELSE 'CALC'
+        END as STATEMENT_TYPE
+    FROM dbo.BrokerageMetrics
+    WHERE TICKER IN ({ticker_list})
+      AND YEARREPORT IN ({year_list})
+      AND LENGTHREPORT IN ({quarter_list})
+      AND KEYCODE IN ({keycode_list})
+    ORDER BY TICKER, YEARREPORT, LENGTHREPORT, KEYCODE
+    """
+
+    df = run_query(query)
+
+    if df.empty:
+        return pd.DataFrame()
+
+    # Convert data types
+    df['YEARREPORT'] = df['YEARREPORT'].astype(int)
+    df['LENGTHREPORT'] = df['LENGTHREPORT'].astype(int)
+    df['VALUE'] = pd.to_numeric(df['VALUE'], errors='coerce')
+
+    return df

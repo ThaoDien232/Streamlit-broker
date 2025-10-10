@@ -21,7 +21,7 @@ st.set_page_config(page_title="Financial Charts - CALC Metrics", layout="wide")
 @st.cache_data(ttl=3600, show_spinner="Loading data...")
 def load_filtered_data(tickers, metrics, years, quarters):
     """Load only the selected tickers, metrics, years, and quarters"""
-    from utils.brokerage_data_optimized import load_filtered_brokerage_data
+    from utils.brokerage_data import load_filtered_brokerage_data
 
     if not tickers or not metrics or not years or not quarters:
         return pd.DataFrame()
@@ -45,7 +45,7 @@ def load_filtered_data(tickers, metrics, years, quarters):
 @st.cache_data(ttl=86400)
 def get_available_options():
     """Get available tickers and years for filters - no heavy data loading"""
-    from utils.brokerage_data_optimized import get_available_tickers_fast, get_available_years_fast
+    from utils.brokerage_data import get_available_tickers_fast, get_available_years_fast
 
     tickers = get_available_tickers_fast()
     years = get_available_years_fast()
