@@ -307,98 +307,111 @@ def calculate_sector_metrics(calculated_records):
 
 def calculate_ratios(calculated_metrics):
     """
-    Calculate ROE and ROA ratios that require previous period data.
+    Calculate Interest Rate ratios that require previous period data.
     """
-    print("Calculating ROE and ROA ratios...")
-    
-    # Convert to DataFrame for easier processing
-    df = pd.DataFrame(calculated_metrics)
-    
-    if df.empty:
+    print("Calculating Interest Rate ratios...")
+
+    # Load ALL calculated metrics from the database to have complete data for ratios
+    combined_df = load_combined_data()
+    calc_df = combined_df[combined_df['STATEMENT_TYPE'] == 'CALC'].copy()
+
+    if calc_df.empty:
+        print("No CALC metrics found in database")
         return calculated_metrics
-    
+
+    # Check which interest rates already exist
+    existing_interest_rates = set()
+    for _, row in calc_df[calc_df['METRIC_CODE'] == 'INTEREST_RATE'].iterrows():
+        key = (row['TICKER'], row['YEARREPORT'], row['LENGTHREPORT'])
+        existing_interest_rates.add(key)
+
+    print(f"Found {len(existing_interest_rates)} existing interest rate records")
+
     ratio_records = []
-    
+
     # Group by ticker for ratio calculations
-    for ticker in df['TICKER'].unique():
-        ticker_data = df[df['TICKER'] == ticker].sort_values(['YEARREPORT', 'LENGTHREPORT'])
-        
-        # Get NPAT, Total Equity, and Total Assets by period
+    for ticker in calc_df['TICKER'].unique():
+        ticker_data = calc_df[calc_df['TICKER'] == ticker].sort_values(['YEARREPORT', 'LENGTHREPORT'])
+
+        # Get NPAT, Total Equity, Total Assets, Interest Expense, and Borrowing Balance by period
         npat_data = {}
         equity_data = {}
         assets_data = {}
-        
+        interest_expense_data = {}
+        borrowing_balance_data = {}
+
         for _, row in ticker_data.iterrows():
             key = (row['YEARREPORT'], row['LENGTHREPORT'])
-            
+
             if row['METRIC_CODE'] == 'NPAT':
                 npat_data[key] = row['VALUE']
             elif row['METRIC_CODE'] == 'TOTAL_EQUITY':
                 equity_data[key] = row['VALUE']
             elif row['METRIC_CODE'] == 'TOTAL_ASSETS':
                 assets_data[key] = row['VALUE']
+            elif row['METRIC_CODE'] == 'INTEREST_EXPENSE':
+                interest_expense_data[key] = row['VALUE']
+            elif row['METRIC_CODE'] == 'BORROWING_BALANCE':
+                borrowing_balance_data[key] = row['VALUE']
         
-        # Calculate ROE and ROA for each period
-        periods = sorted(set(npat_data.keys()) | set(equity_data.keys()) | set(assets_data.keys()))
-        
+        # Calculate ROE, ROA, and Interest Rate for each period
+        periods = sorted(set(npat_data.keys()) | set(equity_data.keys()) | set(assets_data.keys()) |
+                        set(interest_expense_data.keys()) | set(borrowing_balance_data.keys()))
+
         for i, period in enumerate(periods):
             year, quarter = period
             npat = npat_data.get(period, 0)
             current_equity = equity_data.get(period, 0)
             current_assets = assets_data.get(period, 0)
-            
+            interest_expense = interest_expense_data.get(period, 0)
+            current_borrowing = borrowing_balance_data.get(period, 0)
+
             # Get previous period data
             if i > 0:
                 prev_period = periods[i-1]
                 prev_equity = equity_data.get(prev_period, current_equity)
                 prev_assets = assets_data.get(prev_period, current_assets)
+                prev_borrowing = borrowing_balance_data.get(prev_period, current_borrowing)
             else:
                 prev_equity = current_equity
                 prev_assets = current_assets
-            
-            # Calculate ROE
-            avg_equity = (current_equity + prev_equity) / 2 if prev_equity > 0 else current_equity
-            if avg_equity > 0 and npat != 0:
-                roe = npat / avg_equity
-                ratio_records.append({
-                    'TICKER': ticker,
-                    'YEARREPORT': year,
-                    'LENGTHREPORT': quarter,
-                    'STARTDATE': '',
-                    'ENDDATE': '',
-                    'NOTE': 'Calculated from utils/data.py formulas',
-                    'STATEMENT_TYPE': 'CALC',
-                    'METRIC_CODE': 'ROE',
-                    'VALUE': float(roe),
-                    'KEYCODE': 'ROE',
-                    'KEYCODE_NAME': 'ROE',
-                    'QUARTER_LABEL': f'{quarter}Q{year % 100:02d}' if quarter in [1,2,3,4] else 'Annual'
-                })
-            
-            # Calculate ROA
-            avg_assets = (current_assets + prev_assets) / 2 if prev_assets > 0 else current_assets
-            if avg_assets > 0 and npat != 0:
-                roa = npat / avg_assets
-                ratio_records.append({
-                    'TICKER': ticker,
-                    'YEARREPORT': year,
-                    'LENGTHREPORT': quarter,
-                    'STARTDATE': '',
-                    'ENDDATE': '',
-                    'NOTE': 'Calculated from utils/data.py formulas',
-                    'STATEMENT_TYPE': 'CALC',
-                    'METRIC_CODE': 'ROA',
-                    'VALUE': float(roa),
-                    'KEYCODE': 'ROA',
-                    'KEYCODE_NAME': 'ROA',
-                    'QUARTER_LABEL': f'{quarter}Q{year % 100:02d}' if quarter in [1,2,3,4] else 'Annual'
-                })
-    
-    print(f"Calculated {len(ratio_records):,} ratio records (ROE/ROA)")
-    
+                prev_borrowing = current_borrowing
+
+            # Skip ROE and ROA - they already exist
+            # Only calculate new Interest Rate metric
+
+            # Calculate Interest Rate (Interest Expense / Avg Borrowing Balance)
+            # Only if it doesn't already exist
+            period_key = (ticker, year, quarter)
+            if period_key not in existing_interest_rates:
+                # Annualize for quarterly data: multiply by 4
+                avg_borrowing = (current_borrowing + prev_borrowing) / 2 if prev_borrowing > 0 else current_borrowing
+                if avg_borrowing > 0 and interest_expense != 0:
+                    interest_rate = interest_expense / avg_borrowing
+                    # Annualize quarterly data (multiply by 4), leave annual data as is
+                    if quarter in [1, 2, 3, 4]:
+                        interest_rate = interest_rate * 4
+
+                    ratio_records.append({
+                        'TICKER': ticker,
+                        'YEARREPORT': year,
+                        'LENGTHREPORT': quarter,
+                        'STARTDATE': '',
+                        'ENDDATE': '',
+                        'NOTE': 'Calculated: Interest Expense / Avg Borrowing Balance (annualized for quarterly)',
+                        'STATEMENT_TYPE': 'CALC',
+                        'METRIC_CODE': 'INTEREST_RATE',
+                        'VALUE': float(interest_rate),
+                        'KEYCODE': 'INTEREST_RATE',
+                        'KEYCODE_NAME': 'Interest Rate',
+                        'QUARTER_LABEL': f'{quarter}Q{year % 100:02d}' if quarter in [1,2,3,4] else 'Annual'
+                    })
+
+    print(f"Calculated {len(ratio_records):,} Interest Rate records")
+
     # Add ratio records to the original list
     calculated_metrics.extend(ratio_records)
-    
+
     return calculated_metrics
 
 def append_to_combined_file(calculated_metrics):

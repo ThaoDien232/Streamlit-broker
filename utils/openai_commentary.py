@@ -358,6 +358,7 @@ You are a financial analyst specializing in the brokerage sector. Analyze quarte
 IMPORTANT NOTES ABOUT THE DATA:
 - ROE values shown are ALREADY ANNUALIZED (multiplied by 4 for quarterly data)
 - All figures are in VND billions (B VND) unless shown as percentages
+- Margin/Equity % shows margin lending balance as % of shareholder equity (legal cap is 200%)
 - The table shows the last 6 quarters with growth rates
 
 Data for Broker: {ticker} (Quarter: {year_quarter})
@@ -381,18 +382,31 @@ Top Proprietary Holdings:
     prompt += """
 Your answer must follow this structure exactly. Do not add or remove sections.
 
-## 1. Conclusion (max 5 bullet points)
-Write these bullets as a story-driven investor takeaway, don't add numbers just yet (Max 5 bullet points).
-Focus on the big picture: what kind of quarter this was, what drove it, and how sustainable it looks (dig into whether the strong/weak profit growth is due to any one-off items or mainly driven by investment income growth).
+## 1. Overall (max 5 bullet points)
+Write these bullets as a story-driven investor takeaway.
+First, focus on the big picture: what kind of quarter this was, what drove it, and how sustainable it looks (dig into whether the strong/weak profit growth is due to any one-off items or mainly driven by investment income growth).
 Keep numbers supportive, but not the headline. (Example: "Profit growth QoQ/YoY seems strong, but much of it came from one-offs, not core business activities." instead of "PBT +33% QoQ.")
+Second, present PBT, main income streams (brokerage, margin lending, investment incomes), ROA, ROE trends with interpretation.
+Use the earnings bridge (Revenue, Cost, Non-recurring) to explain what really changed.
 Tone: succinct, neutral, analytical.
 
-## 2. Profitability
-Present PBT, main income streams (brokerage, margin lending, investment incomes), ROA, ROE trends with interpretation.
-Use the earnings bridge (Revenue, Cost, Non-recurring) to explain what really changed.
-Underlying the income streams, give a brief on the brokers' brokerage market share and margin balance & its growth.
+## 2. Traditional brokerage (max 3 bullet points)
+Present brokerage and margin lending income growth QoQ/YoY
+Link brokerage income with BOTH market share AND market liquidity (avg daily turnover): if brokerage income grew faster/slower than market liquidity, explain if it's driven by market share gains/losses.
+Give a brief on the brokers'margin balance, its growth and margin/shareholder's equity ratio. Remember the legal cap for margin/shareholder's equity is 200%, the closer the broker is to this cap, the less headroom they have to lend out
+
+## 3. Investment (max 3 bullet points)
+Present investment income growth QoQ/YoY
 If the broker has investment income of 30% growth for either YoY or QoQ, add a bullet point on their top 5 stock holdings and the absolute values at the end of the quarter.
 Each bullet must combine data and meaning.
+
+## 4. IB (max 2 bullet points)
+Only present IB income if the QoQ growth is >30%
+If you present IB income, present the QoQ/YoY growth of IB income
+
+## 5. Cost control (max 3 bullet points)
+Present SGA growth QoQ/YoY and CIR 
+Present interest expense growth QoQ/YoY, interest rate and borrowing balance growth QoQ/YoY. Highlight if interest rate is rising > 20 bps QoQ.
 
 Writing Approach Rules:
 - Conclusion = story first, numbers second.

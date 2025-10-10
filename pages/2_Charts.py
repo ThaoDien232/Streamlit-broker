@@ -17,14 +17,19 @@ font_family = theme["font"]
 
 st.set_page_config(page_title="Financial Charts - CALC Metrics", layout="wide")
 
-# Load Combined Financial Data
-@st.cache_data
+# Load Combined Financial Data from database
+@st.cache_data(ttl=3600)
 def load_combined_data():
-    df = pd.read_csv("sql/Combined_Financial_Data.csv")
-    # Ensure YEARREPORT and LENGTHREPORT are always integer (drop rows where conversion fails)
-    df['YEARREPORT'] = pd.to_numeric(df['YEARREPORT'], errors='coerce').astype('Int64')
-    df['LENGTHREPORT'] = pd.to_numeric(df['LENGTHREPORT'], errors='coerce').astype('Int64')
-    df = df.dropna(subset=['YEARREPORT', 'LENGTHREPORT'])
+    from utils.brokerage_data import load_brokerage_metrics
+
+    # Load from database (2017 onwards, quarterly only)
+    df = load_brokerage_metrics(start_year=2017, include_annual=False)
+
+    if df.empty:
+        st.error("No data loaded from database")
+        return pd.DataFrame()
+
+    # Ensure YEARREPORT and LENGTHREPORT are integer
     df['YEARREPORT'] = df['YEARREPORT'].astype(int)
     df['LENGTHREPORT'] = df['LENGTHREPORT'].astype(int)
     return df

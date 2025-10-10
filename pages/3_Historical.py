@@ -2,19 +2,21 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from utils.brokerage_data import load_brokerage_metrics, get_available_tickers, get_available_quarters
 
 
 # Page config
 st.set_page_config(page_title="Historical Financial Statements", layout="wide")
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def load_financial_data():
-    """Load the combined financial data"""
+    """Load the combined financial data from database"""
     try:
-        df = pd.read_csv('sql/Combined_Financial_Data.csv', dtype={'TICKER': str}, low_memory=False)
+        # Load from database (2017 onwards, include annual data)
+        df = load_brokerage_metrics(start_year=2017, include_annual=True)
         return df
-    except FileNotFoundError:
-        st.error("Combined financial data not found. Please run the data combination script first.")
+    except Exception as e:
+        st.error(f"Failed to load financial data from database: {e}")
         return None
 
 def reload_data():

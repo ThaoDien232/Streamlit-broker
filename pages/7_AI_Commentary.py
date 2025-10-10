@@ -33,12 +33,24 @@ from utils.openai_commentary import (
 
 @st.cache_data(ttl=1800)  # Cache for 30 minutes
 def load_financial_data():
-    """Load Combined_Financial_Data.csv with caching"""
+    """Load brokerage financial data from database"""
     try:
-        df = pd.read_csv('sql/Combined_Financial_Data.csv', dtype={'TICKER': str}, low_memory=False)
+        from utils.brokerage_data import load_brokerage_metrics
+        df = load_brokerage_metrics(start_year=2017, include_annual=False)
         return df
     except Exception as e:
-        st.error(f"Error loading financial data: {e}")
+        st.error(f"Error loading financial data from database: {e}")
+        return pd.DataFrame()
+
+@st.cache_data(ttl=1800)  # Cache for 30 minutes
+def load_market_liquidity_data():
+    """Load and calculate quarterly market liquidity from database"""
+    try:
+        from utils.market_index_data import load_market_liquidity_data as load_db_liquidity
+        quarterly_liquidity = load_db_liquidity(start_year=2017)
+        return quarterly_liquidity
+    except Exception as e:
+        st.warning(f"Could not load market liquidity data: {e}")
         return pd.DataFrame()
 
 def filter_ticker_data(df, ticker):
@@ -166,8 +178,11 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
 
     ticker = ticker_data['TICKER'].iloc[0]
 
+    # Load market liquidity data
+    market_liquidity_df = load_market_liquidity_data()
+
     # Display metrics we want to show
-    display_metrics = ['Net Brokerage Income', 'Margin Income', 'Investment Income', 'PBT', 'NPAT', 'Margin Balance', 'ROE']
+    display_metrics = ['Net Brokerage Income', 'Market Liquidity (Avg Daily)', 'Margin Income', 'Investment Income', 'PBT', 'NPAT', 'Margin Balance', 'Margin/Equity %', 'ROE']
 
     # Create table structure: Metric as rows, quarters as columns
     analysis_data = {'Metric': display_metrics}
@@ -184,7 +199,44 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
 
         # Get metrics for this quarter
         quarter_values = []
+        margin_balance_value = None
+        total_equity_value = None
+
         for metric_name in display_metrics:
+            if metric_name == 'Market Liquidity (Avg Daily)':
+                # Get market liquidity for this quarter
+                if not market_liquidity_df.empty:
+                    liquidity_row = market_liquidity_df[
+                        (market_liquidity_df['Year'] == year) &
+                        (market_liquidity_df['Quarter'] == quarter_num)
+                    ]
+                    if not liquidity_row.empty:
+                        quarter_values.append(liquidity_row.iloc[0]['Avg Daily Turnover (B VND)'])
+                    else:
+                        quarter_values.append(0)
+                else:
+                    quarter_values.append(0)
+                continue
+
+            if metric_name == 'Margin/Equity %':
+                # Calculate margin/equity ratio
+                if margin_balance_value is not None and total_equity_value is not None and total_equity_value != 0:
+                    ratio = (margin_balance_value / total_equity_value) * 100
+                    quarter_values.append(ratio)
+                else:
+                    # Need to fetch if not already fetched
+                    if margin_balance_value is None:
+                        margin_balance_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'MARGIN_BALANCE')
+                    if total_equity_value is None:
+                        total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'TOTAL_EQUITY')
+
+                    if total_equity_value and total_equity_value != 0:
+                        ratio = (margin_balance_value / total_equity_value) * 100
+                        quarter_values.append(ratio)
+                    else:
+                        quarter_values.append(0)
+                continue
+
             metric_code = {
                 'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
                 'Margin Income': 'MARGIN_LENDING_INCOME',
@@ -197,6 +249,13 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
 
             value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, metric_code)
             quarter_values.append(value)
+
+            # Store for ratio calculation
+            if metric_name == 'Margin Balance':
+                margin_balance_value = value
+            elif metric_name == 'ROE':
+                # Also get Total Equity for the ratio
+                total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'TOTAL_EQUITY')
 
         # Add this quarter's column
         analysis_data[quarter] = quarter_values
