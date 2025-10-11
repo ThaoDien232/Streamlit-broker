@@ -74,7 +74,7 @@ def calculate_financial_metrics(ticker_data, selected_quarter, ticker):
     # Key financial metrics to extract using CALC statement type and METRIC_CODE (like Historical page)
     key_metrics = {
         'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
-        'Margin Income': 'MARGIN_LENDING_INCOME',
+        'Margin Income': 'NET_MARGIN_INCOME',  # Correct METRIC_CODE for margin lending income
         'Investment Income': 'NET_INVESTMENT_INCOME',
         'PBT': 'NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX',
         'NPAT': 'NET PROFIT/(LOSS) AFTER TAX',
@@ -240,7 +240,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
 
             metric_code = {
                 'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
-                'Margin Income': 'MARGIN_LENDING_INCOME',
+                'Margin Income': 'NET_MARGIN_INCOME',  # Correct METRIC_CODE for margin lending income
                 'Investment Income': 'NET_INVESTMENT_INCOME',
                 'PBT': 'NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX',
                 'NPAT': 'NET PROFIT/(LOSS) AFTER TAX',
@@ -254,9 +254,12 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
             # Store for ratio calculation
             if metric_name == 'Margin Balance':
                 margin_balance_value = value
-            elif metric_name == 'ROE':
-                # Also get Total Equity for the ratio
+                # Also get Total Equity for the Margin/Equity % calculation
                 total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'TOTAL_EQUITY')
+            elif metric_name == 'ROE':
+                # Also get Total Equity for the ratio if not already fetched
+                if total_equity_value is None:
+                    total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'TOTAL_EQUITY')
 
         # Add this quarter's column
         analysis_data[quarter] = quarter_values
@@ -317,6 +320,19 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
 
 def get_calc_metric_value(df, ticker, year, quarter, metric_code):
     """Get a specific calculated metric value from CALC statement type"""
+    # Special handling for calculated metrics that don't exist in database
+    if metric_code == 'ROE':
+        # Calculate ROE = NPAT / Total Equity * 100 (annualized for quarterly)
+        npat = get_calc_metric_value(df, ticker, year, quarter, 'NPAT')
+        equity = get_calc_metric_value(df, ticker, year, quarter, 'TOTAL_EQUITY')
+        if equity and equity != 0:
+            roe = (npat / equity) * 100
+            # Annualize for quarterly data (multiply by 4)
+            if quarter in [1, 2, 3, 4]:
+                roe = roe * 4
+            return roe
+        return 0
+
     # For PBT and NPAT, use KEYCODE_NAME instead of METRIC_CODE
     if metric_code in ['NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX', 'NET PROFIT/(LOSS) AFTER TAX']:
         result = df[
@@ -324,6 +340,23 @@ def get_calc_metric_value(df, ticker, year, quarter, metric_code):
             (df['YEARREPORT'] == year) &
             (df['LENGTHREPORT'] == quarter) &
             (df['KEYCODE_NAME'] == metric_code)
+        ]
+    # For NPAT and PBT, also try METRIC_CODE
+    elif metric_code in ['NPAT', 'PBT']:
+        result = df[
+            (df['TICKER'] == ticker) &
+            (df['YEARREPORT'] == year) &
+            (df['LENGTHREPORT'] == quarter) &
+            (df['STATEMENT_TYPE'] == 'CALC') &
+            (df['METRIC_CODE'] == metric_code)
+        ]
+    # For TOTAL_EQUITY, use METRIC_CODE directly
+    elif metric_code == 'TOTAL_EQUITY':
+        result = df[
+            (df['TICKER'] == ticker) &
+            (df['YEARREPORT'] == year) &
+            (df['LENGTHREPORT'] == quarter) &
+            (df['METRIC_CODE'] == metric_code)
         ]
     else:
         result = df[
@@ -336,11 +369,6 @@ def get_calc_metric_value(df, ticker, year, quarter, metric_code):
 
     if len(result) > 0:
         value = result.iloc[0]['VALUE']
-
-        # Annualize quarterly ROE and ROA (multiply by 4 for quarters 1-4, not for annual which is 5)
-        if metric_code in ['ROE', 'ROA'] and quarter in [1, 2, 3, 4]:
-            value = value * 4
-
         return value
     return 0
 
