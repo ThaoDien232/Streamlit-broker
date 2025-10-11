@@ -291,7 +291,6 @@ def display_balance_sheet(df, ticker, periods, display_mode):
 def display_investment_book(df, broker, periods):
     """Display Investment Book (Notes 7.x and 8.x) with FVTPL, AFS, HTM categories"""
     st.subheader("📊 Investment Book")
-    st.markdown("Investment holdings classified by accounting category (FVTPL, AFS, HTM)")
 
     # Only show for quarterly data (investment book not meaningful for annual aggregates)
     quarterly_periods = [p for p in periods if p['LENGTHREPORT'] != 5]
@@ -346,27 +345,6 @@ def display_investment_book(df, broker, periods):
     if not has_data:
         st.info(f"No investment holdings data available for {broker} in {selected_period_label}")
         return
-
-    # Display summary metrics
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        fvtpl_mv = get_category_total(current_data, 'FVTPL', 'Market Value') / 1_000_000_000
-        st.metric("FVTPL (Trading)", f"{fvtpl_mv:,.1f}B")
-
-    with col2:
-        afs_mv = get_category_total(current_data, 'AFS', 'Market Value') / 1_000_000_000
-        st.metric("AFS", f"{afs_mv:,.1f}B")
-
-    with col3:
-        htm_cost = get_category_total(current_data, 'HTM', 'Cost') / 1_000_000_000
-        st.metric("HTM", f"{htm_cost:,.1f}B")
-
-    with col4:
-        total = fvtpl_mv + afs_mv + htm_cost
-        st.metric("Total Investments", f"{total:,.1f}B")
-
-    st.markdown("---")
 
     # Format and display investment book with prior quarter comparison
     if prior_data and prior_quarter_label:
