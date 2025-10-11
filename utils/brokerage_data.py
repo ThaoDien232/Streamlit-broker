@@ -114,6 +114,10 @@ def load_brokerage_metrics(
     if 'ENDDATE' in df.columns:
         df['ENDDATE'] = pd.to_datetime(df['ENDDATE'], errors='coerce')
 
+    # IMPORTANT: Translate KEYCODE back to our METRIC_CODE format
+    from utils.keycode_mapping import get_metric_code
+    df['METRIC_CODE'] = df['KEYCODE'].apply(lambda k: get_metric_code(k) or k)
+
     st.success(f"✅ Loaded {len(df):,} records for {df['TICKER'].nunique()} brokers from database")
 
     return df
@@ -474,6 +478,13 @@ def load_filtered_brokerage_data(
     df['LENGTHREPORT'] = df['LENGTHREPORT'].astype(int)
     df['VALUE'] = pd.to_numeric(df['VALUE'], errors='coerce')
 
+    # IMPORTANT: Translate KEYCODE back to our METRIC_CODE format
+    # Database returns 'Net_Brokerage_Income', 'Net_Trading_Income', etc.
+    # But we need 'NET_BROKERAGE_INCOME', 'NET_TRADING_INCOME', etc.
+    # to match what the Charts/Historical pages filter by
+    from utils.keycode_mapping import get_metric_code
+    df['METRIC_CODE'] = df['KEYCODE'].apply(lambda k: get_metric_code(k) or k)
+
     return df
 
 @st.cache_data(ttl=3600)
@@ -545,6 +556,10 @@ def load_ticker_quarter_data(ticker: str, quarter_label: str, lookback_quarters:
         df['STARTDATE'] = pd.to_datetime(df['STARTDATE'], errors='coerce')
     if 'ENDDATE' in df.columns:
         df['ENDDATE'] = pd.to_datetime(df['ENDDATE'], errors='coerce')
+
+    # IMPORTANT: Translate KEYCODE back to our METRIC_CODE format
+    from utils.keycode_mapping import get_metric_code
+    df['METRIC_CODE'] = df['KEYCODE'].apply(lambda k: get_metric_code(k) or k)
 
     return df
 
