@@ -25,14 +25,14 @@ INVESTMENT_CLASSIFICATION = {
     '7.1.1.2. Unlisted Shares': ('FVTPL', 'Equities', 'Unlisted Shares', 'Cost'),
     '7.1.1.3. Fund': ('FVTPL', 'Equities', 'Fund Certificates', 'Cost'),
     '7.1.1.4. Bonds': ('FVTPL', 'Bonds', 'Bonds', 'Cost'),
-    '7.1.2. Other short-term investments': ('FVTPL', 'Others', 'CDs & Short-term Deposits', 'Cost'),
+    '7.1.2. Other short-term investments': ('FVTPL', 'Deposits', 'CDs', 'Cost'),
 
     '8.1.1. Trading Securities': ('FVTPL', 'Trading Securities', 'Trading Securities - Total', 'Market Value'),
     '8.1.1.1. Listed Shares': ('FVTPL', 'Equities', 'Listed Shares', 'Market Value'),
     '8.1.1.2. Unlisted Shares': ('FVTPL', 'Equities', 'Unlisted Shares', 'Market Value'),
     '8.1.1.3. Fund': ('FVTPL', 'Equities', 'Fund Certificates', 'Market Value'),
     '8.1.1.4. Bonds': ('FVTPL', 'Bonds', 'Bonds', 'Market Value'),
-    '8.1.2. Other short-term investments': ('FVTPL', 'Others', 'CDs & Short-term Deposits', 'Market Value'),
+    '8.1.2. Other short-term investments': ('FVTPL', 'Deposits', 'CDs', 'Market Value'),
 
     # AFS - Available for Sale (7.2.x and 8.2.x)
     '7.2.1. Listed shares': ('AFS', 'Equities', 'Listed Shares', 'Cost'),
@@ -51,7 +51,7 @@ INVESTMENT_CLASSIFICATION = {
     '7.3.2. Unlisted shares': ('HTM', 'Equities', 'Unlisted Shares', 'Cost'),
     '7.3.3. Investment Fund Certificates': ('HTM', 'Equities', 'Fund Certificates', 'Cost'),
     '7.3.4. Bonds': ('HTM', 'Bonds', 'Bonds', 'Cost'),
-    '7.3.5. Monetary market instrument': ('HTM', 'Money Market', 'Deposits & Money Market', 'Cost'),
+    '7.3.5. Monetary market instrument': ('HTM', 'Deposits', 'Term Deposits', 'Cost'),
 
     '8.5.1.1. Listed Shares': ('HTM', 'Equities', 'Listed Shares', 'Market Value'),
     '8.5.1.2. Unlisted Shares': ('HTM', 'Equities', 'Unlisted Shares', 'Market Value'),
@@ -69,7 +69,7 @@ INVESTMENT_BOOK_STRUCTURE = {
         'sections': [
             ('Equities', ['Listed Shares', 'Unlisted Shares', 'Fund Certificates']),
             ('Bonds', ['Bonds']),
-            ('Others', ['CDs & Short-term Deposits'])
+            ('Deposits', ['CDs'])
         ]
     },
     'AFS': {
@@ -85,7 +85,7 @@ INVESTMENT_BOOK_STRUCTURE = {
         'sections': [
             ('Equities', ['Listed Shares', 'Unlisted Shares', 'Fund Certificates']),
             ('Bonds', ['Bonds']),
-            ('Money Market', ['Deposits & Money Market'])
+            ('Deposits', ['Term Deposits'])
         ]
     }
 }

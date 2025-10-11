@@ -479,10 +479,18 @@ def get_investment_composition(ticker_data, ticker, quarter_label):
                 # Determine sub-category from item name
                 if 'Bond' in item_name or 'bond' in item_name:
                     sub_cat = 'Bonds'
-                elif 'CD' in item_name or 'Deposit' in item_name or 'deposit' in item_name:
-                    sub_cat = 'CDs & Deposits'
+                elif 'CD' in item_name and 'CDs' in item_name:
+                    sub_cat = 'CDs'
+                elif 'Term Deposit' in item_name:
+                    sub_cat = 'Term Deposits'
+                elif 'Deposit' in item_name or 'deposit' in item_name:
+                    # Generic deposit - categorize based on category
+                    if category == 'HTM':
+                        sub_cat = 'Term Deposits'
+                    else:
+                        sub_cat = 'CDs'
                 elif 'Money Market' in item_name or 'Monetary market' in item_name:
-                    sub_cat = 'Money Market'
+                    sub_cat = 'Money Market Instruments'
                 elif 'Share' in item_name or 'Fund' in item_name or 'Equity' in item_name or 'Equit' in item_name:
                     # Further breakdown equities
                     if 'Listed' in item_name and 'Unlisted' not in item_name:
@@ -493,8 +501,6 @@ def get_investment_composition(ticker_data, ticker, quarter_label):
                         sub_cat = 'Fund Certificates'
                     else:
                         sub_cat = 'Equities'
-                elif 'Other' in item_name:
-                    sub_cat = 'CDs & Deposits'  # Other short-term investments typically means CDs/deposits
                 else:
                     sub_cat = 'Others'
 
