@@ -9,11 +9,11 @@ from utils.brokerage_data import load_brokerage_metrics, get_available_tickers, 
 st.set_page_config(page_title="Historical Financial Statements", layout="wide")
 
 @st.cache_data(ttl=3600)
-def load_financial_data():
-    """Load the combined financial data from database"""
+def load_broker_financial_data(ticker: str, start_year: int, end_year: int, include_annual: bool = True):
+    """Load financial data for specific broker and year range (optimized query)"""
     try:
-        # Load from database (2017 onwards, include annual data)
-        df = load_brokerage_metrics(start_year=2017, include_annual=True)
+        # Load ONLY the selected broker and year range
+        df = load_brokerage_metrics(ticker=ticker, start_year=start_year, end_year=end_year, include_annual=include_annual)
         return df
     except Exception as e:
         st.error(f"Failed to load financial data from database: {e}")
@@ -21,7 +21,8 @@ def load_financial_data():
 
 def reload_data():
     """Clear cache and reload data"""
-    load_financial_data.clear()
+    load_broker_financial_data.clear()
+    get_available_tickers.clear()
     st.rerun()
 
 def format_vnd_billions(value):
@@ -296,14 +297,9 @@ def main():
         if st.sidebar.button("Reload Data", help="Refresh data from Combined_Financial_Data.csv"):
             reload_data()
     
-    # Load data
-    df = load_financial_data()
-    if df is None:
-        return
-    
     # Sidebar controls
     st.sidebar.header(" Display Options")
-    
+
     # Display mode toggle
     display_mode = st.sidebar.radio(
         "Display Mode:",
@@ -311,19 +307,19 @@ def main():
         index=0,
         help="Choose between absolute values in VND billions or YoY/QoQ growth percentages"
     )
-    
-    # Broker selection
-    individual_brokers = sorted([ticker for ticker in df['TICKER'].unique() 
-                               if pd.notna(ticker) and ticker != 'Sector'])
+
+    # Get available brokers (lightweight query)
+    all_tickers = get_available_tickers()
+    individual_brokers = sorted([t for t in all_tickers if t != 'Sector'])
     available_brokers = ['Sector'] + individual_brokers
-    
+
     selected_broker = st.sidebar.selectbox(
         "Select Broker:",
         options=available_brokers,
         index=0,
         help="Choose which broker's financial statements to display (Sector = sum of all brokers)"
     )
-    
+
     # Report type selection
     report_type = st.sidebar.radio(
         "Report Type:",
@@ -331,10 +327,11 @@ def main():
         index=0,
         help="Choose between quarterly or annual financial statements"
     )
-    
+
     # Time horizon
     current_year = datetime.now().year
-    available_years = sorted(df['YEARREPORT'].unique(), reverse=True)
+    available_years = list(range(2017, current_year + 1))
+    available_years.sort(reverse=True)
     
     # Set default start and end years to 2024-2025
     default_start_year = 2024
@@ -371,25 +368,33 @@ def main():
             help="Ending year for the analysis"
         )
     
+    # NOW load data ONLY for selected broker and year range
+    include_annual = (report_type == "Annual")
+    df = load_broker_financial_data(selected_broker, start_year, end_year, include_annual=True)
+
+    if df is None or df.empty:
+        st.warning(f"No data available for {selected_broker} in the selected time range.")
+        return
+
     # Get available periods for selected broker
     periods = get_available_periods(df, selected_broker, report_type)
-    
+
     # Filter periods by year range
     periods = [p for p in periods if start_year <= p['YEARREPORT'] <= end_year]
-    
+
     if not periods:
         st.warning(f"No {report_type.lower()} data available for {selected_broker} in the selected time range.")
         return
-    
+
     # Display broker info
     st.markdown(f"##  **{selected_broker}** Financial Statements")
     st.markdown(f"**Currency:** VND Billions")
-    
+
     # Display all financial statements on one page
     display_income_statement(df, selected_broker, periods, display_mode)
-    
+
     st.markdown("---")  # Separator line
-    
+
     display_balance_sheet(df, selected_broker, periods, display_mode)
 
 if __name__ == "__main__":

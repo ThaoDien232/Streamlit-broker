@@ -472,3 +472,109 @@ def load_filtered_brokerage_data(
     df['VALUE'] = pd.to_numeric(df['VALUE'], errors='coerce')
 
     return df
+
+@st.cache_data(ttl=3600)
+def load_ticker_quarter_data(ticker: str, quarter_label: str, lookback_quarters: int = 6) -> pd.DataFrame:
+    """
+    Load data for a specific ticker and quarter, with optional lookback periods.
+    Optimized for AI Commentary page use case.
+
+    Args:
+        ticker: Single broker ticker (e.g., 'SSI')
+        quarter_label: Quarter label (e.g., '1Q24')
+        lookback_quarters: Number of historical quarters to include (default 6)
+
+    Returns:
+        DataFrame with ticker data for the specified quarter and lookback period
+    """
+    from utils.brokerage_data import parse_quarter_label
+
+    # Parse the quarter label
+    year, quarter_num = parse_quarter_label(quarter_label)
+    if year is None or quarter_num is None:
+        return pd.DataFrame()
+
+    # Calculate lookback range (approximate - we'll get extra data and filter in Python)
+    # Go back 2 years to ensure we capture enough quarters
+    start_year = year - 2
+    end_year = year
+
+    excluded_list = ','.join([f"'{t}'" for t in EXCLUDED_TICKERS])
+
+    query = f"""
+    SELECT
+        TICKER,
+        YEARREPORT,
+        LENGTHREPORT,
+        QUARTER_LABEL,
+        STARTDATE,
+        ENDDATE,
+        KEYCODE as METRIC_CODE,
+        VALUE,
+        KEYCODE,
+        KEYCODE_NAME,
+        CASE
+            WHEN KEYCODE LIKE 'BS.%' THEN 'BS'
+            WHEN KEYCODE LIKE 'IS.%' THEN 'IS'
+            WHEN KEYCODE LIKE '7.%' OR KEYCODE LIKE '8.%' THEN 'NOTE'
+            ELSE 'CALC'
+        END as STATEMENT_TYPE
+    FROM dbo.BrokerageMetrics
+    WHERE TICKER = '{ticker}'
+      AND YEARREPORT BETWEEN {start_year} AND {end_year}
+      AND LENGTHREPORT BETWEEN 1 AND 4
+      AND TICKER NOT IN ({excluded_list})
+    ORDER BY YEARREPORT, LENGTHREPORT, KEYCODE
+    """
+
+    df = run_query(query)
+
+    if df.empty:
+        return pd.DataFrame()
+
+    # Convert data types
+    df['YEARREPORT'] = df['YEARREPORT'].astype(int)
+    df['LENGTHREPORT'] = df['LENGTHREPORT'].astype(int)
+    df['VALUE'] = pd.to_numeric(df['VALUE'], errors='coerce')
+
+    # Convert dates if present
+    if 'STARTDATE' in df.columns:
+        df['STARTDATE'] = pd.to_datetime(df['STARTDATE'], errors='coerce')
+    if 'ENDDATE' in df.columns:
+        df['ENDDATE'] = pd.to_datetime(df['ENDDATE'], errors='coerce')
+
+    return df
+
+@st.cache_data(ttl=3600)
+def get_ticker_quarters_list(ticker: str, start_year: int = 2017) -> List[str]:
+    """
+    Get list of available quarters for a specific ticker.
+    Lightweight query - only returns quarter labels.
+
+    Args:
+        ticker: Broker ticker
+        start_year: Start year (default 2017)
+
+    Returns:
+        List of quarter labels sorted chronologically (newest first)
+    """
+    excluded_list = ','.join([f"'{t}'" for t in EXCLUDED_TICKERS])
+
+    query = f"""
+    SELECT DISTINCT QUARTER_LABEL, YEARREPORT, LENGTHREPORT
+    FROM dbo.BrokerageMetrics
+    WHERE TICKER = '{ticker}'
+      AND YEARREPORT >= {start_year}
+      AND LENGTHREPORT BETWEEN 1 AND 4
+      AND QUARTER_LABEL IS NOT NULL
+      AND QUARTER_LABEL != 'Annual'
+      AND TICKER NOT IN ({excluded_list})
+    ORDER BY YEARREPORT DESC, LENGTHREPORT DESC
+    """
+
+    df = run_query(query)
+
+    if not df.empty:
+        return df['QUARTER_LABEL'].tolist()
+
+    return []

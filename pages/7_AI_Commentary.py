@@ -32,11 +32,12 @@ from utils.openai_commentary import (
 )
 
 @st.cache_data(ttl=1800)  # Cache for 30 minutes
-def load_financial_data():
-    """Load brokerage financial data from database"""
+def load_ticker_data(ticker: str, quarter_label: str):
+    """Load brokerage financial data for specific ticker and quarter (with lookback)"""
     try:
-        from utils.brokerage_data import load_brokerage_metrics
-        df = load_brokerage_metrics(start_year=2017, include_annual=False)
+        from utils.brokerage_data import load_ticker_quarter_data
+        # Load data for this ticker with 6 quarters lookback
+        df = load_ticker_quarter_data(ticker=ticker, quarter_label=quarter_label, lookback_quarters=6)
         return df
     except Exception as e:
         st.error(f"Error loading financial data from database: {e}")
@@ -54,8 +55,8 @@ def load_market_liquidity_data():
         return pd.DataFrame()
 
 def filter_ticker_data(df, ticker):
-    """Step 1: Filter data for specific ticker and return historical table"""
-    ticker_data = df[df['TICKER'] == ticker].copy()
+    """Step 1: Filter data for specific ticker and return historical table (data already filtered by load_ticker_data)"""
+    ticker_data = df.copy()  # Data already filtered in query
 
     # Pivot to get quarters as columns and metrics as rows
     pivot_data = ticker_data.pivot_table(
@@ -497,12 +498,10 @@ with st.sidebar:
 
     st.markdown("---")
 
-# Load data
-df = load_financial_data()
+# Load available tickers and quarters (lightweight queries)
+from utils.brokerage_data import get_available_tickers, get_ticker_quarters_list
 
-if df.empty:
-    st.error("❌ Financial data not found. Please ensure Combined_Financial_Data.csv exists in the sql/ directory.")
-    st.stop()
+available_tickers = get_available_tickers()
 
 def sort_quarters_chronologically(quarters):
     """Sort quarters in chronological order (1Q19, 2Q19, 3Q19, 4Q19, 1Q20, etc.)"""
@@ -519,10 +518,6 @@ def sort_quarters_chronologically(quarters):
             return (9999, 0)  # Invalid format goes to end
 
     return sorted(quarters, key=quarter_key)
-
-# Get available options from the CSV data
-available_tickers = sorted([t for t in df['TICKER'].unique() if pd.notna(t)], key=str)
-available_quarters = sort_quarters_chronologically([q for q in df['QUARTER_LABEL'].unique() if pd.notna(q) and q != 'Annual'])
 
 # Check for cached commentary
 cache_file = "sql/ai_commentary_cache.csv"
@@ -552,15 +547,14 @@ with col1:
     )
 
 with col2:
-    # Filter quarters available for the selected ticker
-    ticker_df = df[df['TICKER'] == selected_ticker]
-    ticker_quarters = sort_quarters_chronologically([q for q in ticker_df['QUARTER_LABEL'].unique() if pd.notna(q) and q != 'Annual'])
+    # Get quarters available for the selected ticker (lightweight query)
+    ticker_quarters = get_ticker_quarters_list(selected_ticker, start_year=2017)
 
     if ticker_quarters:
         selected_quarter = st.selectbox(
             "Select Quarter:",
             ticker_quarters,
-            index=len(ticker_quarters) - 1,  # Default to latest quarter
+            index=0,  # Default to latest quarter (already sorted newest first)
             help="Choose the quarter to analyze or generate commentary for"
         )
     else:
@@ -585,12 +579,15 @@ with col4:
 # Show broker information using 3-step approach
 if selected_ticker and selected_quarter:
     try:
-        # Step 1: Filter ticker data
-        ticker_data, pivot_data = filter_ticker_data(df, selected_ticker)
+        # Load data ONLY for selected ticker and quarter (with lookback)
+        ticker_data = load_ticker_data(selected_ticker, selected_quarter)
 
         if ticker_data.empty:
-            st.error(f"No financial data found for {selected_ticker}")
+            st.error(f"No financial data found for {selected_ticker} - {selected_quarter}")
             st.stop()
+
+        # Step 1: Filter ticker data (already filtered, just format)
+        ticker_data, pivot_data = filter_ticker_data(ticker_data, selected_ticker)
 
         # Step 2: Calculate financial metrics and growth rates
         calculated_metrics = calculate_financial_metrics(ticker_data, selected_quarter, selected_ticker)
@@ -798,30 +795,36 @@ with col3:
 # Generate commentary
 if generate_button and selected_ticker and selected_quarter:
     try:
-        # Ensure we have the analysis data
-        ticker_data, pivot_data = filter_ticker_data(df, selected_ticker)
-        calculated_metrics = calculate_financial_metrics(ticker_data, selected_quarter, selected_ticker)
-        analysis_table = create_analysis_table(ticker_data, calculated_metrics, selected_quarter)
-        market_share_table, prop_holdings_table = create_summary_tables(selected_ticker, selected_quarter, ticker_data)
+        # Load data for selected ticker/quarter
+        ticker_data = load_ticker_data(selected_ticker, selected_quarter)
 
-        if analysis_table.empty:
+        if ticker_data.empty:
             st.error(f"No financial data available for {selected_ticker} in {selected_quarter}")
         else:
-            with st.spinner(f"🤖 Generating AI commentary for {selected_ticker} - {selected_quarter}..."):
-                try:
-                    # Convert analysis table to string for OpenAI
-                    analysis_text = analysis_table.to_string(index=False)
+            # Prepare analysis data
+            ticker_data, pivot_data = filter_ticker_data(ticker_data, selected_ticker)
+            calculated_metrics = calculate_financial_metrics(ticker_data, selected_quarter, selected_ticker)
+            analysis_table = create_analysis_table(ticker_data, calculated_metrics, selected_quarter)
+            market_share_table, prop_holdings_table = create_summary_tables(selected_ticker, selected_quarter, ticker_data)
 
-                    # Generate commentary and get the prompt
-                    result = generate_commentary(
-                        ticker=selected_ticker,
-                        year_quarter=selected_quarter,
-                        df=df,  # Pass the full Combined_Financial_Data DataFrame
-                        model=model_choice,
-                        force_regenerate=force_regenerate,
-                        analysis_table=analysis_table,  # Pass the pre-built analysis table
-                        market_share_table=market_share_table,  # Pass market share table
-                        prop_holdings_table=prop_holdings_table,  # Pass prop holdings table
+            if analysis_table.empty:
+                st.error(f"No financial data available for {selected_ticker} in {selected_quarter}")
+            else:
+                with st.spinner(f"🤖 Generating AI commentary for {selected_ticker} - {selected_quarter}..."):
+                    try:
+                        # Convert analysis table to string for OpenAI
+                        analysis_text = analysis_table.to_string(index=False)
+
+                        # Generate commentary and get the prompt
+                        result = generate_commentary(
+                            ticker=selected_ticker,
+                            year_quarter=selected_quarter,
+                            df=ticker_data,  # Pass the ticker-specific data
+                            model=model_choice,
+                            force_regenerate=force_regenerate,
+                            analysis_table=analysis_table,  # Pass the pre-built analysis table
+                            market_share_table=market_share_table,  # Pass market share table
+                            prop_holdings_table=prop_holdings_table,  # Pass prop holdings table
                         return_prompt=True  # Request the prompt to be returned
                     )
 
