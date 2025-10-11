@@ -432,6 +432,64 @@ def get_top_prop_holdings(ticker, quarter_label):
     except Exception as e:
         return []
 
+def get_investment_composition(ticker_data, ticker, quarter_label):
+    """Get investment book composition (FVTPL, AFS, HTM) for selected quarter"""
+    from utils.investment_book import get_investment_data
+
+    # Parse quarter to get year and quarter number
+    try:
+        quarter_num = int(quarter_label[0])
+        year_str = quarter_label[-2:]
+        year = 2000 + int(year_str) if int(year_str) < 50 else 1900 + int(year_str)
+    except:
+        return pd.DataFrame()
+
+    # Get investment data for this quarter
+    investment_data = get_investment_data(ticker_data, ticker, year, quarter_num)
+
+    if not investment_data:
+        return pd.DataFrame()
+
+    # Calculate totals for each category
+    # FVTPL and AFS: use Market Value
+    # HTM: use Cost (measured at amortized cost)
+    composition = []
+    total_value = 0
+
+    for category in ['FVTPL', 'AFS', 'HTM']:
+        if category in investment_data:
+            if category == 'HTM':
+                # HTM uses Cost
+                category_total = investment_data[category].get('Cost', 0)
+            else:
+                # FVTPL and AFS use Market Value
+                category_total = investment_data[category].get('Market Value', 0)
+
+            if category_total > 0:
+                composition.append({
+                    'Category': category,
+                    'Value': category_total
+                })
+                total_value += category_total
+
+    if total_value == 0:
+        return pd.DataFrame()
+
+    # Calculate percentages
+    for item in composition:
+        item['Value (B VND)'] = f"{item['Value'] / 1_000_000_000:.1f}"
+        item['Composition %'] = f"{(item['Value'] / total_value * 100):.1f}%"
+        del item['Value']  # Remove raw value
+
+    # Add total row
+    composition.append({
+        'Category': 'Total',
+        'Value (B VND)': f"{total_value / 1_000_000_000:.1f}",
+        'Composition %': '100.0%'
+    })
+
+    return pd.DataFrame(composition)
+
 def create_summary_tables(ticker, quarter_label, ticker_data):
     """Step 4: Create separate tables for market share and prop book data - Last 6 Quarters"""
 
@@ -440,7 +498,7 @@ def create_summary_tables(ticker, quarter_label, ticker_data):
 
     # Find the index of selected quarter and get last 6 quarters
     if quarter_label not in quarters:
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     current_idx = quarters.index(quarter_label)
     # Get last 6 quarters including current (or fewer if not available)
@@ -484,7 +542,10 @@ def create_summary_tables(ticker, quarter_label, ticker_data):
             holdings_data['Type'].append(holding['Type'])
         prop_holdings_table = pd.DataFrame(holdings_data)
 
-    return market_share_table, prop_holdings_table
+    # Build investment composition table for current quarter
+    investment_composition_table = get_investment_composition(ticker_data, ticker, quarter_label)
+
+    return market_share_table, prop_holdings_table, investment_composition_table
 
 # Title and description
 st.title("AI-Powered Commentary")
@@ -601,8 +662,8 @@ if selected_ticker and selected_quarter:
             st.code(traceback.format_exc())
             analysis_table = pd.DataFrame()
 
-        # Step 4: Create summary tables with market share and prop book data
-        market_share_table, prop_holdings_table = create_summary_tables(selected_ticker, selected_quarter, ticker_data)
+        # Step 4: Create summary tables with market share, prop book, and investment composition data
+        market_share_table, prop_holdings_table, investment_composition_table = create_summary_tables(selected_ticker, selected_quarter, ticker_data)
 
         # Display the data processing results
         st.subheader(f"Financial Analysis: {selected_ticker} - {selected_quarter}")
@@ -666,6 +727,11 @@ if selected_ticker and selected_quarter:
             if not market_share_table.empty:
                 st.write("**Market Share:**")
                 st.dataframe(market_share_table, use_container_width=True, hide_index=True)
+
+            # Display investment composition table
+            if not investment_composition_table.empty:
+                st.write("**Investment Book Composition:**")
+                st.dataframe(investment_composition_table, use_container_width=True, hide_index=True)
 
             # Display prop holdings table
             if not prop_holdings_table.empty:
@@ -805,7 +871,7 @@ if generate_button and selected_ticker and selected_quarter:
             ticker_data, pivot_data = filter_ticker_data(ticker_data, selected_ticker)
             calculated_metrics = calculate_financial_metrics(ticker_data, selected_quarter, selected_ticker)
             analysis_table = create_analysis_table(ticker_data, calculated_metrics, selected_quarter)
-            market_share_table, prop_holdings_table = create_summary_tables(selected_ticker, selected_quarter, ticker_data)
+            market_share_table, prop_holdings_table, investment_composition_table = create_summary_tables(selected_ticker, selected_quarter, ticker_data)
 
             if analysis_table.empty:
                 st.error(f"No financial data available for {selected_ticker} in {selected_quarter}")
