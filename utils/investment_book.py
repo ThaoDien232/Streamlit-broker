@@ -155,91 +155,157 @@ def get_investment_data(df: pd.DataFrame, ticker: str, year: int, quarter: int) 
 
     return investment_book
 
-def format_investment_book(investment_data: Dict, show_category: str = None) -> pd.DataFrame:
+def format_investment_book(
+    current_data: Dict,
+    prior_data: Dict = None,
+    current_label: str = "Current",
+    prior_label: str = "Prior Quarter"
+) -> pd.DataFrame:
     """
-    Format investment data into a readable DataFrame.
+    Format investment data with optional prior quarter comparison.
+
+    - HTM category shows NO G/L column (measured at amortized cost)
+    - FVTPL and AFS show G/L column (measured at fair value)
 
     Args:
-        investment_data: Dictionary from get_investment_data()
-        show_category: Specific category to format ('FVTPL', 'AFS', 'HTM') or None for all
+        current_data: Current period investment data from get_investment_data()
+        prior_data: Prior quarter investment data (optional)
+        current_label: Label for current period columns
+        prior_label: Label for prior period columns
 
     Returns:
-        Formatted DataFrame with Cost and Market Value columns
+        Formatted DataFrame with Cost, Market Value, and (for FVTPL/AFS) G/L columns
     """
-    categories = [show_category] if show_category else ['FVTPL', 'AFS', 'HTM']
-
     rows = []
 
-    for category in categories:
-        if category not in investment_data or category not in INVESTMENT_BOOK_STRUCTURE:
+    for category in ['FVTPL', 'AFS', 'HTM']:
+        if category not in current_data or category not in INVESTMENT_BOOK_STRUCTURE:
             continue
 
-        cat_data = investment_data[category]
+        curr_cat = current_data[category]
+        prior_cat = prior_data.get(category, {}) if prior_data else {}
         structure = INVESTMENT_BOOK_STRUCTURE[category]
 
-        # Add category header
-        rows.append({
-            'Item': category,  # Use abbreviation (FVTPL, AFS, HTM)
-            'Cost (B VND)': '',
-            'Market Value (B VND)': '',
-            'Unrealized G/L (B VND)': ''
-        })
+        # Build column headers
+        if prior_data:
+            header = {
+                'Item': category,
+                f'{current_label} - Cost': '',
+                f'{current_label} - MV': '',
+            }
+            if category != 'HTM':  # No G/L for HTM
+                header[f'{current_label} - G/L'] = ''
+            header.update({
+                f'{prior_label} - Cost': '',
+                f'{prior_label} - MV': '',
+            })
+            if category != 'HTM':
+                header[f'{prior_label} - G/L'] = ''
+        else:
+            header = {
+                'Item': category,
+                'Cost (B VND)': '',
+                'Market Value (B VND)': '',
+            }
+            if category != 'HTM':
+                header['Unrealized G/L (B VND)'] = ''
 
-        # Process sections
+        rows.append(header)
+
+        # Process items
         for section_name, items in structure['sections']:
-            section_cost = 0
-            section_mv = 0
-
             for item in items:
-                cost = cat_data.get('Cost', {}).get(item, 0)
-                mv = cat_data.get('Market Value', {}).get(item, 0)
+                curr_cost = curr_cat.get('Cost', {}).get(item, 0)
+                curr_mv = curr_cat.get('Market Value', {}).get(item, 0)
 
-                if cost != 0 or mv != 0:
-                    cost_b = cost / 1_000_000_000
-                    mv_b = mv / 1_000_000_000
-                    gl_b = mv_b - cost_b
+                # Skip if no data
+                if curr_cost == 0 and curr_mv == 0:
+                    if not prior_data:
+                        continue
+                    prior_cost = prior_cat.get('Cost', {}).get(item, 0)
+                    prior_mv = prior_cat.get('Market Value', {}).get(item, 0)
+                    if prior_cost == 0 and prior_mv == 0:
+                        continue
 
-                    rows.append({
+                curr_cost_b = curr_cost / 1_000_000_000
+                curr_mv_b = curr_mv / 1_000_000_000
+                curr_gl_b = curr_mv_b - curr_cost_b
+
+                if prior_data:
+                    prior_cost = prior_cat.get('Cost', {}).get(item, 0)
+                    prior_mv = prior_cat.get('Market Value', {}).get(item, 0)
+                    prior_cost_b = prior_cost / 1_000_000_000
+                    prior_mv_b = prior_mv / 1_000_000_000
+                    prior_gl_b = prior_mv_b - prior_cost_b
+
+                    row = {
                         'Item': f'  {item}',
-                        'Cost (B VND)': f'{cost_b:,.2f}',
-                        'Market Value (B VND)': f'{mv_b:,.2f}',
-                        'Unrealized G/L (B VND)': f'{gl_b:+,.2f}'
+                        f'{current_label} - Cost': f'{curr_cost_b:,.2f}' if curr_cost != 0 else '-',
+                        f'{current_label} - MV': f'{curr_mv_b:,.2f}' if curr_mv != 0 else '-',
+                    }
+                    if category != 'HTM':
+                        row[f'{current_label} - G/L'] = f'{curr_gl_b:+,.2f}' if (curr_cost != 0 or curr_mv != 0) else '-'
+
+                    row.update({
+                        f'{prior_label} - Cost': f'{prior_cost_b:,.2f}' if prior_cost != 0 else '-',
+                        f'{prior_label} - MV': f'{prior_mv_b:,.2f}' if prior_mv != 0 else '-',
                     })
+                    if category != 'HTM':
+                        row[f'{prior_label} - G/L'] = f'{prior_gl_b:+,.2f}' if (prior_cost != 0 or prior_mv != 0) else '-'
+                else:
+                    row = {
+                        'Item': f'  {item}',
+                        'Cost (B VND)': f'{curr_cost_b:,.2f}',
+                        'Market Value (B VND)': f'{curr_mv_b:,.2f}',
+                    }
+                    if category != 'HTM':
+                        row['Unrealized G/L (B VND)'] = f'{curr_gl_b:+,.2f}'
 
-                    section_cost += cost
-                    section_mv += mv
-
-            # Section subtotal
-            if section_cost != 0 or section_mv != 0:
-                cost_b = section_cost / 1_000_000_000
-                mv_b = section_mv / 1_000_000_000
-                gl_b = mv_b - cost_b
-
-                rows.append({
-                    'Item': f'  Subtotal - {section_name}',
-                    'Cost (B VND)': f'{cost_b:,.2f}',
-                    'Market Value (B VND)': f'{mv_b:,.2f}',
-                    'Unrealized G/L (B VND)': f'{gl_b:+,.2f}'
-                })
+                rows.append(row)
 
         # Category total
-        cat_cost = sum(cat_data.get('Cost', {}).values())
-        cat_mv = sum(cat_data.get('Market Value', {}).values())
+        curr_cat_cost = sum(curr_cat.get('Cost', {}).values())
+        curr_cat_mv = sum(curr_cat.get('Market Value', {}).values())
 
-        if cat_cost != 0 or cat_mv != 0:
-            cost_b = cat_cost / 1_000_000_000
-            mv_b = cat_mv / 1_000_000_000
-            gl_b = mv_b - cost_b
+        if curr_cat_cost != 0 or curr_cat_mv != 0:
+            curr_cat_cost_b = curr_cat_cost / 1_000_000_000
+            curr_cat_mv_b = curr_cat_mv / 1_000_000_000
+            curr_cat_gl_b = curr_cat_mv_b - curr_cat_cost_b
 
-            rows.append({
-                'Item': f'Total {category}',
-                'Cost (B VND)': f'{cost_b:,.2f}',
-                'Market Value (B VND)': f'{mv_b:,.2f}',
-                'Unrealized G/L (B VND)': f'{gl_b:+,.2f}'
-            })
+            if prior_data:
+                prior_cat_cost = sum(prior_cat.get('Cost', {}).values())
+                prior_cat_mv = sum(prior_cat.get('Market Value', {}).values())
+                prior_cat_cost_b = prior_cat_cost / 1_000_000_000
+                prior_cat_mv_b = prior_cat_mv / 1_000_000_000
+                prior_cat_gl_b = prior_cat_mv_b - prior_cat_cost_b
+
+                total_row = {
+                    'Item': f'Total {category}',
+                    f'{current_label} - Cost': f'{curr_cat_cost_b:,.2f}',
+                    f'{current_label} - MV': f'{curr_cat_mv_b:,.2f}',
+                }
+                if category != 'HTM':
+                    total_row[f'{current_label} - G/L'] = f'{curr_cat_gl_b:+,.2f}'
+
+                total_row.update({
+                    f'{prior_label} - Cost': f'{prior_cat_cost_b:,.2f}',
+                    f'{prior_label} - MV': f'{prior_cat_mv_b:,.2f}',
+                })
+                if category != 'HTM':
+                    total_row[f'{prior_label} - G/L'] = f'{prior_cat_gl_b:+,.2f}'
+            else:
+                total_row = {
+                    'Item': f'Total {category}',
+                    'Cost (B VND)': f'{curr_cat_cost_b:,.2f}',
+                    'Market Value (B VND)': f'{curr_cat_mv_b:,.2f}',
+                }
+                if category != 'HTM':
+                    total_row['Unrealized G/L (B VND)'] = f'{curr_cat_gl_b:+,.2f}'
+
+            rows.append(total_row)
 
         # Blank row
-        rows.append({'Item': '', 'Cost (B VND)': '', 'Market Value (B VND)': '', 'Unrealized G/L (B VND)': ''})
+        rows.append({k: '' for k in header.keys()})
 
     return pd.DataFrame(rows)
 

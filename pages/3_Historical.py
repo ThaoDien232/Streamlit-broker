@@ -320,14 +320,25 @@ def display_investment_book(df, broker, periods):
     year = selected_period['YEARREPORT']
     quarter = selected_period['LENGTHREPORT']
 
-    # Get investment data
-    investment_data = get_investment_data(df, broker, year, quarter)
+    # Get current investment data
+    current_data = get_investment_data(df, broker, year, quarter)
+
+    # Get prior quarter data (if exists)
+    prior_data = None
+    prior_quarter_label = None
+    current_index = quarterly_periods.index(selected_period)
+    if current_index < len(quarterly_periods) - 1:  # Not the oldest quarter
+        prior_period = quarterly_periods[current_index + 1]
+        prior_year = prior_period['YEARREPORT']
+        prior_quarter = prior_period['LENGTHREPORT']
+        prior_quarter_label = prior_period['QUARTER_LABEL']
+        prior_data = get_investment_data(df, broker, prior_year, prior_quarter)
 
     # Check if there's any investment data
     has_data = False
     for category in ['FVTPL', 'AFS', 'HTM']:
-        if investment_data.get(category):
-            if investment_data[category].get('Cost') or investment_data[category].get('Market Value'):
+        if current_data.get(category):
+            if current_data[category].get('Cost') or current_data[category].get('Market Value'):
                 has_data = True
                 break
 
@@ -339,15 +350,15 @@ def display_investment_book(df, broker, periods):
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        fvtpl_mv = get_category_total(investment_data, 'FVTPL', 'Market Value') / 1_000_000_000
+        fvtpl_mv = get_category_total(current_data, 'FVTPL', 'Market Value') / 1_000_000_000
         st.metric("FVTPL (Trading)", f"{fvtpl_mv:,.1f}B")
 
     with col2:
-        afs_mv = get_category_total(investment_data, 'AFS', 'Market Value') / 1_000_000_000
+        afs_mv = get_category_total(current_data, 'AFS', 'Market Value') / 1_000_000_000
         st.metric("AFS", f"{afs_mv:,.1f}B")
 
     with col3:
-        htm_cost = get_category_total(investment_data, 'HTM', 'Cost') / 1_000_000_000
+        htm_cost = get_category_total(current_data, 'HTM', 'Cost') / 1_000_000_000
         st.metric("HTM", f"{htm_cost:,.1f}B")
 
     with col4:
@@ -356,8 +367,16 @@ def display_investment_book(df, broker, periods):
 
     st.markdown("---")
 
-    # Format and display investment book
-    investment_df = format_investment_book(investment_data)
+    # Format and display investment book with prior quarter comparison
+    if prior_data and prior_quarter_label:
+        investment_df = format_investment_book(
+            current_data,
+            prior_data,
+            current_label=selected_period_label,
+            prior_label=prior_quarter_label
+        )
+    else:
+        investment_df = format_investment_book(current_data)
 
     if not investment_df.empty:
         st.dataframe(investment_df, use_container_width=True, hide_index=True, height=500)
