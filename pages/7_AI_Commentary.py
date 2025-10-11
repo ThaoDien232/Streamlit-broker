@@ -831,41 +831,41 @@ if generate_button and selected_ticker and selected_quarter:
                         # Unpack result
                         commentary, full_prompt = result
 
-                    if commentary.startswith("Error"):
-                        st.error(commentary)
-                        st.info("💡 **Tips:**\n- Check your OpenAI API key in .streamlit/secrets.toml file\n- Ensure you have API credits\n- Try a different model")
-                    else:
-                        st.success("Analysis generated successfully!")
+                        if commentary.startswith("Error"):
+                            st.error(commentary)
+                            st.info("💡 **Tips:**\n- Check your OpenAI API key in .streamlit/secrets.toml file\n- Ensure you have API credits\n- Try a different model")
+                        else:
+                            st.success("Analysis generated successfully!")
 
-                        # Display the generated commentary
-                        st.subheader(f"AI Analysis: {selected_ticker} - {selected_quarter}")
+                            # Display the generated commentary
+                            st.subheader(f"AI Analysis: {selected_ticker} - {selected_quarter}")
 
-                        # Format the commentary to ensure bullets are on separate lines and headers are normal size
-                        formatted_commentary = commentary.replace('• ', '\n• ').strip()
-                        # Convert markdown headers (## or #) to bold text to keep same text size
-                        import re
-                        formatted_commentary = re.sub(r'^##\s+', '**', formatted_commentary, flags=re.MULTILINE)
-                        formatted_commentary = re.sub(r'^#\s+', '**', formatted_commentary, flags=re.MULTILINE)
-                        # Add closing bold tag at end of header lines
-                        formatted_commentary = re.sub(r'\*\*(\d+)\.\s+([^\n]+)', r'**\1. \2**', formatted_commentary)
+                            # Format the commentary to ensure bullets are on separate lines and headers are normal size
+                            formatted_commentary = commentary.replace('• ', '\n• ').strip()
+                            # Convert markdown headers (## or #) to bold text to keep same text size
+                            import re
+                            formatted_commentary = re.sub(r'^##\s+', '**', formatted_commentary, flags=re.MULTILINE)
+                            formatted_commentary = re.sub(r'^#\s+', '**', formatted_commentary, flags=re.MULTILINE)
+                            # Add closing bold tag at end of header lines
+                            formatted_commentary = re.sub(r'\*\*(\d+)\.\s+([^\n]+)', r'**\1. \2**', formatted_commentary)
 
-                        st.markdown(formatted_commentary)
+                            st.markdown(formatted_commentary)
 
-                        st.caption(f"Generated with {model_choice} on {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+                            st.caption(f"Generated with {model_choice} on {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
-                        # Display the full prompt sent to OpenAI
-                        with st.expander("📝 View Full Prompt Sent to OpenAI"):
-                            st.markdown("### System Message:")
-                            st.code("You are an expert financial analyst specializing in Vietnamese securities and brokerage firms. You MUST follow the exact structure provided in the prompt. Do not deviate from the requested format.")
+                            # Display the full prompt sent to OpenAI
+                            with st.expander("📝 View Full Prompt Sent to OpenAI"):
+                                st.markdown("### System Message:")
+                                st.code("You are an expert financial analyst specializing in Vietnamese securities and brokerage firms. You MUST follow the exact structure provided in the prompt. Do not deviate from the requested format.")
 
-                            st.markdown("### User Prompt:")
-                            st.text(full_prompt)
+                                st.markdown("### User Prompt:")
+                                st.text(full_prompt)
 
-                            st.caption(f"Model: {model_choice} | Max Tokens: 800 | Temperature: 0.5")
+                                st.caption(f"Model: {model_choice} | Max Tokens: 800 | Temperature: 0.5")
 
-                except Exception as e:
-                    st.error(f"Error generating commentary: {e}")
-                    st.info("💡 **Common issues:**\n- Missing OpenAI API key\n- Invalid API key\n- Insufficient API credits\n- Network connectivity")
+                    except Exception as e:
+                        st.error(f"Error generating commentary: {e}")
+                        st.info("💡 **Common issues:**\n- Missing OpenAI API key\n- Invalid API key\n- Insufficient API credits\n- Network connectivity")
 
     except Exception as e:
         st.error(f"Error preparing data for analysis: {e}")
