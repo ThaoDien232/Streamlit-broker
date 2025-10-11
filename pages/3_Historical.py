@@ -324,11 +324,12 @@ def display_investment_book(df, broker, periods):
     current_data = get_investment_data(df, broker, year, quarter)
 
     # Get prior quarter data (if exists)
+    # quarterly_periods is sorted oldest to newest, so prior = index - 1
     prior_data = None
     prior_quarter_label = None
     current_index = quarterly_periods.index(selected_period)
-    if current_index < len(quarterly_periods) - 1:  # Not the oldest quarter
-        prior_period = quarterly_periods[current_index + 1]
+    if current_index > 0:  # Not the oldest quarter
+        prior_period = quarterly_periods[current_index - 1]
         prior_year = prior_period['YEARREPORT']
         prior_quarter = prior_period['LENGTHREPORT']
         prior_quarter_label = prior_period['QUARTER_LABEL']
