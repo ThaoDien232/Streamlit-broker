@@ -280,23 +280,26 @@ def calculate_metric(
 def get_available_tickers() -> List[str]:
     """Get list of available broker tickers from database (2017 onwards)."""
 
-    # Build exclusion list
-    excluded_list = ','.join([f"'{t}'" for t in EXCLUDED_TICKERS])
+    try:
+        # Build exclusion list
+        excluded_list = ','.join([f"'{t}'" for t in EXCLUDED_TICKERS])
 
-    query = f"""
-    SELECT DISTINCT TICKER
-    FROM dbo.BrokerageMetrics
-    WHERE YEARREPORT >= 2017
-      AND LENGTHREPORT BETWEEN 1 AND 4
-      AND TICKER != 'Sector'
-      AND TICKER NOT IN ({excluded_list})
-    ORDER BY TICKER
-    """
+        query = f"""
+        SELECT DISTINCT TICKER
+        FROM dbo.BrokerageMetrics
+        WHERE YEARREPORT >= 2017
+          AND LENGTHREPORT BETWEEN 1 AND 4
+          AND TICKER != 'Sector'
+          AND TICKER NOT IN ({excluded_list})
+        ORDER BY TICKER
+        """
 
-    df = run_query(query)
+        df = run_query(query)
 
-    if not df.empty:
-        return df['TICKER'].tolist()
+        if not df.empty:
+            return df['TICKER'].tolist()
+    except Exception as e:
+        st.warning(f"⚠️ Database connection issue, using fallback ticker list. Error: {e}")
 
     # Fallback to default list (active brokers only)
     return ['SSI', 'VCI', 'HCM', 'VIX', 'VND', 'MBS', 'SHS', 'BSI',
@@ -558,23 +561,26 @@ def get_ticker_quarters_list(ticker: str, start_year: int = 2017) -> List[str]:
     Returns:
         List of quarter labels sorted chronologically (newest first)
     """
-    excluded_list = ','.join([f"'{t}'" for t in EXCLUDED_TICKERS])
+    try:
+        excluded_list = ','.join([f"'{t}'" for t in EXCLUDED_TICKERS])
 
-    query = f"""
-    SELECT DISTINCT QUARTER_LABEL, YEARREPORT, LENGTHREPORT
-    FROM dbo.BrokerageMetrics
-    WHERE TICKER = '{ticker}'
-      AND YEARREPORT >= {start_year}
-      AND LENGTHREPORT BETWEEN 1 AND 4
-      AND QUARTER_LABEL IS NOT NULL
-      AND QUARTER_LABEL != 'Annual'
-      AND TICKER NOT IN ({excluded_list})
-    ORDER BY YEARREPORT DESC, LENGTHREPORT DESC
-    """
+        query = f"""
+        SELECT DISTINCT QUARTER_LABEL, YEARREPORT, LENGTHREPORT
+        FROM dbo.BrokerageMetrics
+        WHERE TICKER = '{ticker}'
+          AND YEARREPORT >= {start_year}
+          AND LENGTHREPORT BETWEEN 1 AND 4
+          AND QUARTER_LABEL IS NOT NULL
+          AND QUARTER_LABEL != 'Annual'
+          AND TICKER NOT IN ({excluded_list})
+        ORDER BY YEARREPORT DESC, LENGTHREPORT DESC
+        """
 
-    df = run_query(query)
+        df = run_query(query)
 
-    if not df.empty:
-        return df['QUARTER_LABEL'].tolist()
+        if not df.empty:
+            return df['QUARTER_LABEL'].tolist()
+    except Exception as e:
+        st.error(f"⚠️ Database error loading quarters for {ticker}: {e}")
 
     return []
