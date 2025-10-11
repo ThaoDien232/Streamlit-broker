@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from utils.brokerage_data import load_brokerage_metrics, get_available_tickers, get_available_quarters
+from utils.investment_book import get_investment_data, format_investment_book, get_category_total
 
 
 # Page config
@@ -287,6 +288,105 @@ def display_balance_sheet(df, ticker, periods, display_mode):
         else:
             st.info("No growth data available for Balance Sheet metrics.")
 
+def display_investment_book(df, broker, periods):
+    """Display Investment Book (Notes 7.x and 8.x) with FVTPL, AFS, HTM categories"""
+    st.subheader("📊 Investment Book")
+    st.markdown("Investment holdings classified by accounting category (FVTPL, AFS, HTM)")
+
+    # Only show for quarterly data (investment book not meaningful for annual aggregates)
+    quarterly_periods = [p for p in periods if p['LENGTHREPORT'] != 5]
+
+    if not quarterly_periods:
+        st.info("Investment book requires quarterly data. Please select a year range with quarterly periods.")
+        return
+
+    # Select which quarter to display (default to latest)
+    period_labels = [p['QUARTER_LABEL'] for p in quarterly_periods]
+
+    selected_period_label = st.selectbox(
+        "Select Quarter for Investment Book:",
+        period_labels,
+        index=0,  # Latest quarter
+        help="Investment holdings breakdown for the selected quarter"
+    )
+
+    # Find the selected period
+    selected_period = next((p for p in quarterly_periods if p['QUARTER_LABEL'] == selected_period_label), None)
+
+    if not selected_period:
+        st.warning(f"Could not find data for {selected_period_label}")
+        return
+
+    year = selected_period['YEARREPORT']
+    quarter = selected_period['LENGTHREPORT']
+
+    # Get investment data
+    investment_data = get_investment_data(df, broker, year, quarter)
+
+    # Check if there's any investment data
+    has_data = False
+    for category in ['FVTPL', 'AFS', 'HTM']:
+        if investment_data.get(category):
+            if investment_data[category].get('Cost') or investment_data[category].get('Market Value'):
+                has_data = True
+                break
+
+    if not has_data:
+        st.info(f"No investment holdings data available for {broker} in {selected_period_label}")
+        return
+
+    # Display summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        fvtpl_mv = get_category_total(investment_data, 'FVTPL', 'Market Value') / 1_000_000_000
+        st.metric("FVTPL (Trading)", f"{fvtpl_mv:,.1f}B")
+
+    with col2:
+        afs_mv = get_category_total(investment_data, 'AFS', 'Market Value') / 1_000_000_000
+        st.metric("AFS", f"{afs_mv:,.1f}B")
+
+    with col3:
+        htm_cost = get_category_total(investment_data, 'HTM', 'Cost') / 1_000_000_000
+        st.metric("HTM", f"{htm_cost:,.1f}B")
+
+    with col4:
+        total = fvtpl_mv + afs_mv + htm_cost
+        st.metric("Total Investments", f"{total:,.1f}B")
+
+    st.markdown("---")
+
+    # Format and display investment book
+    investment_df = format_investment_book(investment_data)
+
+    if not investment_df.empty:
+        st.dataframe(investment_df, use_container_width=True, hide_index=True, height=500)
+
+        # Add download button
+        csv = investment_df.to_csv(index=False)
+        st.download_button(
+            label="📥 Download Investment Book",
+            data=csv,
+            file_name=f"investment_book_{broker}_{selected_period_label}.csv",
+            mime="text/csv",
+            key=f"download_inv_{broker}_{selected_period_label}"
+        )
+
+    # Add explanatory note
+    with st.expander("ℹ️ Understanding Investment Categories"):
+        st.markdown("""
+        **FVTPL** (Fair Value Through Profit or Loss): Trading securities held for short-term profit
+
+        **AFS** (Available-for-Sale): Long-term financial assets measured at fair value through OCI
+
+        **HTM** (Held-to-Maturity): Fixed maturity investments measured at amortized cost
+
+        **Columns:**
+        - **Cost**: Original purchase price / carrying amount
+        - **Market Value**: Current fair market value
+        - **Unrealized G/L**: Difference between market value and cost
+        """)
+
 
 def main():
     # Header with reload button
@@ -396,6 +496,10 @@ def main():
     st.markdown("---")  # Separator line
 
     display_balance_sheet(df, selected_broker, periods, display_mode)
+
+    st.markdown("---")  # Separator line
+
+    display_investment_book(df, selected_broker, periods)
 
 if __name__ == "__main__":
     main()
