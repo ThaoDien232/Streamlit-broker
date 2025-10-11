@@ -333,39 +333,31 @@ def get_calc_metric_value(df, ticker, year, quarter, metric_code):
             return roe
         return 0
 
-    # For PBT and NPAT, use KEYCODE_NAME instead of METRIC_CODE
+    # Base filter
+    base_filter = (
+        (df['TICKER'] == ticker) &
+        (df['YEARREPORT'] == year) &
+        (df['LENGTHREPORT'] == quarter)
+    )
+
+    result = pd.DataFrame()
+
+    # Try multiple lookup strategies in order of preference
+    # 1. Try KEYCODE_NAME (for verbose names like "NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX")
     if metric_code in ['NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX', 'NET PROFIT/(LOSS) AFTER TAX']:
-        result = df[
-            (df['TICKER'] == ticker) &
-            (df['YEARREPORT'] == year) &
-            (df['LENGTHREPORT'] == quarter) &
-            (df['KEYCODE_NAME'] == metric_code)
-        ]
-    # For NPAT and PBT, also try METRIC_CODE
-    elif metric_code in ['NPAT', 'PBT']:
-        result = df[
-            (df['TICKER'] == ticker) &
-            (df['YEARREPORT'] == year) &
-            (df['LENGTHREPORT'] == quarter) &
-            (df['STATEMENT_TYPE'] == 'CALC') &
-            (df['METRIC_CODE'] == metric_code)
-        ]
-    # For TOTAL_EQUITY, use METRIC_CODE directly
-    elif metric_code == 'TOTAL_EQUITY':
-        result = df[
-            (df['TICKER'] == ticker) &
-            (df['YEARREPORT'] == year) &
-            (df['LENGTHREPORT'] == quarter) &
-            (df['METRIC_CODE'] == metric_code)
-        ]
-    else:
-        result = df[
-            (df['TICKER'] == ticker) &
-            (df['YEARREPORT'] == year) &
-            (df['LENGTHREPORT'] == quarter) &
-            (df['STATEMENT_TYPE'] == 'CALC') &
-            (df['METRIC_CODE'] == metric_code)
-        ]
+        result = df[base_filter & (df['KEYCODE_NAME'] == metric_code)]
+
+    # 2. If empty, try KEYCODE directly (for simple codes like "PBT", "NPAT")
+    if result.empty and metric_code in ['PBT', 'NPAT']:
+        result = df[base_filter & (df['KEYCODE'] == metric_code)]
+
+    # 3. If still empty, try METRIC_CODE with STATEMENT_TYPE='CALC'
+    if result.empty:
+        result = df[base_filter & (df['STATEMENT_TYPE'] == 'CALC') & (df['METRIC_CODE'] == metric_code)]
+
+    # 4. If still empty and is balance sheet item, try without STATEMENT_TYPE filter
+    if result.empty and metric_code in ['TOTAL_EQUITY', 'TOTAL_ASSETS']:
+        result = df[base_filter & (df['METRIC_CODE'] == metric_code)]
 
     if len(result) > 0:
         value = result.iloc[0]['VALUE']
