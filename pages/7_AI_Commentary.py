@@ -457,13 +457,23 @@ def get_investment_composition(ticker_data, ticker, quarter_label):
     total_value = 0
 
     for category in ['FVTPL', 'AFS', 'HTM']:
-        if category in investment_data:
+        if category in investment_data and investment_data[category]:
+            category_total = 0
+
             if category == 'HTM':
                 # HTM uses Cost
-                category_total = investment_data[category].get('Cost', 0)
+                cost_dict = investment_data[category].get('Cost', {})
+                if isinstance(cost_dict, dict):
+                    category_total = sum(cost_dict.values())
+                elif isinstance(cost_dict, (int, float)):
+                    category_total = cost_dict
             else:
                 # FVTPL and AFS use Market Value
-                category_total = investment_data[category].get('Market Value', 0)
+                mv_dict = investment_data[category].get('Market Value', {})
+                if isinstance(mv_dict, dict):
+                    category_total = sum(mv_dict.values())
+                elif isinstance(mv_dict, (int, float)):
+                    category_total = mv_dict
 
             if category_total > 0:
                 composition.append({
