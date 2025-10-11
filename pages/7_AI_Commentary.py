@@ -433,7 +433,7 @@ def get_top_prop_holdings(ticker, quarter_label):
         return []
 
 def get_investment_composition(ticker_data, ticker, quarter_label):
-    """Get investment book composition (FVTPL, AFS, HTM) for selected quarter"""
+    """Get investment book composition with sub-categories (Equities, Bonds, etc.) for selected quarter"""
     from utils.investment_book import get_investment_data
 
     # Parse quarter to get year and quarter number
@@ -450,55 +450,103 @@ def get_investment_composition(ticker_data, ticker, quarter_label):
     if not investment_data:
         return pd.DataFrame()
 
-    # Calculate totals for each category
+    # Build detailed composition with sub-categories
     # FVTPL and AFS: use Market Value
     # HTM: use Cost (measured at amortized cost)
     composition = []
     total_value = 0
+    category_totals = {}
 
     for category in ['FVTPL', 'AFS', 'HTM']:
-        if category in investment_data and investment_data[category]:
-            category_total = 0
+        if category not in investment_data or not investment_data[category]:
+            continue
 
-            if category == 'HTM':
-                # HTM uses Cost
-                cost_dict = investment_data[category].get('Cost', {})
-                if isinstance(cost_dict, dict):
-                    category_total = sum(cost_dict.values())
-                elif isinstance(cost_dict, (int, float)):
-                    category_total = cost_dict
-            else:
-                # FVTPL and AFS use Market Value
-                mv_dict = investment_data[category].get('Market Value', {})
-                if isinstance(mv_dict, dict):
-                    category_total = sum(mv_dict.values())
-                elif isinstance(mv_dict, (int, float)):
-                    category_total = mv_dict
+        category_total = 0
 
-            if category_total > 0:
+        # Determine which valuation to use
+        if category == 'HTM':
+            valuation_dict = investment_data[category].get('Cost', {})
+        else:
+            valuation_dict = investment_data[category].get('Market Value', {})
+
+        if not isinstance(valuation_dict, dict):
+            continue
+
+        # Group by sub-categories (instrument types)
+        sub_category_map = {}
+        for item_name, item_value in valuation_dict.items():
+            if item_value > 0:
+                # Determine sub-category from item name
+                if 'Bond' in item_name or 'bond' in item_name:
+                    sub_cat = 'Bonds'
+                elif 'Money Market' in item_name or 'Monetary market' in item_name:
+                    sub_cat = 'Money Market'
+                elif 'Share' in item_name or 'Fund' in item_name or 'Equity' in item_name or 'Equit' in item_name:
+                    # Further breakdown equities
+                    if 'Listed' in item_name:
+                        sub_cat = 'Listed Equities'
+                    elif 'Unlisted' in item_name:
+                        sub_cat = 'Unlisted Equities'
+                    elif 'Fund' in item_name:
+                        sub_cat = 'Fund Certificates'
+                    else:
+                        sub_cat = 'Equities'
+                elif 'Other' in item_name:
+                    sub_cat = 'Others'
+                else:
+                    sub_cat = 'Others'
+
+                if sub_cat not in sub_category_map:
+                    sub_category_map[sub_cat] = 0
+                sub_category_map[sub_cat] += item_value
+                category_total += item_value
+
+        # Add category header
+        if category_total > 0:
+            composition.append({
+                'Category': category,
+                'Sub-Category': '',
+                'Value': category_total,
+                'is_header': True
+            })
+            category_totals[category] = category_total
+            total_value += category_total
+
+            # Add sub-categories
+            for sub_cat, sub_value in sorted(sub_category_map.items()):
                 composition.append({
-                    'Category': category,
-                    'Value': category_total
+                    'Category': '',
+                    'Sub-Category': f'  {sub_cat}',
+                    'Value': sub_value,
+                    'is_header': False
                 })
-                total_value += category_total
 
     if total_value == 0:
         return pd.DataFrame()
 
-    # Calculate percentages
+    # Calculate percentages and format
     for item in composition:
         item['Value (B VND)'] = f"{item['Value'] / 1_000_000_000:.1f}"
         item['Composition %'] = f"{(item['Value'] / total_value * 100):.1f}%"
-        del item['Value']  # Remove raw value
+        del item['Value']
+        del item['is_header']
 
     # Add total row
     composition.append({
         'Category': 'Total',
+        'Sub-Category': '',
         'Value (B VND)': f"{total_value / 1_000_000_000:.1f}",
         'Composition %': '100.0%'
     })
 
-    return pd.DataFrame(composition)
+    # Combine Category and Sub-Category into single column for display
+    df = pd.DataFrame(composition)
+    df['Investment Type'] = df.apply(
+        lambda row: row['Category'] if row['Category'] else row['Sub-Category'],
+        axis=1
+    )
+
+    return df[['Investment Type', 'Value (B VND)', 'Composition %']]
 
 def create_summary_tables(ticker, quarter_label, ticker_data):
     """Step 4: Create separate tables for market share and prop book data - Last 6 Quarters"""
