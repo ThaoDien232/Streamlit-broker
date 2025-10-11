@@ -479,11 +479,13 @@ def get_investment_composition(ticker_data, ticker, quarter_label):
                 # Determine sub-category from item name
                 if 'Bond' in item_name or 'bond' in item_name:
                     sub_cat = 'Bonds'
+                elif 'CD' in item_name or 'Deposit' in item_name or 'deposit' in item_name:
+                    sub_cat = 'CDs & Deposits'
                 elif 'Money Market' in item_name or 'Monetary market' in item_name:
                     sub_cat = 'Money Market'
                 elif 'Share' in item_name or 'Fund' in item_name or 'Equity' in item_name or 'Equit' in item_name:
                     # Further breakdown equities
-                    if 'Listed' in item_name:
+                    if 'Listed' in item_name and 'Unlisted' not in item_name:
                         sub_cat = 'Listed Equities'
                     elif 'Unlisted' in item_name:
                         sub_cat = 'Unlisted Equities'
@@ -492,7 +494,7 @@ def get_investment_composition(ticker_data, ticker, quarter_label):
                     else:
                         sub_cat = 'Equities'
                 elif 'Other' in item_name:
-                    sub_cat = 'Others'
+                    sub_cat = 'CDs & Deposits'  # Other short-term investments typically means CDs/deposits
                 else:
                     sub_cat = 'Others'
 
@@ -526,7 +528,7 @@ def get_investment_composition(ticker_data, ticker, quarter_label):
 
     # Calculate percentages and format
     for item in composition:
-        item['Value (B VND)'] = f"{item['Value'] / 1_000_000_000:.1f}"
+        item['Value (B VND)'] = f"{item['Value'] / 1_000_000_000:,.1f}"
         item['Composition %'] = f"{(item['Value'] / total_value * 100):.1f}%"
         del item['Value']
         del item['is_header']
@@ -535,7 +537,7 @@ def get_investment_composition(ticker_data, ticker, quarter_label):
     composition.append({
         'Category': 'Total',
         'Sub-Category': '',
-        'Value (B VND)': f"{total_value / 1_000_000_000:.1f}",
+        'Value (B VND)': f"{total_value / 1_000_000_000:,.1f}",
         'Composition %': '100.0%'
     })
 
