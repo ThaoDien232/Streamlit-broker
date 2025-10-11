@@ -179,7 +179,7 @@ def format_investment_book(investment_data: Dict, show_category: str = None) -> 
 
         # Add category header
         rows.append({
-            'Item': f"**{structure['display_name']}**",
+            'Item': category,  # Use abbreviation (FVTPL, AFS, HTM)
             'Cost (B VND)': '',
             'Market Value (B VND)': '',
             'Unrealized G/L (B VND)': ''
@@ -232,10 +232,10 @@ def format_investment_book(investment_data: Dict, show_category: str = None) -> 
             gl_b = mv_b - cost_b
 
             rows.append({
-                'Item': f'**Total {category}**',
-                'Cost (B VND)': f'**{cost_b:,.2f}**',
-                'Market Value (B VND)': f'**{mv_b:,.2f}**',
-                'Unrealized G/L (B VND)': f'**{gl_b:+,.2f}**'
+                'Item': f'Total {category}',
+                'Cost (B VND)': f'{cost_b:,.2f}',
+                'Market Value (B VND)': f'{mv_b:,.2f}',
+                'Unrealized G/L (B VND)': f'{gl_b:+,.2f}'
             })
 
         # Blank row
