@@ -825,11 +825,11 @@ if generate_button and selected_ticker and selected_quarter:
                             analysis_table=analysis_table,  # Pass the pre-built analysis table
                             market_share_table=market_share_table,  # Pass market share table
                             prop_holdings_table=prop_holdings_table,  # Pass prop holdings table
-                        return_prompt=True  # Request the prompt to be returned
-                    )
+                            return_prompt=True  # Request the prompt to be returned
+                        )
 
-                    # Unpack result
-                    commentary, full_prompt = result
+                        # Unpack result
+                        commentary, full_prompt = result
 
                     if commentary.startswith("Error"):
                         st.error(commentary)
