@@ -325,33 +325,43 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 continue
 
             if metric_name == 'Brokerage Market Share':
-                # Calculate Market Share = Trading Value / (Market Liquidity * Trading Days in Quarter) / 2
-                institution_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
-                investor_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Investor_shares_trading_value')
-                total_trading_value = institution_shares + investor_shares
+                # First, try to get market share from HSX data (for Top 10 brokers)
+                # Check if there's a market share KEYCODE in the database
+                hsx_market_share = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Market_share')
 
-                # Get market liquidity and trading days
-                if not market_liquidity_df.empty:
-                    liquidity_row = market_liquidity_df[
-                        (market_liquidity_df['Year'] == year) &
-                        (market_liquidity_df['Quarter'] == quarter_num)
-                    ]
-                    if not liquidity_row.empty:
-                        avg_daily_turnover_bn = liquidity_row.iloc[0]['Avg Daily Turnover (B VND)']
-                        trading_days = liquidity_row.iloc[0]['Trading Days']
+                # If HSX data exists and is non-zero, use it; otherwise calculate
+                if hsx_market_share and hsx_market_share != 0:
+                    # Use HSX-provided market share (already in percentage)
+                    quarter_values.append(hsx_market_share)
+                else:
+                    # Calculate Market Share for brokers not in Top 10
+                    # Formula: Trading Value / (Market Liquidity * Trading Days in Quarter) / 2
+                    institution_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
+                    investor_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Investor_shares_trading_value')
+                    total_trading_value = institution_shares + investor_shares
 
-                        # Market liquidity is in billions, convert to VND for calculation
-                        total_market_value = avg_daily_turnover_bn * 1_000_000_000 * trading_days
+                    # Get market liquidity and trading days
+                    if not market_liquidity_df.empty:
+                        liquidity_row = market_liquidity_df[
+                            (market_liquidity_df['Year'] == year) &
+                            (market_liquidity_df['Quarter'] == quarter_num)
+                        ]
+                        if not liquidity_row.empty:
+                            avg_daily_turnover_bn = liquidity_row.iloc[0]['Avg Daily Turnover (B VND)']
+                            trading_days = liquidity_row.iloc[0]['Trading Days']
 
-                        if total_market_value and total_market_value != 0:
-                            market_share = (total_trading_value / total_market_value) / 2 * 100  # Divide by 2 and convert to percentage
-                            quarter_values.append(market_share)
+                            # Market liquidity is in billions, convert to VND for calculation
+                            total_market_value = avg_daily_turnover_bn * 1_000_000_000 * trading_days
+
+                            if total_market_value and total_market_value != 0:
+                                market_share = (total_trading_value / total_market_value) / 2 * 100  # Divide by 2 and convert to percentage
+                                quarter_values.append(market_share)
+                            else:
+                                quarter_values.append(0)
                         else:
                             quarter_values.append(0)
                     else:
                         quarter_values.append(0)
-                else:
-                    quarter_values.append(0)
                 continue
 
             if metric_name == 'Net Brokerage Fee':
