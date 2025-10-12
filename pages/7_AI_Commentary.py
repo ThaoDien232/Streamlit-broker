@@ -76,8 +76,8 @@ def calculate_financial_metrics(ticker_data, selected_quarter, ticker):
         'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
         'Margin Income': 'NET_MARGIN_INCOME',  # Correct METRIC_CODE for margin lending income
         'Investment Income': 'NET_INVESTMENT_INCOME',
-        'PBT': 'NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX',
-        'NPAT': 'NET PROFIT/(LOSS) AFTER TAX',
+        'PBT': 'PBT',  # KEYCODE in database
+        'NPAT': 'NPAT',  # KEYCODE in database
         'Margin Balance': 'MARGIN_BALANCE',
         'ROE': 'ROE'  # Use existing ROE calculation from CSV
     }
@@ -229,7 +229,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                     if margin_balance_value is None:
                         margin_balance_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'MARGIN_BALANCE')
                     if total_equity_value is None:
-                        total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'TOTAL_EQUITY')
+                        total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'BS.142')
 
                     if total_equity_value and total_equity_value != 0:
                         ratio = (margin_balance_value / total_equity_value) * 100
@@ -242,8 +242,8 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
                 'Margin Income': 'NET_MARGIN_INCOME',  # Correct METRIC_CODE for margin lending income
                 'Investment Income': 'NET_INVESTMENT_INCOME',
-                'PBT': 'NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX',
-                'NPAT': 'NET PROFIT/(LOSS) AFTER TAX',
+                'PBT': 'PBT',  # KEYCODE in database
+                'NPAT': 'NPAT',  # KEYCODE in database
                 'Margin Balance': 'MARGIN_BALANCE',
                 'ROE': 'ROE'
             }.get(metric_name)
@@ -255,11 +255,11 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
             if metric_name == 'Margin Balance':
                 margin_balance_value = value
                 # Also get Total Equity for the Margin/Equity % calculation
-                total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'TOTAL_EQUITY')
+                total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'BS.142')
             elif metric_name == 'ROE':
                 # Also get Total Equity for the ratio if not already fetched
                 if total_equity_value is None:
-                    total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'TOTAL_EQUITY')
+                    total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'BS.142')
 
         # Add this quarter's column
         analysis_data[quarter] = quarter_values
@@ -324,7 +324,7 @@ def get_calc_metric_value(df, ticker, year, quarter, metric_code):
     if metric_code == 'ROE':
         # Calculate ROE = NPAT / Total Equity * 100 (annualized for quarterly)
         npat = get_calc_metric_value(df, ticker, year, quarter, 'NPAT')
-        equity = get_calc_metric_value(df, ticker, year, quarter, 'TOTAL_EQUITY')
+        equity = get_calc_metric_value(df, ticker, year, quarter, 'BS.142')  # Use actual KEYCODE
         if equity and equity != 0:
             roe = (npat / equity) * 100
             # Annualize for quarterly data (multiply by 4)
@@ -342,21 +342,15 @@ def get_calc_metric_value(df, ticker, year, quarter, metric_code):
 
     result = pd.DataFrame()
 
-    # Try multiple lookup strategies in order of preference
-    # 1. Try KEYCODE_NAME (for verbose names like "NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX")
-    if metric_code in ['NET ACCOUNTING PROFIT/(LOSS) BEFORE TAX', 'NET PROFIT/(LOSS) AFTER TAX']:
-        result = df[base_filter & (df['KEYCODE_NAME'] == metric_code)]
+    # Try KEYCODE directly (for codes like 'PBT', 'NPAT', 'BS.142')
+    result = df[base_filter & (df['KEYCODE'] == metric_code)]
 
-    # 2. If empty, try KEYCODE directly (for simple codes like "PBT", "NPAT")
-    if result.empty and metric_code in ['PBT', 'NPAT']:
-        result = df[base_filter & (df['KEYCODE'] == metric_code)]
-
-    # 3. If still empty, try METRIC_CODE with STATEMENT_TYPE='CALC'
+    # If empty, try METRIC_CODE with STATEMENT_TYPE='CALC'
     if result.empty:
         result = df[base_filter & (df['STATEMENT_TYPE'] == 'CALC') & (df['METRIC_CODE'] == metric_code)]
 
-    # 4. If still empty and is balance sheet item, try without STATEMENT_TYPE filter
-    if result.empty and metric_code in ['TOTAL_EQUITY', 'TOTAL_ASSETS']:
+    # If still empty, try METRIC_CODE without STATEMENT_TYPE filter (for balance sheet items)
+    if result.empty:
         result = df[base_filter & (df['METRIC_CODE'] == metric_code)]
 
     if len(result) > 0:
