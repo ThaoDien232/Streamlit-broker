@@ -290,6 +290,7 @@ def generate_commentary(ticker: str, year_quarter: str, df: pd.DataFrame,
                        analysis_table: pd.DataFrame = None,
                        market_share_table: pd.DataFrame = None,
                        prop_holdings_table: pd.DataFrame = None,
+                       investment_composition_table: pd.DataFrame = None,
                        return_prompt: bool = False) -> str:
     """
     Generate AI commentary for a broker's quarterly performance using prepared analysis table.
@@ -303,6 +304,7 @@ def generate_commentary(ticker: str, year_quarter: str, df: pd.DataFrame,
         analysis_table: Pre-built analysis table with last 6 quarters (optional, will build if not provided)
         market_share_table: Market share table (optional)
         prop_holdings_table: Proprietary holdings table (optional)
+        investment_composition_table: Investment book composition table (optional)
         return_prompt: If True, returns tuple (commentary, prompt) instead of just commentary
 
     Returns:
@@ -377,6 +379,13 @@ Market Share Data:
         prompt += f"""
 Top Proprietary Holdings:
 {prop_holdings_table.to_markdown(index=False, tablefmt='grid')}
+"""
+
+    # Add investment composition table if available
+    if investment_composition_table is not None and not investment_composition_table.empty:
+        prompt += f"""
+Investment Book Composition (Selected Quarter: {year_quarter}):
+{investment_composition_table.to_markdown(index=False, tablefmt='grid')}
 """
 
     prompt += """

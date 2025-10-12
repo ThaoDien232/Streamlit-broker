@@ -80,8 +80,13 @@ def calculate_financial_metrics(ticker_data, selected_quarter, ticker):
         'Other Incomes': 'NET_OTHER_INCOME',
         'PBT': 'PBT',  # KEYCODE in database
         'NPAT': 'NPAT',  # KEYCODE in database
+        'SG&A': 'SG_A',  # Selling, General & Administrative expenses
+        'Interest Expense': 'Interest_Expense',  # Interest expense
+        'Borrowing Balance': 'Borrowing_Balance',  # Total borrowing
         'Margin Balance': 'MARGIN_BALANCE',
-        'ROE': 'ROE'  # Use existing ROE calculation from CSV
+        'ROE': 'ROE',  # Use existing ROE calculation from CSV
+        'CIR': 'CIR',  # Cost-to-Income Ratio (calculated)
+        'Interest Rate': 'Interest_Rate'  # Interest rate (calculated)
     }
 
     # Get data for current quarter and comparison periods
@@ -185,7 +190,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
     market_liquidity_df = load_market_liquidity_data()
 
     # Display metrics we want to show
-    display_metrics = ['Net Brokerage Income', 'IB Income', 'Market Liquidity (Avg Daily)', 'Margin Income', 'Investment Income', 'Other Incomes', 'PBT', 'NPAT', 'Margin Balance', 'Margin/Equity %', 'ROE']
+    display_metrics = ['Net Brokerage Income', 'IB Income', 'Market Liquidity (Avg Daily)', 'Margin Income', 'Investment Income', 'Other Incomes', 'PBT', 'NPAT', 'SG&A', 'CIR', 'Interest Expense', 'Borrowing Balance', 'Interest Rate', 'Margin Balance', 'Margin/Equity %', 'ROE']
 
     # Create table structure: Metric as rows, quarters as columns
     analysis_data = {'Metric': display_metrics}
@@ -240,6 +245,55 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                         quarter_values.append(0)
                 continue
 
+            if metric_name == 'CIR':
+                # Calculate CIR = SG&A / (Total Operating Income - Investment Income)
+                sga = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'SG_A')
+                total_op_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'TOTAL_OPERATING_INCOME')
+                investment_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'NET_INVESTMENT_INCOME')
+
+                denominator = total_op_income - investment_income
+                if denominator and denominator != 0:
+                    cir = abs(sga) / denominator * 100  # Use abs since SGA is negative
+                    quarter_values.append(cir)
+                else:
+                    quarter_values.append(0)
+                continue
+
+            if metric_name == 'Interest Rate':
+                # Calculate Interest Rate = Interest Expense / Average Borrowing Balance * 100
+                # For quarterly data, annualize by multiplying by 4
+                interest_expense = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Interest_Expense')
+                borrowing_balance = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Borrowing_Balance')
+
+                # Get previous quarter borrowing for average
+                quarters = sort_quarters_chronologically([q for q in ticker_data['QUARTER_LABEL'].unique() if pd.notna(q) and q != ''])
+                current_quarter_label = f"{quarter_num}Q{str(year)[-2:]}"
+                if current_quarter_label in quarters:
+                    current_idx = quarters.index(current_quarter_label)
+                    if current_idx > 0:
+                        prev_quarter_label = quarters[current_idx - 1]
+                        # Parse previous quarter
+                        try:
+                            prev_quarter_num = int(prev_quarter_label[0])
+                            prev_year_str = prev_quarter_label[-2:]
+                            prev_year = 2000 + int(prev_year_str) if int(prev_year_str) < 50 else 1900 + int(prev_year_str)
+                            prev_borrowing = get_calc_metric_value(ticker_data, ticker, prev_year, prev_quarter_num, 'Borrowing_Balance')
+                            avg_borrowing = (borrowing_balance + prev_borrowing) / 2 if prev_borrowing else borrowing_balance
+                        except:
+                            avg_borrowing = borrowing_balance
+                    else:
+                        avg_borrowing = borrowing_balance
+                else:
+                    avg_borrowing = borrowing_balance
+
+                if avg_borrowing and avg_borrowing != 0:
+                    # Annualize the rate for quarterly data
+                    interest_rate = abs(interest_expense) / avg_borrowing * 100 * 4
+                    quarter_values.append(interest_rate)
+                else:
+                    quarter_values.append(0)
+                continue
+
             metric_code = {
                 'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
                 'IB Income': 'NET_IB_INCOME',
@@ -248,8 +302,13 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 'Other Incomes': 'NET_OTHER_INCOME',
                 'PBT': 'PBT',  # KEYCODE in database
                 'NPAT': 'NPAT',  # KEYCODE in database
+                'SG&A': 'SG_A',
+                'Interest Expense': 'Interest_Expense',
+                'Borrowing Balance': 'Borrowing_Balance',
                 'Margin Balance': 'MARGIN_BALANCE',
-                'ROE': 'ROE'
+                'ROE': 'ROE',
+                'CIR': 'CIR',
+                'Interest Rate': 'Interest_Rate'
             }.get(metric_name)
 
             value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, metric_code)
@@ -761,7 +820,7 @@ if selected_ticker and selected_quarter:
                 try:
                     value = float(value)
                     # Percentages - already calculated as percentages (e.g., 15.5 means 15.5%)
-                    if metric_name in ['ROE', 'ROA', 'Margin/Equity %']:
+                    if metric_name in ['ROE', 'ROA', 'Margin/Equity %', 'CIR', 'Interest Rate']:
                         return f"{value:.2f}%"
                     # Other financial metrics in billions VND with thousand separators
                     elif abs(value) >= 1e9:
@@ -975,6 +1034,7 @@ if generate_button and selected_ticker and selected_quarter:
                             analysis_table=analysis_table,  # Pass the pre-built analysis table
                             market_share_table=market_share_table,  # Pass market share table
                             prop_holdings_table=prop_holdings_table,  # Pass prop holdings table
+                            investment_composition_table=investment_composition_table,  # Pass investment composition table
                             return_prompt=True  # Request the prompt to be returned
                         )
 
