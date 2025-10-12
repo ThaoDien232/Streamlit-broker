@@ -338,14 +338,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                     ]
                     if not liquidity_row.empty:
                         avg_daily_turnover_bn = liquidity_row.iloc[0]['Avg Daily Turnover (B VND)']
-
-                        # Try to get trading days, with fallback to default value
-                        try:
-                            trading_days = liquidity_row.iloc[0]['Trading Days']
-                        except (KeyError, IndexError):
-                            # Fallback: estimate trading days (roughly 60-65 days per quarter)
-                            trading_days = 63  # Average trading days per quarter
-                            st.warning(f"Trading Days column not found for {quarter}. Using default value of {trading_days} days. Please clear cache and refresh.")
+                        trading_days = liquidity_row.iloc[0]['Trading Days']
 
                         # Market liquidity is in billions, convert to VND for calculation
                         total_market_value = avg_daily_turnover_bn * 1_000_000_000 * trading_days
