@@ -393,32 +393,35 @@ Investment Book Composition (Selected Quarter: {year_quarter}):
 Your answer must follow this structure exactly. Do not add or remove sections.
 
 ## 1. Overall (max 5 bullet points)
-Write these bullets as a story-driven investor takeaway.
-Focus on what kind of quarter this was, what drove it, and how sustainable the performance looks.
-Assess whether profit growth came from core operations or one-off items.
-Present key profitability metrics (PBT, ROE, ROA) and explain trends using an earnings bridge: revenue, cost, and non-recurring items.
-Tone: succinct, neutral, analytical.
+Focus on what kind of quarter this was, what drove it, and how sustainable it looks.
+Start with PBT QoQ and YoY growth, then show the ROE beside it to frame profitability.
+Describe which specific income stream (brokerage, margin, investment, or IB) primarily drove the quarter’s change.
+Do not mention total operating income as a driver since it is a sum of all income streams.
+Avoid unrelated income commentary in this section. Use this part to give the investor a clear sense of the overall tone of the quarter (improving, stable, or softening).
 
 ## 2. Traditional brokerage (max 3 bullet points)
-Present brokerage and margin lending income growth QoQ/YoY.
-Link brokerage income with BOTH market share and market liquidity (avg daily turnover). If brokerage income outpaced or lagged liquidity, explain if this was due to market share change.
-Connect margin income growth with margin balance growth (QoQ/YoY) to show if income was driven by lending volume or rate changes.
-Discuss margin/Equity ratio and its movement vs. the 200% legal cap to gauge lending headroom.
+Present brokerage income growth QoQ and YoY, followed by the trend in market liquidity (average daily trading value).
+Conclude whether brokerage income changes were primarily driven by market liquidity or market share.
+Then discuss margin lending income and balance growth QoQ and YoY, connecting margin income growth to margin balance growth to show whether it was driven by lending volume or rate changes.
+When mentioning margin/equity ratio, include both the current and previous quarter’s level to give context. 
+Classify the margin/equity ratio as follows: above 150 percent = high, 70–150 percent = normal, below 70 percent = low. 
+Discuss how the current level implies lending capacity or headroom versus the 200 percent legal cap.
 
 ## 3. Investment (max 3 bullet points)
-Present investment income growth QoQ/YoY and connect it to changes in investment book composition (shift between listed equities, bonds, CDs, deposits, etc.).
-Discuss how the structure of the investment book explains income stability. Brokers with higher share of listed bonds, CDs, or deposits (FVTPL or AFS) tend to have stable investment income, while those with higher exposure to listed equities (especially FVTPL) tend to have volatile investment income.
-If the broker has a high percentage of listed FVTPL equities, list the top holdings (tickers) and how they influenced income.
-Highlight if any change in asset mix or valuation drove the income trend.
+Present investment income growth QoQ and YoY and connect it to the composition and any change in the investment book. 
+Go beyond FVTPL, AFS, or HTM classification — describe whether the broker mainly holds bonds, equities, or deposits/CDs, as this determines the nature of its investment style. 
+A broker with large holdings in bonds, deposits, or CDs typically shows stable investment income, while one with heavy listed equity exposure tends to show higher volatility. 
+If the broker has high exposure to listed FVTPL equities, include the top holdings and explain how they may have affected performance. 
+Comment on whether recent shifts in the investment mix suggest a more conservative or aggressive investment posture.
 
 ## 4. IB (max 2 bullet points)
 Only discuss IB income if QoQ growth is greater than 30 percent.
-Show IB income QoQ/YoY growth and briefly explain if this came from deal volume recovery or large mandates.
+Show IB income QoQ and YoY growth and briefly explain if this came from deal volume recovery or large mandates.
 
 ## 5. Cost control (max 3 bullet points)
-Present SGA growth QoQ/YoY and CIR trend.
-Discuss interest expense growth QoQ/YoY, interest rate change, and borrowing balance growth.
-Highlight if interest rate increased more than 20 bps QoQ or if cost pressure is notable.
+Present SGA growth QoQ and YoY and discuss CIR trend.
+Discuss interest expense growth QoQ and YoY, interest rate changes, and borrowing balance growth.
+Highlight if interest rate increased more than 20 bps QoQ or if cost pressure is significant.
 
 Writing Approach Rules:
 Each paragraph must combine data and interpretation in one sentence.
