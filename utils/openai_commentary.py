@@ -384,39 +384,41 @@ Your answer must follow this structure exactly. Do not add or remove sections.
 
 ## 1. Overall (max 5 bullet points)
 Write these bullets as a story-driven investor takeaway.
-First, focus on the big picture: what kind of quarter this was, what drove it, and how sustainable it looks (dig into whether the strong/weak profit growth is due to any one-off items or mainly driven by investment income growth).
-Keep numbers supportive, but not the headline. (Example: "Profit growth QoQ/YoY seems strong, but much of it came from one-offs, not core business activities." instead of "PBT +33% QoQ.")
-Second, present PBT, main income streams (brokerage, margin lending, investment incomes), ROA, ROE trends with interpretation.
-Use the earnings bridge (Revenue, Cost, Non-recurring) to explain what really changed.
+Focus on what kind of quarter this was, what drove it, and how sustainable the performance looks.
+Assess whether profit growth came from core operations or one-off items.
+Present key profitability metrics (PBT, ROE, ROA) and explain trends using an earnings bridge: revenue, cost, and non-recurring items.
 Tone: succinct, neutral, analytical.
 
 ## 2. Traditional brokerage (max 3 bullet points)
-Present brokerage and margin lending income growth QoQ/YoY
-Link brokerage income with BOTH market share AND market liquidity (avg daily turnover): if brokerage income grew faster/slower than market liquidity, explain if it's driven by market share gains/losses.
-Give a brief on the brokers'margin balance, its growth and margin/shareholder's equity ratio. Remember the legal cap for margin/shareholder's equity is 200%, the closer the broker is to this cap, the less headroom they have to lend out
+Present brokerage and margin lending income growth QoQ/YoY.
+Link brokerage income with BOTH market share and market liquidity (avg daily turnover). If brokerage income outpaced or lagged liquidity, explain if this was due to market share change.
+Connect margin income growth with margin balance growth (QoQ/YoY) to show if income was driven by lending volume or rate changes.
+Discuss margin/Equity ratio and its movement vs. the 200% legal cap to gauge lending headroom.
 
 ## 3. Investment (max 3 bullet points)
-Present investment income growth QoQ/YoY
-If the broker has investment income of 30% growth for either YoY or QoQ, add a bullet point on their top 5 stock holdings and the absolute values at the end of the quarter.
-Each bullet must combine data and meaning.
+Present investment income growth QoQ/YoY and connect it to changes in investment book composition (shift between listed equities, bonds, CDs, deposits, etc.).
+Discuss how the structure of the investment book explains income stability. Brokers with higher share of listed bonds, CDs, or deposits (FVTPL or AFS) tend to have stable investment income, while those with higher exposure to listed equities (especially FVTPL) tend to have volatile investment income.
+If the broker has a high percentage of listed FVTPL equities, list the top holdings (tickers) and how they influenced income.
+Highlight if any change in asset mix or valuation drove the income trend.
 
 ## 4. IB (max 2 bullet points)
-Only present IB income if the QoQ growth is >30%
-If you present IB income, present the QoQ/YoY growth of IB income
+Only discuss IB income if QoQ growth is greater than 30 percent.
+Show IB income QoQ/YoY growth and briefly explain if this came from deal volume recovery or large mandates.
 
 ## 5. Cost control (max 3 bullet points)
-Present SGA growth QoQ/YoY and CIR 
-Present interest expense growth QoQ/YoY, interest rate and borrowing balance growth QoQ/YoY. Highlight if interest rate is rising > 20 bps QoQ.
+Present SGA growth QoQ/YoY and CIR trend.
+Discuss interest expense growth QoQ/YoY, interest rate change, and borrowing balance growth.
+Highlight if interest rate increased more than 20 bps QoQ or if cost pressure is notable.
 
 Writing Approach Rules:
-- Conclusion = story first, numbers second.
-- Each bullet across all sections must weave number + meaning in one line.
-- Avoid mechanical breakdowns of every bridge component; focus only on what matters most.
-- Keep style punchy, concise, and investment-oriented.
+Each paragraph must combine data and interpretation in one sentence.
+Story first, numbers second.
+Avoid mechanical bridges and focus on the most material movements.
+Tone should be factual, concise, and investment-oriented.
 
-Format Guidelines:
-- Use one decimal point for percentages (e.g., 15.7%) when citing specific figures
-- Keep analysis factual and data-driven
+Formatting:
+Use one decimal place for percentages (e.g., 15.7%).
+Keep output clean and easy to read.
 """
 
     # If we have cached commentary and not forcing regeneration, return it now
