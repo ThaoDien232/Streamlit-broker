@@ -325,14 +325,15 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 continue
 
             if metric_name == 'Brokerage Market Share':
-                # First, try to get market share from HSX data (for Top 10 brokers)
-                # Check if there's a market share KEYCODE in the database
-                hsx_market_share = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Market_share')
+                # First, try to get market share from HSX API (for Top 10 brokers)
+                # Reconstruct quarter_label from year and quarter_num (e.g., "1Q24")
+                quarter_label = f"{quarter_num}Q{str(year)[-2:]}"
+                hsx_data = fetch_market_share(ticker, quarter_label)
 
-                # If HSX data exists and is non-zero, use it; otherwise calculate
-                if hsx_market_share and hsx_market_share != 0:
+                # If HSX API returns data (broker is in Top 10), use it
+                if hsx_data['market_share'] > 0:
                     # Use HSX-provided market share (already in percentage)
-                    quarter_values.append(hsx_market_share)
+                    quarter_values.append(hsx_data['market_share'])
                 else:
                     # Calculate Market Share for brokers not in Top 10
                     # Formula: Trading Value / (Market Liquidity * Trading Days in Quarter) / 2
