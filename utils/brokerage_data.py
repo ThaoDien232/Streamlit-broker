@@ -65,10 +65,9 @@ def load_brokerage_metrics(
     if not include_annual:
         where_conditions.append("LENGTHREPORT BETWEEN 1 AND 4")  # Q1-Q4 only
 
-    # Exclude defunct/inactive brokers
+    # Exclude defunct/inactive brokers (but keep Sector aggregate)
     excluded_list = ','.join([f"'{t}'" for t in EXCLUDED_TICKERS])
     where_conditions.append(f"TICKER NOT IN ({excluded_list})")
-    where_conditions.append("TICKER != 'Sector'")  # Also exclude Sector aggregate
 
     where_clause = " AND ".join(where_conditions)
 
@@ -293,7 +292,6 @@ def get_available_tickers() -> List[str]:
         FROM dbo.BrokerageMetrics
         WHERE YEARREPORT >= 2017
           AND LENGTHREPORT BETWEEN 1 AND 4
-          AND TICKER != 'Sector'
           AND TICKER NOT IN ({excluded_list})
         ORDER BY TICKER
         """
@@ -464,7 +462,6 @@ def load_filtered_brokerage_data(
       AND LENGTHREPORT IN ({quarter_list})
       AND KEYCODE IN ({keycode_list})
       AND TICKER NOT IN ({excluded_list})
-      AND TICKER != 'Sector'
     ORDER BY TICKER, YEARREPORT, LENGTHREPORT, KEYCODE
     """
 
