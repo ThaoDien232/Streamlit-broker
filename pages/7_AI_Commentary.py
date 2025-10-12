@@ -78,6 +78,7 @@ def calculate_financial_metrics(ticker_data, selected_quarter, ticker):
         'Margin Income': 'NET_MARGIN_INCOME',  # Correct METRIC_CODE for margin lending income
         'Investment Income': 'NET_INVESTMENT_INCOME',
         'Other Incomes': 'NET_OTHER_INCOME',
+        'Total Operating Income': 'Total_Operating_Income',  # Total operating income
         'PBT': 'PBT',  # KEYCODE in database
         'NPAT': 'NPAT',  # KEYCODE in database
         'SG&A': 'SG_A',  # Selling, General & Administrative expenses
@@ -190,7 +191,25 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
     market_liquidity_df = load_market_liquidity_data()
 
     # Display metrics we want to show
-    display_metrics = ['Net Brokerage Income', 'IB Income', 'Market Liquidity (Avg Daily)', 'Margin Income', 'Investment Income', 'Other Incomes', 'PBT', 'NPAT', 'SG&A', 'CIR', 'Interest Expense', 'Borrowing Balance', 'Interest Rate', 'Margin Balance', 'Margin/Equity %', 'ROE']
+    display_metrics = [
+        'Net Brokerage Income',
+        'Market Liquidity (Avg Daily)',
+        'IB Income',
+        'Margin Income',
+        'Margin Balance',
+        'Margin/Equity %',
+        'Investment Income',
+        'Other Incomes',
+        'Total Operating Income',
+        'SG&A',
+        'CIR',
+        'Interest Expense',
+        'Borrowing Balance',
+        'Interest Rate',
+        'PBT',
+        'NPAT',
+        'ROE'
+    ]
 
     # Create table structure: Metric as rows, quarters as columns
     analysis_data = {'Metric': display_metrics}
@@ -300,6 +319,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 'Margin Income': 'NET_MARGIN_INCOME',  # Correct METRIC_CODE for margin lending income
                 'Investment Income': 'NET_INVESTMENT_INCOME',
                 'Other Incomes': 'NET_OTHER_INCOME',
+                'Total Operating Income': 'Total_Operating_Income',
                 'PBT': 'PBT',  # KEYCODE in database
                 'NPAT': 'NPAT',  # KEYCODE in database
                 'SG&A': 'SG_A',

@@ -316,12 +316,13 @@ def generate_commentary(ticker: str, year_quarter: str, df: pd.DataFrame,
     cached_commentary = None
     if not force_regenerate and os.path.exists(cache_file):
         try:
-            cache_df = pd.read_csv(cache_file)
+            cache_df = pd.read_csv(cache_file, quoting=1, escapechar='\\')
             cached = cache_df[(cache_df['TICKER'] == ticker) &
                              (cache_df['QUARTER'] == year_quarter)]
             if not cached.empty:
                 cached_commentary = cached.iloc[-1]['COMMENTARY']
-        except:
+        except Exception as e:
+            print(f"Could not read from cache: {e}")
             pass  # Continue to generate new commentary
 
     # Use provided analysis_table or build it
@@ -464,12 +465,13 @@ Keep output clean and easy to read.
         # Save to cache
         try:
             if os.path.exists(cache_file):
-                cache_df = pd.read_csv(cache_file)
+                cache_df = pd.read_csv(cache_file, quoting=1)  # QUOTE_ALL for proper handling
                 cache_df = pd.concat([cache_df, pd.DataFrame([cache_data])], ignore_index=True)
             else:
                 cache_df = pd.DataFrame([cache_data])
 
-            cache_df.to_csv(cache_file, index=False)
+            # Use quoting and escapechar to handle newlines and quotes in commentary
+            cache_df.to_csv(cache_file, index=False, quoting=1, escapechar='\\')
         except Exception as e:
             print(f"Could not save to cache: {e}")
 
