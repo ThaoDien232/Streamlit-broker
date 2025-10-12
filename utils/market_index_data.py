@@ -76,21 +76,22 @@ def load_market_index(
 @st.cache_data(ttl=1800)
 def load_market_liquidity_data(start_year: int = 2017) -> pd.DataFrame:
     """
-    Load and calculate quarterly market liquidity (average daily turnover).
+    Load and calculate quarterly market liquidity (average daily turnover) and trading days.
     Replaces the calculation from INDEX.csv.
 
     Args:
         start_year: Start year (default 2017)
 
     Returns:
-        DataFrame with columns: Year, Quarter, Quarter_Label, Avg Daily Turnover (B VND)
+        DataFrame with columns: Year, Quarter, Quarter_Label, Avg Daily Turnover (B VND), Trading Days
     """
 
     query = f"""
     SELECT
         YEAR(TRADINGDATE) as Year,
         DATEPART(QUARTER, TRADINGDATE) as Quarter,
-        AVG(TOTALVALUE) as avg_daily_turnover
+        AVG(TOTALVALUE) as avg_daily_turnover,
+        COUNT(DISTINCT TRADINGDATE) as trading_days
     FROM dbo.MarketIndex
     WHERE COMGROUPCODE = 'VNINDEX'
       AND YEAR(TRADINGDATE) >= {start_year}
@@ -113,8 +114,11 @@ def load_market_liquidity_data(start_year: int = 2017) -> pd.DataFrame:
         axis=1
     )
 
+    # Rename trading_days to Trading Days for consistency
+    df['Trading Days'] = df['trading_days']
+
     # Select final columns
-    df = df[['Year', 'Quarter', 'Quarter_Label', 'Avg Daily Turnover (B VND)']]
+    df = df[['Year', 'Quarter', 'Quarter_Label', 'Avg Daily Turnover (B VND)', 'Trading Days']]
 
     return df
 

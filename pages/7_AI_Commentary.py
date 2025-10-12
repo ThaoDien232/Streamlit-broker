@@ -194,6 +194,9 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
     display_metrics = [
         'Net Brokerage Income',
         'Market Liquidity (Avg Daily)',
+        'Trading Value',
+        'Brokerage Market Share',
+        'Net Brokerage Fee',
         'IB Income',
         'Margin Income',
         'Margin Balance',
@@ -309,6 +312,59 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                     # Annualize the rate for quarterly data
                     interest_rate = abs(interest_expense) / avg_borrowing * 100 * 4
                     quarter_values.append(interest_rate)
+                else:
+                    quarter_values.append(0)
+                continue
+
+            if metric_name == 'Trading Value':
+                # Calculate Trading Value = Institution shares + Investor shares trading value (in billions VND)
+                institution_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
+                investor_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Investor_shares_trading_value')
+                total_trading_value = (institution_shares + investor_shares) / 1_000_000_000  # Convert to billions
+                quarter_values.append(total_trading_value)
+                continue
+
+            if metric_name == 'Brokerage Market Share':
+                # Calculate Market Share = Trading Value / (Market Liquidity * Trading Days in Quarter) / 2
+                institution_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
+                investor_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Investor_shares_trading_value')
+                total_trading_value = institution_shares + investor_shares
+
+                # Get market liquidity and trading days
+                if not market_liquidity_df.empty:
+                    liquidity_row = market_liquidity_df[
+                        (market_liquidity_df['Year'] == year) &
+                        (market_liquidity_df['Quarter'] == quarter_num)
+                    ]
+                    if not liquidity_row.empty:
+                        avg_daily_turnover_bn = liquidity_row.iloc[0]['Avg Daily Turnover (B VND)']
+                        trading_days = liquidity_row.iloc[0]['Trading Days']
+
+                        # Market liquidity is in billions, convert to VND for calculation
+                        total_market_value = avg_daily_turnover_bn * 1_000_000_000 * trading_days
+
+                        if total_market_value and total_market_value != 0:
+                            market_share = (total_trading_value / total_market_value) / 2 * 100  # Divide by 2 and convert to percentage
+                            quarter_values.append(market_share)
+                        else:
+                            quarter_values.append(0)
+                    else:
+                        quarter_values.append(0)
+                else:
+                    quarter_values.append(0)
+                continue
+
+            if metric_name == 'Net Brokerage Fee':
+                # Calculate Net Brokerage Fee = Net Brokerage Income / Trading Value (in basis points)
+                net_brokerage_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'NET_BROKERAGE_INCOME')
+                institution_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
+                investor_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Investor_shares_trading_value')
+                total_trading_value = institution_shares + investor_shares
+
+                if total_trading_value and total_trading_value != 0:
+                    # Calculate as basis points (bps): (income / trading value) * 10000
+                    net_brokerage_fee_bps = (net_brokerage_income / total_trading_value) * 10000
+                    quarter_values.append(net_brokerage_fee_bps)
                 else:
                     quarter_values.append(0)
                 continue
@@ -840,8 +896,14 @@ if selected_ticker and selected_quarter:
                 try:
                     value = float(value)
                     # Percentages - already calculated as percentages (e.g., 15.5 means 15.5%)
-                    if metric_name in ['ROE', 'ROA', 'Margin/Equity %', 'CIR', 'Interest Rate']:
+                    if metric_name in ['ROE', 'ROA', 'Margin/Equity %', 'CIR', 'Interest Rate', 'Brokerage Market Share']:
                         return f"{value:.2f}%"
+                    # Basis points
+                    elif metric_name == 'Net Brokerage Fee':
+                        return f"{value:.2f} bps"
+                    # Trading Value already in billions
+                    elif metric_name == 'Trading Value':
+                        return f"{value:,.1f}B VND"
                     # Other financial metrics in billions VND with thousand separators
                     elif abs(value) >= 1e9:
                         return f"{value/1e9:,.1f}B VND"
