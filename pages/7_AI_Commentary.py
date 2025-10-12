@@ -74,8 +74,10 @@ def calculate_financial_metrics(ticker_data, selected_quarter, ticker):
     # Key financial metrics to extract using CALC statement type and METRIC_CODE (like Historical page)
     key_metrics = {
         'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
+        'IB Income': 'NET_IB_INCOME',
         'Margin Income': 'NET_MARGIN_INCOME',  # Correct METRIC_CODE for margin lending income
         'Investment Income': 'NET_INVESTMENT_INCOME',
+        'Other Incomes': 'NET_OTHER_INCOME',
         'PBT': 'PBT',  # KEYCODE in database
         'NPAT': 'NPAT',  # KEYCODE in database
         'Margin Balance': 'MARGIN_BALANCE',
@@ -183,7 +185,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
     market_liquidity_df = load_market_liquidity_data()
 
     # Display metrics we want to show
-    display_metrics = ['Net Brokerage Income', 'Market Liquidity (Avg Daily)', 'Margin Income', 'Investment Income', 'PBT', 'NPAT', 'Margin Balance', 'Margin/Equity %', 'ROE']
+    display_metrics = ['Net Brokerage Income', 'IB Income', 'Market Liquidity (Avg Daily)', 'Margin Income', 'Investment Income', 'Other Incomes', 'PBT', 'NPAT', 'Margin Balance', 'Margin/Equity %', 'ROE']
 
     # Create table structure: Metric as rows, quarters as columns
     analysis_data = {'Metric': display_metrics}
@@ -240,8 +242,10 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
 
             metric_code = {
                 'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
+                'IB Income': 'NET_IB_INCOME',
                 'Margin Income': 'NET_MARGIN_INCOME',  # Correct METRIC_CODE for margin lending income
                 'Investment Income': 'NET_INVESTMENT_INCOME',
+                'Other Incomes': 'NET_OTHER_INCOME',
                 'PBT': 'PBT',  # KEYCODE in database
                 'NPAT': 'NPAT',  # KEYCODE in database
                 'Margin Balance': 'MARGIN_BALANCE',
@@ -756,9 +760,9 @@ if selected_ticker and selected_quarter:
                     return "N/A"
                 try:
                     value = float(value)
-                    # ROE and ROA should be displayed as percentages (multiply by 100 since CSV has decimal values)
-                    if metric_name in ['ROE', 'ROA']:
-                        return f"{value * 100:.2f}%"
+                    # Percentages - already calculated as percentages (e.g., 15.5 means 15.5%)
+                    if metric_name in ['ROE', 'ROA', 'Margin/Equity %']:
+                        return f"{value:.2f}%"
                     # Other financial metrics in billions VND with thousand separators
                     elif abs(value) >= 1e9:
                         return f"{value/1e9:,.1f}B VND"
