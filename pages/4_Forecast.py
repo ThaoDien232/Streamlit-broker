@@ -394,8 +394,8 @@ for y, q in brokerage_history_quarters:
     share_decimal = None
     share_pct_display = None
     if api_share_pct:
-        share_decimal = (api_share_pct / 100) / 2
-        share_pct_display = share_decimal * 100
+        share_decimal = api_share_pct / 100
+        share_pct_display = api_share_pct
     else:
         share_year = get_share_for_year(y)
         if share_year:
