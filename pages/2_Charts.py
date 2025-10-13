@@ -109,24 +109,23 @@ def fetch_market_share_data(year, quarters):
 def get_metric_display_name(metric_code):
     """Convert metric code to display name"""
     metric_names = {
-        'NET_BROKERAGE_INCOME': 'Net Brokerage Income',
-        'NET_TRADING_INCOME': 'Net Trading Income',
+        'NET_BROKERAGE_INCOME': 'Brokerage Income',
+        'NET_TRADING_INCOME': 'Trading Income',
         'INTEREST_INCOME': 'Interest Income',
-        'NET_INVESTMENT_INCOME': 'Net Investment Income',
+        'NET_INVESTMENT_INCOME': 'Investment Income',
         'FEE_INCOME': 'Fee Income',
         'CAPITAL_INCOME': 'Capital Income',
         'MARGIN_BALANCE': 'Margin Balance',
         'TOTAL_OPERATING_INCOME': 'Total Operating Income',
-        'NET_IB_INCOME': 'Net IB Income',
-        'NET_OTHER_OP_INCOME': 'Net Other Operating Income',
+        'NET_IB_INCOME': 'IB Income',
+        'NET_OTHER_OP_INCOME': 'Other Income',
         'BORROWING_BALANCE': 'Borrowing Balance',
-        'PBT': 'Profit Before Tax',
-        'NPAT': 'Net Profit After Tax',
-        'SGA': 'SG&A Expenses',
-        'NET_MARGIN_INCOME': 'Net Margin Income',
+        'PBT': 'PBT',
+        'NPAT': 'NPAT',
+        'SGA': 'SG&A',
         'MARGIN_LENDING_INCOME': 'Margin Lending Income',
-        'ROE': 'Return on Equity (ROE)',
-        'ROA': 'Return on Assets (ROA)'
+        'ROE': 'ROE',
+        'ROA': 'ROA'
     }
     return metric_names.get(metric_code, metric_code)
 
@@ -232,12 +231,11 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
 
     # Color scheme for components (6 components)
     component_colors = {
-        'Brokerage Income': '#1f77b4',
-        'IB Income': '#ff7f0e',
-        'Other Operating Income': '#2ca02c',
-        'Trading Income': '#d62728',
-        'Interest Income': '#8c564b',
-        'Margin Lending Income': '#9467bd'
+        'Brokerage Income': "#89ceffff",
+        'Margin Lending Income': "#cc96ff",
+        'IB Income': "#ffaf69",
+        'Investment Income': "#ff9f9f",
+        'Other Income': "#9dff9dc5"
     }
 
     for broker in selected_brokers:
@@ -318,10 +316,9 @@ allowed_metrics = [
     'NET_IB_INCOME',
     'NET_OTHER_OP_INCOME',
     'BORROWING_BALANCE',
-    'PBT',  # Changed from full name
-    'NPAT',  # Changed from full name
+    'PBT',
+    'NPAT',
     'SGA',
-    'NET_MARGIN_INCOME',
     'MARGIN_LENDING_INCOME',
     'ROE',
     'ROA'
@@ -340,7 +337,7 @@ fixed_charts = ['PBT', 'ROE', 'TOTAL_OPERATING_INCOME']
 
 # Additional metrics selection - NOW ALWAYS AVAILABLE
 additional_metrics = st.sidebar.multiselect(
-    "Additional Charts (optional):",
+    "Add charts:",
     options=[m for m in allowed_metrics if m not in fixed_charts],
     default=[],
     format_func=get_metric_display_name,
