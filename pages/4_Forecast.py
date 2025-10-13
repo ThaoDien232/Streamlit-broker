@@ -1,6 +1,7 @@
 import math
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 import toml
@@ -16,7 +17,7 @@ if st.sidebar.button("Reload Data"):
 
 @st.cache_data
 def load_data():
-    """Load quarterly actuals and full-year forecast data."""
+    """Load quarterly actuals, index data, and full-year forecast data."""
 
     theme_config = toml.load("utils/config.toml")
 
@@ -29,7 +30,10 @@ def load_data():
     df_forecast['DATE'] = df_forecast['DATE'].astype(int)
     df_forecast['VALUE'] = pd.to_numeric(df_forecast['VALUE'], errors='coerce')
 
-    return theme_config, df_is_quarterly, df_forecast
+    df_index = pd.read_csv('sql/INDEX.csv', parse_dates=['TRADINGDATE'])
+    df_turnover = pd.read_excel('sql/turnover.xlsx')
+
+    return theme_config, df_is_quarterly, df_forecast, df_index, df_turnover
 
 
 SEGMENTS = [
@@ -118,6 +122,12 @@ def quarter_label(year: int, quarter: int) -> str:
     return f"{year} Q{quarter}"
 
 
+def prev_quarter(year: int, quarter: int) -> tuple[int, int]:
+    if quarter == 1:
+        return year - 1, 4
+    return year, quarter - 1
+
+
 def collect_totals(df: pd.DataFrame, mask: pd.Series) -> dict[str, float]:
     subset = df.loc[mask]
     totals = {segment['key']: subset[segment['key']].sum() if not subset.empty else 0.0 for segment in SEGMENTS}
@@ -153,7 +163,7 @@ def format_pct(value: float | None) -> str:
     return f"{value * 100:,.1f}%"
 
 
-theme_config, df_is_quarterly, df_forecast = load_data()
+theme_config, df_is_quarterly, df_forecast, df_index_raw, df_turnover = load_data()
 
 theme = theme_config.get("theme", {}) if isinstance(theme_config, dict) else {}
 background_color = theme.get("backgroundColor", "#FFFFFF")
@@ -197,6 +207,52 @@ forecast_map = get_forecast_map(df_forecast, selected_broker, target_year, forec
 
 ytd_mask = (df_quarters['YEARREPORT'] == target_year) & (df_quarters['LENGTHREPORT'] < target_quarter)
 ytd_totals = collect_totals(df_quarters, ytd_mask)
+
+# Prepare market turnover metrics by quarter
+df_index = df_index_raw.copy()
+if 'COMGROUPCODE' in df_index.columns:
+    df_index = df_index[df_index['COMGROUPCODE'] == 'VNINDEX']
+df_index['TRADINGDATE'] = pd.to_datetime(df_index['TRADINGDATE'], errors='coerce')
+df_index = df_index.dropna(subset=['TRADINGDATE'])
+
+if not df_index.empty and 'TOTALVALUE' in df_index.columns:
+    df_index['QuarterPeriod'] = df_index['TRADINGDATE'].dt.to_period('Q')
+    quarter_stats_df = df_index.groupby('QuarterPeriod').agg(
+        total_turnover=('TOTALVALUE', 'sum'),
+        trading_days=('TRADINGDATE', 'nunique')
+    ).reset_index()
+    quarter_stats_df['Year'] = quarter_stats_df['QuarterPeriod'].dt.year
+    quarter_stats_df['Quarter'] = quarter_stats_df['QuarterPeriod'].dt.quarter
+    quarter_stats_df['avg_daily_bn'] = quarter_stats_df.apply(
+        lambda row: (row['total_turnover'] / row['trading_days'] / 1e9)
+        if row['trading_days'] else np.nan,
+        axis=1
+    )
+else:
+    quarter_stats_df = pd.DataFrame(columns=['Year', 'Quarter', 'total_turnover', 'trading_days', 'avg_daily_bn'])
+
+quarter_stats_lookup = {
+    (int(row['Year']), int(row['Quarter'])): {
+        'total_turnover': float(row['total_turnover']) if not pd.isna(row['total_turnover']) else None,
+        'trading_days': int(row['trading_days']) if not pd.isna(row['trading_days']) else None,
+        'avg_daily_bn': float(row['avg_daily_bn']) if not pd.isna(row['avg_daily_bn']) else None,
+    }
+    for _, row in quarter_stats_df.iterrows()
+}
+
+turnover_share_lookup = {}
+if not df_turnover.empty:
+    turnover_filtered = df_turnover[df_turnover['Ticker'] == selected_broker].copy()
+    turnover_filtered['share'] = turnover_filtered.apply(
+        lambda row: (row['Company turnover'] / row['Market turnover'] / 2)
+        if row['Market turnover'] not in (0, None, np.nan) else np.nan,
+        axis=1
+    )
+    turnover_share_lookup = {
+        int(row['Year']): float(row['share'])
+        for _, row in turnover_filtered.iterrows()
+        if not pd.isna(row['share'])
+    }
 
 base_segments = {}
 missing_segments = []
@@ -270,12 +326,165 @@ summary_df = pd.DataFrame(summary_rows)
 summary_df = summary_df[columns_order]
 
 st.markdown("### Quarterly Forecast Adjustments")
-st.caption(f"Base assumptions derived from {target_year} full-year forecast minus actual results up to {latest_label}.")
 
 if missing_segments:
     st.info("Missing forecast values for: " + ", ".join(missing_segments))
 
+# Brokerage segment detailed table (last 3 quarters + forecast)
+brokerage_history_quarters = []
+year_cursor, quarter_cursor = target_year, target_quarter
+for _ in range(3):
+    year_cursor, quarter_cursor = prev_quarter(year_cursor, quarter_cursor)
+    brokerage_history_quarters.append((year_cursor, quarter_cursor))
+brokerage_history_quarters = list(reversed(brokerage_history_quarters))
+
+def get_share_for_year(year: int) -> float | None:
+    if year in turnover_share_lookup:
+        return turnover_share_lookup[year]
+    if not turnover_share_lookup:
+        return None
+    years_sorted = sorted(turnover_share_lookup.keys())
+    prior_years = [y for y in years_sorted if y <= year]
+    if prior_years:
+        return turnover_share_lookup[prior_years[-1]]
+    future_years = [y for y in years_sorted if y >= year]
+    if future_years:
+        return turnover_share_lookup[future_years[0]]
+    return None
+
+history_metrics = []
+for y, q in brokerage_history_quarters:
+    stats = quarter_stats_lookup.get((y, q), {})
+    total_turnover = stats.get('total_turnover')
+    trading_days = stats.get('trading_days')
+    avg_daily_bn = stats.get('avg_daily_bn')
+
+    quarter_row = df_quarters[
+        (df_quarters['YEARREPORT'] == y) & (df_quarters['LENGTHREPORT'] == q)
+    ]
+    net_brokerage = float(quarter_row['brokerage_fee'].iloc[0]) if not quarter_row.empty else None
+
+    share_value = get_share_for_year(y)
+    if (
+        share_value is not None
+        and share_value > 0
+        and total_turnover not in (None, 0)
+        and net_brokerage not in (None, 0)
+    ):
+        fee_decimal = net_brokerage / (total_turnover * 2 * share_value)
+        fee_bps = fee_decimal * 10000
+    else:
+        fee_bps = None
+
+    history_metrics.append({
+        'label': quarter_label(y, q),
+        'year': y,
+        'quarter': q,
+        'avg_daily_bn': avg_daily_bn,
+        'share_pct': share_value * 100 if share_value is not None else None,
+        'fee_bps': fee_bps,
+        'net_brokerage_bn': net_brokerage / 1e9 if net_brokerage is not None else None,
+        'total_turnover': total_turnover,
+        'trading_days': trading_days,
+        'net_brokerage': net_brokerage,
+    })
+
+history_avg_daily = [m['avg_daily_bn'] for m in history_metrics if m['avg_daily_bn'] is not None]
+history_fee_bps = [m['fee_bps'] for m in history_metrics if m['fee_bps'] is not None]
+history_trading_days = [m['trading_days'] for m in history_metrics if m['trading_days']]
+
+share_default = get_share_for_year(target_year)
+if share_default is None and history_metrics:
+    last_with_share = next((m for m in reversed(history_metrics) if m['share_pct']), None)
+    share_default = (last_with_share['share_pct'] / 100) if last_with_share else 0.05
+
+avg_daily_default = history_avg_daily[-1] if history_avg_daily else 0.0
+fee_default = history_fee_bps[-1] if history_fee_bps else 2.0
+trading_days_forecast = int(round(np.mean(history_trading_days))) if history_trading_days else 63
+
+share_default_pct = (share_default * 100) if share_default is not None else 5.0
+
+brokerage_input_cols = st.columns(3)
+avg_daily_initial = float(round(avg_daily_default)) if avg_daily_default is not None else 0.0
+avg_daily_input = brokerage_input_cols[0].number_input(
+    f"{target_label} VNI Avg Daily Turnover (bn VND)",
+    value=avg_daily_initial,
+    min_value=0.0,
+    step=50.0,
+    format="%.0f"
+)
+market_share_initial = float(round(share_default_pct, 2)) if share_default_pct is not None else 0.0
+market_share_input = brokerage_input_cols[1].number_input(
+    f"{target_label} Market Share (%)",
+    value=market_share_initial,
+    min_value=0.0,
+    step=0.1,
+    format="%.2f"
+)
+net_fee_initial = float(round(fee_default, 2)) if fee_default is not None else 0.0
+net_fee_input = brokerage_input_cols[2].number_input(
+    f"{target_label} Net Brokerage Fee (bps)",
+    value=net_fee_initial,
+    min_value=0.0,
+    step=0.1,
+    format="%.2f"
+)
+
+market_share_decimal = market_share_input / 100
+net_fee_decimal = net_fee_input / 10000
+total_turnover_forecast = avg_daily_input * 1e9 * trading_days_forecast
+net_brokerage_forecast = total_turnover_forecast * 2 * market_share_decimal * net_fee_decimal
+net_brokerage_forecast_bn = net_brokerage_forecast / 1e9
+
+forecast_metrics = {
+    'label': target_label,
+    'avg_daily_bn': avg_daily_input,
+    'share_pct': market_share_input,
+    'fee_bps': net_fee_input,
+    'net_brokerage_bn': net_brokerage_forecast_bn,
+}
+
+def fmt_value(value, decimals=0, suffix=""):
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return "-"
+    return f"{value:,.{decimals}f}{suffix}"
+
+table_rows = {
+    'Metric': [
+        'VNI Avg Trading Value (bn/day)',
+        'Market Share (%)',
+        'Net Brokerage Fee (bps)',
+        'Net Brokerage Income (bn)',
+    ]
+}
+
+for metrics in history_metrics:
+    table_rows[metrics['label']] = [
+        fmt_value(metrics['avg_daily_bn']),
+        fmt_value(metrics['share_pct'], 2),
+        fmt_value(metrics['fee_bps'], 2),
+        fmt_value(metrics['net_brokerage_bn']),
+    ]
+
+table_rows[forecast_metrics['label']] = [
+    fmt_value(forecast_metrics['avg_daily_bn']),
+    fmt_value(forecast_metrics['share_pct'], 2),
+    fmt_value(forecast_metrics['fee_bps'], 2),
+    fmt_value(forecast_metrics['net_brokerage_bn']),
+]
+
+brokerage_table_df = pd.DataFrame(table_rows)
+brokerage_table_df = brokerage_table_df.set_index('Metric')
+st.dataframe(brokerage_table_df, use_container_width=True)
+st.caption(f"Assuming {trading_days_forecast} trading days for {target_label} and applying net brokerage formula.")
+
+# Update summary with forecast brokerage
+target_column_label = f"{target_label} Base (bn VND)"
+if target_column_label in summary_df.columns:
+    summary_df.loc[summary_df['Segment'] == 'Brokerage Fee', target_column_label] = format_bn_str(net_brokerage_forecast)
+
 st.subheader("Baseline Breakdown")
+st.caption(f"Base assumptions derived from {target_year} full-year forecast minus actual results up to {latest_label}.")
 st.dataframe(summary_df, hide_index=True)
 
 st.subheader(f"{target_label} Segment Assumptions")
@@ -284,6 +493,8 @@ segment_inputs = {}
 input_columns = st.columns(3)
 
 for idx, segment in enumerate(SEGMENTS):
+    if segment['key'] == 'brokerage_fee':
+        continue
     col = input_columns[idx % len(input_columns)]
     with col:
         base_bn = format_bn(base_segments.get(segment['key'], 0.0))
@@ -296,6 +507,8 @@ for idx, segment in enumerate(SEGMENTS):
             format="%.0f"
         )
         segment_inputs[segment['key']] = value * 1e9
+
+segment_inputs['brokerage_fee'] = net_brokerage_forecast
 
 adjusted_total_segments = sum(segment_inputs.values())
 adjusted_pbt = residual_other + adjusted_total_segments
