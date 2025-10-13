@@ -419,11 +419,24 @@ NOTE: The "Impact (pp)" column shows each component's contribution to PBT growth
 """
 
     prompt += """
+Hierarchy of Investment Data (for context):
+Each investment item follows a structured multi-level numbering system (e.g., NOS119–NOS160) that encodes both accounting and asset-type hierarchy:
+- Levels 7–8 correspond to the main accounting classifications:
+  • FVTPL (Fair Value Through Profit or Loss)
+  • AFS (Available-for-Sale)
+  • HTM (Held-to-Maturity)
+- Within each category, sub-levels represent specific asset types such as:
+  • Listed Shares, Unlisted Shares, Funds, Bonds (under FVTPL or AFS)
+  • Deposits or CDs (typically under HTM)
+These sub-items roll up into their respective accounting groups.
+When analyzing investment income, you should interpret both the *top-level accounting exposure* (FVTPL vs AFS vs HTM) and the *underlying asset mix* (equities vs bonds vs deposits).
+"""
+    prompt += """
 Your answer must follow this structure exactly. Do not add or remove sections.
 
 ## 1. Overall (max 5 bullet points)
 Write these bullets as a story-driven investor takeaway.
-Focus on what kind of quarter this was, what drove it, and how sustainable it looks.
+Focus on what kind of quarter this was, state the absolute quarter PBT, what drove it, and how sustainable it looks.
 Keep numbers supportive, but not the headline. (Example: “Profit rebound looks strong, but much of it came from one-offs, raising questions about repeatability.” instead of “PBT +33% QoQ.”)
 Describe which specific income stream (brokerage, margin, investment, or IB) primarily drove the quarter’s change.
 Use the “Impact (pp)” column from the earnings driver table to pinpoint which components contributed the most or detracted from PBT growth. 
@@ -433,7 +446,7 @@ Use this section to clearly summarize what defined the quarter (improving, stabl
 
 ## 2. Traditional brokerage (max 3 bullet points)
 Present brokerage income growth QoQ and YoY, followed by the trend in market liquidity (average daily trading value).
-Conclude whether brokerage income changes were primarily driven by market liquidity or market share.
+Conclude whether brokerage income changes were primarily driven by market liquidity, market share or net brokerage fee.
 Then discuss margin lending income and balance growth QoQ and YoY, connecting margin income growth to margin balance growth to show whether it was driven by lending volume or rate changes.
 When mentioning margin/equity ratio, include both the current and previous quarter’s level to give context.
 Classify the margin/equity ratio as follows: above 150 percent = high, 70–150 percent = normal, below 70 percent = low.

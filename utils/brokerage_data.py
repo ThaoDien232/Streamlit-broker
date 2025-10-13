@@ -26,7 +26,7 @@ EXCLUDED_TICKERS = [
     'MHBS', 'MKSC', 'MSBS', 'MSGS', 'NASC', 'NAVS', 'NHSV', 'NSIC', 'NVSC',
     'OCSC', 'PBSV', 'PCSC', 'PGSC', 'ROSE', 'RUBSE', 'SJCS', 'SME', 'STSC',
     'SVS', 'TAS', 'TCSC', 'TFSC', 'TLSC', 'TSSC', 'VCSC', 'VDSE', 'VFSC',
-    'VGSC', 'VIETS', 'VNIS', 'VNSC', 'VPBS', 'VQSC', 'VSEC', 'VSM', 'VSMC',
+    'VGSC', 'VIETS', 'VNIS', 'VNSC', 'VQSC', 'VSEC', 'VSM', 'VSMC',
     'VTSC'
 ]
 
