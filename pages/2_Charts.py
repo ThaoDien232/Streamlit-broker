@@ -29,9 +29,9 @@ def load_filtered_data(tickers, metrics, years, quarters):
     # If TOTAL_OPERATING_INCOME is requested, also load its components
     metrics_to_load = list(metrics)
     if 'TOTAL_OPERATING_INCOME' in metrics:
-        # TOI income streams: brokerage, margin lending, IB, investment and other incomes
-        toi_components = ['NET_BROKERAGE_INCOME', 'MARGIN_LENDING_INCOME', 'NET_IB_INCOME',
-                         'NET_INVESTMENT_INCOME', 'NET_OTHER_OP_INCOME']
+        # TOI = Fee Income + Capital Income (6 components total)
+        toi_components = ['NET_BROKERAGE_INCOME', 'NET_IB_INCOME', 'NET_OTHER_OP_INCOME',
+                         'NET_TRADING_INCOME', 'INTEREST_INCOME', 'MARGIN_LENDING_INCOME']
         metrics_to_load.extend([m for m in toi_components if m not in metrics_to_load])
 
     df = load_filtered_brokerage_data(
@@ -111,6 +111,7 @@ def get_metric_display_name(metric_code):
     metric_names = {
         'NET_BROKERAGE_INCOME': 'Net Brokerage Income',
         'NET_TRADING_INCOME': 'Net Trading Income',
+        'INTEREST_INCOME': 'Interest Income',
         'NET_INVESTMENT_INCOME': 'Net Investment Income',
         'FEE_INCOME': 'Fee Income',
         'CAPITAL_INCOME': 'Capital Income',
@@ -162,13 +163,17 @@ def calculate_ma4(df, metric_code, ticker):
 def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
     """Create stacked bar chart showing TOI structure (income streams as % of TOI)"""
 
-    # TOI income streams: brokerage, margin lending, IB, investment and other incomes
+    # TOI = Fee Income + Capital Income
+    # Fee Income = Net Brokerage + Net IB + Net Other Operating
+    # Capital Income = Net Trading + Interest + Margin Lending
+    # So the 6 components that sum to 100% of TOI are:
     toi_components = {
         'Brokerage Income': 'NET_BROKERAGE_INCOME',
-        'Margin Lending Income': 'MARGIN_LENDING_INCOME',
         'IB Income': 'NET_IB_INCOME',
-        'Investment Income': 'NET_INVESTMENT_INCOME',
-        'Other Income': 'NET_OTHER_OP_INCOME'
+        'Other Operating Income': 'NET_OTHER_OP_INCOME',
+        'Trading Income': 'NET_TRADING_INCOME',
+        'Interest Income': 'INTEREST_INCOME',
+        'Margin Lending Income': 'MARGIN_LENDING_INCOME'
     }
 
     # Collect data for each broker
@@ -225,13 +230,14 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
     # Create stacked bar chart for each broker
     fig = go.Figure()
 
-    # Color scheme for components
+    # Color scheme for components (6 components)
     component_colors = {
         'Brokerage Income': '#1f77b4',
-        'Margin Lending Income': '#9467bd',
         'IB Income': '#ff7f0e',
-        'Investment Income': '#d62728',
-        'Other Income': '#2ca02c'
+        'Other Operating Income': '#2ca02c',
+        'Trading Income': '#d62728',
+        'Interest Income': '#8c564b',
+        'Margin Lending Income': '#9467bd'
     }
 
     for broker in selected_brokers:
@@ -303,6 +309,7 @@ st.sidebar.header("Chart Filters")
 allowed_metrics = [
     'NET_BROKERAGE_INCOME',
     'NET_TRADING_INCOME',
+    'INTEREST_INCOME',
     'NET_INVESTMENT_INCOME',
     'FEE_INCOME',
     'CAPITAL_INCOME',
