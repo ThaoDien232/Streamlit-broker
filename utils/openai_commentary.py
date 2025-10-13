@@ -422,8 +422,9 @@ NOTE: The "Impact (pp)" column shows each component's contribution to PBT growth
 Your answer must follow this structure exactly. Do not add or remove sections.
 
 ## 1. Overall (max 5 bullet points)
+Write these bullets as a story-driven investor takeaway.
 Focus on what kind of quarter this was, what drove it, and how sustainable it looks.
-Start with PBT QoQ and YoY growth, then show the ROE beside it to frame profitability.
+Keep numbers supportive, but not the headline. (Example: “Profit rebound looks strong, but much of it came from one-offs, raising questions about repeatability.” instead of “PBT +33% QoQ.”)
 Describe which specific income stream (brokerage, margin, investment, or IB) primarily drove the quarter’s change.
 Use the “Impact (pp)” column from the earnings driver table to pinpoint which components contributed the most or detracted from PBT growth. 
 For example: “Margin income added +19pp to PBT growth, offset partly by higher interest expense (-15pp).”
@@ -446,7 +447,7 @@ If the broker has high exposure to listed FVTPL equities, include the top holdin
 Comment on whether recent shifts in the investment mix suggest a more conservative or aggressive investment posture.
 
 ## 4. IB (max 2 bullet points)
-Only discuss IB income if QoQ growth is greater than 30 percent.
+Only discuss IB income if QoQ growth is great mer than 30 percent.
 Show IB income QoQ and YoY growth and briefly explain if this came from deal volume recovery or large mandates.
 
 ## 5. Cost control (max 3 bullet points)
@@ -456,8 +457,8 @@ Use the “Impact (pp)” from the earnings driver table to explain how cost dri
 Highlight if interest rate increased more than 20 bps QoQ or if cost pressure is significant.
 
 Writing Approach Rules:
-Each paragraph must combine data and interpretation in one sentence.
-Story first, numbers second.
+Each bullet across all sections must weave number + meaning in one line.
+Conclusion = Story first, numbers second.
 Avoid mechanical bridges and focus on material movements.
 Tone should be factual, concise, and investment-oriented.
 
