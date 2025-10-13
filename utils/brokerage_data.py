@@ -423,12 +423,31 @@ def load_filtered_brokerage_data(
     if not tickers or not years or not quarters:
         return pd.DataFrame()
 
-    # Translate metrics to database KEYCODEs
-    db_keycodes = []
+    # Separate calculated vs database metrics
+    db_metrics = []
+    calculated_metrics_list = []
+
     for metric in metrics:
+        if needs_calculation(metric):
+            calculated_metrics_list.append(metric)
+        else:
+            db_metrics.append(metric)
+
+    # Translate database metrics to KEYCODEs
+    db_keycodes = []
+    for metric in db_metrics:
         keycode = get_db_keycode(metric)
         if keycode:
             db_keycodes.append(keycode)
+
+    # For calculated metrics, we need to load their components
+    for calc_metric in calculated_metrics_list:
+        formula_info = CALCULATED_METRICS.get(calc_metric)
+        if formula_info:
+            for component in formula_info['components']:
+                component_keycode = get_db_keycode(component)
+                if component_keycode and component_keycode not in db_keycodes:
+                    db_keycodes.append(component_keycode)
 
     if not db_keycodes:
         return pd.DataFrame()
@@ -481,6 +500,44 @@ def load_filtered_brokerage_data(
     # to match what the Charts/Historical pages filter by
     from utils.keycode_mapping import get_metric_code
     df['METRIC_CODE'] = df['KEYCODE'].apply(lambda k: get_metric_code(k) or k)
+
+    # Calculate requested metrics that aren't in the database (like ROE, ROA)
+    if calculated_metrics_list:
+        calculated_rows = []
+
+        for ticker in tickers:
+            for year in years:
+                for quarter in quarters:
+                    for calc_metric in calculated_metrics_list:
+                        # Calculate the metric value
+                        value = calculate_metric(ticker, year, quarter, calc_metric, df)
+
+                        if value != 0:  # Only add non-zero values
+                            # Find quarter label
+                            quarter_label_row = df[
+                                (df['TICKER'] == ticker) &
+                                (df['YEARREPORT'] == year) &
+                                (df['LENGTHREPORT'] == quarter)
+                            ]
+
+                            quarter_label = quarter_label_row['QUARTER_LABEL'].iloc[0] if not quarter_label_row.empty else f"{quarter}Q{year%100}"
+
+                            calculated_rows.append({
+                                'TICKER': ticker,
+                                'YEARREPORT': year,
+                                'LENGTHREPORT': quarter,
+                                'QUARTER_LABEL': quarter_label,
+                                'METRIC_CODE': calc_metric,
+                                'VALUE': value,
+                                'KEYCODE': calc_metric,
+                                'KEYCODE_NAME': calc_metric,
+                                'STATEMENT_TYPE': 'CALC'
+                            })
+
+        # Append calculated metrics to the dataframe
+        if calculated_rows:
+            calc_df = pd.DataFrame(calculated_rows)
+            df = pd.concat([df, calc_df], ignore_index=True)
 
     return df
 

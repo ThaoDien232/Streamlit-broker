@@ -258,20 +258,8 @@ with tab1:
                     with columns[i]:
                         st.subheader(f"{get_metric_display_name(metric)}")
 
-                        # DEBUG: Show what we're looking for
-                        if metric in ['ROE', 'ROA']:
-                            unique_metrics = filtered_df['METRIC_CODE'].unique()
-                            st.info(f"DEBUG: Looking for '{metric}' in data. Available metrics: {unique_metrics[:10]}")
-                            st.info(f"DEBUG: Total rows in filtered_df: {len(filtered_df)}")
-
                         # Filter data for current metric (METRIC_CODE is already the right format from database)
                         metric_data = filtered_df[filtered_df['METRIC_CODE'] == metric].copy()
-
-                        # DEBUG: Show results
-                        if metric in ['ROE', 'ROA']:
-                            st.info(f"DEBUG: Found {len(metric_data)} rows for {metric}")
-                            if not metric_data.empty:
-                                st.write("Sample data:", metric_data.head())
 
                         if not metric_data.empty:
                             # Sort data chronologically
@@ -290,14 +278,10 @@ with tab1:
                                 if not broker_data.empty:
                                     # Check if this is ROE or ROA (percentage metrics)
                                     if metric in ['ROE', 'ROA']:
-                                        # For ROE/ROA, multiply by 100 to convert to percentage
-                                        broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce') * 100
-                                        
-                                        # Annualize quarterly values by multiplying by 4
-                                        # Only annualize if it's quarterly data (LENGTHREPORT != 5)
-                                        quarterly_mask = broker_data['LENGTHREPORT'] != 5
-                                        broker_data.loc[quarterly_mask, 'DISPLAY_VALUE'] *= 4
-                                        
+                                        # ROE/ROA values are already calculated as percentages and annualized
+                                        # by the calculate_metric function - just use them directly
+                                        broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce')
+
                                         y_values = broker_data['DISPLAY_VALUE']
                                         hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}}%<br><extra></extra>"
                                     else:
