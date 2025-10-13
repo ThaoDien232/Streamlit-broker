@@ -29,8 +29,9 @@ def load_filtered_data(tickers, metrics, years, quarters):
     # If TOTAL_OPERATING_INCOME is requested, also load its components
     metrics_to_load = list(metrics)
     if 'TOTAL_OPERATING_INCOME' in metrics:
-        toi_components = ['NET_BROKERAGE_INCOME', 'NET_IB_INCOME', 'NET_OTHER_OP_INCOME',
-                         'NET_TRADING_INCOME', 'MARGIN_LENDING_INCOME', 'INTEREST_INCOME']
+        # TOI income streams: brokerage, margin lending, IB, investment and other incomes
+        toi_components = ['NET_BROKERAGE_INCOME', 'MARGIN_LENDING_INCOME', 'NET_IB_INCOME',
+                         'NET_INVESTMENT_INCOME', 'NET_OTHER_OP_INCOME']
         metrics_to_load.extend([m for m in toi_components if m not in metrics_to_load])
 
     df = load_filtered_brokerage_data(
@@ -161,17 +162,13 @@ def calculate_ma4(df, metric_code, ticker):
 def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
     """Create stacked bar chart showing TOI structure (income streams as % of TOI)"""
 
-    # TOI components based on the formula: TOI = Fee Income + Capital Income
-    # Fee Income = Net Brokerage + Net IB + Net Other Operating
-    # Capital Income = Net Trading + Margin Lending + Interest Income
-
+    # TOI income streams: brokerage, margin lending, IB, investment and other incomes
     toi_components = {
-        'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
-        'Net IB Income': 'NET_IB_INCOME',
-        'Net Other Operating Income': 'NET_OTHER_OP_INCOME',
-        'Net Trading Income': 'NET_TRADING_INCOME',
+        'Brokerage Income': 'NET_BROKERAGE_INCOME',
         'Margin Lending Income': 'MARGIN_LENDING_INCOME',
-        'Interest Income': 'INTEREST_INCOME'
+        'IB Income': 'NET_IB_INCOME',
+        'Investment Income': 'NET_INVESTMENT_INCOME',
+        'Other Income': 'NET_OTHER_OP_INCOME'
     }
 
     # Collect data for each broker
@@ -230,12 +227,11 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
 
     # Color scheme for components
     component_colors = {
-        'Net Brokerage Income': '#1f77b4',
-        'Net IB Income': '#ff7f0e',
-        'Net Other Operating Income': '#2ca02c',
-        'Net Trading Income': '#d62728',
+        'Brokerage Income': '#1f77b4',
         'Margin Lending Income': '#9467bd',
-        'Interest Income': '#8c564b'
+        'IB Income': '#ff7f0e',
+        'Investment Income': '#d62728',
+        'Other Income': '#2ca02c'
     }
 
     for broker in selected_brokers:
@@ -476,16 +472,18 @@ with tab1:
                                     )
                                 )
 
-                                # Add MA4 line trace
+                                # Add MA4 line trace - solid line with prominent color
                                 if not broker_data_with_ma4.empty and len(broker_data_with_ma4) >= 4:
+                                    # Use contrasting colors for MA4 lines to make them stand out
+                                    ma4_colors = ['#FF0000', '#00FF00', '#0000FF', '#FF00FF', '#00FFFF', '#FFD700']
                                     fig.add_trace(
                                         go.Scatter(
                                             x=broker_data_with_ma4['Quarter_Label'],
                                             y=broker_data_with_ma4['MA4_DISPLAY'],
                                             name=f"{broker} MA4",
                                             mode='lines+markers',
-                                            line=dict(color=colors[j % len(colors)], dash='dash', width=2),
-                                            marker=dict(size=6),
+                                            line=dict(color=ma4_colors[j % len(ma4_colors)], width=3),
+                                            marker=dict(size=8, symbol='diamond'),
                                             hovertemplate=f"<b>{broker} MA4</b><br>Period: %{{x}}<br>MA4: %{{y:,.2f}}<br><extra></extra>",
                                             legendgroup=broker
                                         )
