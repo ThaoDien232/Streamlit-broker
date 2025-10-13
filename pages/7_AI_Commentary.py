@@ -869,7 +869,6 @@ with col4:
 
 # Show broker information using 3-step approach
 if selected_ticker and selected_quarter:
-    st.success(f"DEBUG: Selected {selected_ticker} - {selected_quarter}")
     try:
         # Load data ONLY for selected ticker and quarter (with lookback)
         ticker_data = load_ticker_data(selected_ticker, selected_quarter)
@@ -899,23 +898,16 @@ if selected_ticker and selected_quarter:
         # Display the data processing results
         st.subheader(f"Financial Analysis: {selected_ticker} - {selected_quarter}")
 
-        # Display earnings drivers analysis (MOVED OUTSIDE CONDITIONAL FOR TESTING)
+        # Display earnings drivers analysis
         st.write("**Earnings Drivers Analysis:**")
         try:
             from utils.earnings_drivers import calculate_earnings_drivers
-
-            # Debug: Show what we're calculating
-            st.info(f"Calculating earnings drivers for {selected_ticker} - {selected_quarter}")
 
             # Create tabs for QoQ and YoY
             tab_qoq, tab_yoy = st.tabs(["Quarter-over-Quarter", "Year-over-Year"])
 
             with tab_qoq:
-                st.write("Attempting QoQ calculation...")
                 drivers_qoq = calculate_earnings_drivers(selected_ticker, selected_quarter, 'QoQ')
-
-                st.write(f"DEBUG: drivers_qoq.empty = {drivers_qoq.empty}")
-                st.write(f"DEBUG: drivers_qoq shape = {drivers_qoq.shape if not drivers_qoq.empty else 'empty'}")
 
                 if not drivers_qoq.empty:
                     # Format the dataframe for display
@@ -940,10 +932,7 @@ if selected_ticker and selected_quarter:
                     st.warning("Insufficient data for QoQ analysis (need at least 2 quarters)")
 
             with tab_yoy:
-                st.write("Attempting YoY calculation...")
                 drivers_yoy = calculate_earnings_drivers(selected_ticker, selected_quarter, 'YoY')
-
-                st.write(f"DEBUG: drivers_yoy.empty = {drivers_yoy.empty}")
 
                 if not drivers_yoy.empty:
                     # Format the dataframe for display
