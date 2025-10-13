@@ -243,10 +243,10 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
     component_colors = {
         'Brokerage Income': "#66c2a5",
         'IB Income': "#fc8d62",
-        'Other Operating Income': "#ffd92f",
+        'Other Operating Income': "#cc96ff",
         'Trading Income': "#e5c494",
-        'Interest Income': "#b0e0b0",
-        'Margin Lending Income': "#cc96ff"
+        'Interest Income': "#ffd92f",
+        'Margin Lending Income': "#b0e0b0"
     }
 
     for broker in selected_brokers:
