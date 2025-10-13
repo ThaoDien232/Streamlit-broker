@@ -258,9 +258,21 @@ with tab1:
                     with columns[i]:
                         st.subheader(f"{get_metric_display_name(metric)}")
 
+                        # DEBUG: Show what we're looking for
+                        if metric in ['ROE', 'ROA']:
+                            unique_metrics = filtered_df['METRIC_CODE'].unique()
+                            st.info(f"DEBUG: Looking for '{metric}' in data. Available metrics: {unique_metrics[:10]}")
+                            st.info(f"DEBUG: Total rows in filtered_df: {len(filtered_df)}")
+
                         # Filter data for current metric (METRIC_CODE is already the right format from database)
                         metric_data = filtered_df[filtered_df['METRIC_CODE'] == metric].copy()
-                        
+
+                        # DEBUG: Show results
+                        if metric in ['ROE', 'ROA']:
+                            st.info(f"DEBUG: Found {len(metric_data)} rows for {metric}")
+                            if not metric_data.empty:
+                                st.write("Sample data:", metric_data.head())
+
                         if not metric_data.empty:
                             # Sort data chronologically
                             metric_data = metric_data.sort_values(['YEARREPORT', 'LENGTHREPORT'])
