@@ -244,7 +244,7 @@ turnover_share_lookup = {}
 if not df_turnover.empty:
     turnover_filtered = df_turnover[df_turnover['Ticker'] == selected_broker].copy()
     turnover_filtered['share'] = turnover_filtered.apply(
-        lambda row: (row['Company turnover'] / row['Market turnover'] / 2)
+        lambda row: (row['Company turnover'] / row['Market turnover'])
         if row['Market turnover'] not in (0, None, np.nan) else np.nan,
         axis=1
     )
@@ -352,7 +352,7 @@ def get_share_for_year(year: int) -> float | None:
         return turnover_share_lookup[future_years[0]]
     return None
 
-history_metrics = []
+history_metrics_raw = []
 for y, q in brokerage_history_quarters:
     stats = quarter_stats_lookup.get((y, q), {})
     total_turnover = stats.get('total_turnover')
@@ -364,45 +364,87 @@ for y, q in brokerage_history_quarters:
     ]
     net_brokerage = float(quarter_row['brokerage_fee'].iloc[0]) if not quarter_row.empty else None
 
-    share_value = get_share_for_year(y)
-    if (
-        share_value is not None
-        and share_value > 0
-        and total_turnover not in (None, 0)
-        and net_brokerage not in (None, 0)
-    ):
-        fee_decimal = net_brokerage / (total_turnover * 2 * share_value)
-        fee_bps = fee_decimal * 10000
-    else:
-        fee_bps = None
-
-    history_metrics.append({
+    history_metrics_raw.append({
         'label': quarter_label(y, q),
         'year': y,
         'quarter': q,
         'avg_daily_bn': avg_daily_bn,
-        'share_pct': share_value * 100 if share_value is not None else None,
-        'fee_bps': fee_bps,
         'net_brokerage_bn': net_brokerage / 1e9 if net_brokerage is not None else None,
         'total_turnover': total_turnover,
         'trading_days': trading_days,
         'net_brokerage': net_brokerage,
     })
 
+year_fee_constant = {}
+for metrics in history_metrics_raw:
+    y = metrics['year']
+    share_year = get_share_for_year(y)
+    if share_year in (None, 0):
+        continue
+    if metrics['net_brokerage'] in (None, 0) or metrics['total_turnover'] in (None, 0):
+        continue
+    year_totals = year_fee_constant.setdefault(y, {'net_brokerage': 0.0, 'turnover': 0.0})
+    year_totals['net_brokerage'] += metrics['net_brokerage']
+    year_totals['turnover'] += metrics['total_turnover']
+
+for y, totals in list(year_fee_constant.items()):
+    share_year = get_share_for_year(y)
+    denom = totals['turnover'] * 2 * share_year if share_year else 0
+    if denom:
+        fee_decimal = totals['net_brokerage'] / denom
+        if fee_decimal > 0:
+            year_fee_constant[y] = fee_decimal
+        else:
+            year_fee_constant.pop(y)
+    else:
+        year_fee_constant.pop(y)
+
+history_metrics = []
+for metrics in history_metrics_raw:
+    y = metrics['year']
+    total_turnover = metrics['total_turnover']
+    net_brokerage = metrics['net_brokerage']
+    fee_decimal = year_fee_constant.get(y)
+
+    share_pct = None
+    fee_bps = None
+    if (
+        fee_decimal
+        and total_turnover not in (None, 0)
+        and net_brokerage not in (None, 0)
+    ):
+        share_decimal = net_brokerage / (total_turnover * 2 * fee_decimal)
+        share_pct = share_decimal * 100
+        fee_bps = fee_decimal * 10000
+    else:
+        share_year = get_share_for_year(y)
+        if share_year:
+            share_pct = share_year * 100
+
+    history_metrics.append({
+        **metrics,
+        'share_pct': share_pct,
+        'fee_bps': fee_bps,
+    })
+
 history_avg_daily = [m['avg_daily_bn'] for m in history_metrics if m['avg_daily_bn'] is not None]
 history_fee_bps = [m['fee_bps'] for m in history_metrics if m['fee_bps'] is not None]
 history_trading_days = [m['trading_days'] for m in history_metrics if m['trading_days']]
 
-share_default = get_share_for_year(target_year)
-if share_default is None and history_metrics:
-    last_with_share = next((m for m in reversed(history_metrics) if m['share_pct']), None)
-    share_default = (last_with_share['share_pct'] / 100) if last_with_share else 0.05
+share_default = None
+last_with_share = next((m for m in reversed(history_metrics) if m['share_pct'] is not None), None)
+if last_with_share:
+    share_default = last_with_share['share_pct'] / 100
+if share_default is None:
+    share_default = get_share_for_year(target_year)
+if share_default is None:
+    share_default = 0.05
 
 avg_daily_default = history_avg_daily[-1] if history_avg_daily else 0.0
 fee_default = history_fee_bps[-1] if history_fee_bps else 2.0
 trading_days_forecast = int(round(np.mean(history_trading_days))) if history_trading_days else 63
 
-share_default_pct = (share_default * 100) if share_default is not None else 5.0
+share_default_pct = share_default * 100
 
 brokerage_input_cols = st.columns(3)
 avg_daily_initial = float(round(avg_daily_default)) if avg_daily_default is not None else 0.0
