@@ -244,7 +244,7 @@ turnover_share_lookup = {}
 if not df_turnover.empty:
     turnover_filtered = df_turnover[df_turnover['Ticker'] == selected_broker].copy()
     turnover_filtered['share'] = turnover_filtered.apply(
-        lambda row: (row['Company turnover'] / row['Market turnover'] / 2)
+        lambda row: (row['Company turnover'] / row['Market turnover'])
         if row['Market turnover'] not in (0, None, np.nan) else np.nan,
         axis=1
     )
