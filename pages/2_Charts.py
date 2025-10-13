@@ -195,10 +195,11 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
         for _, toi_row in toi_data.iterrows():
             year = toi_row['YEARREPORT']
             quarter = toi_row['LENGTHREPORT']
-            quarter_label = toi_row['Quarter_Label']
+            quarter_label = toi_row.get('Quarter_Label', '')
             toi_value = toi_row['VALUE']
 
-            if toi_value == 0:
+            # Skip if data is invalid
+            if pd.isna(toi_value) or toi_value == 0 or not quarter_label:
                 continue
 
             # Get component values for this period
@@ -213,6 +214,11 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
 
                 if not component_row.empty:
                     component_value = component_row.iloc[0]['VALUE']
+
+                    # Skip if component_value is None or NaN
+                    if pd.isna(component_value):
+                        component_value = 0
+
                     percentage = (component_value / toi_value) * 100 if toi_value != 0 else 0
 
                     all_data.append({
@@ -235,9 +241,9 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
 
     # Color scheme for components (6 components)
     component_colors = {
-        'Brokerage Income': "#89ceffff",
+        'Brokerage Income': "#89ceff",
         'IB Income': "#ffaf69",
-        'Other Operating Income': "#9dff9dc5",
+        'Other Operating Income': "#9dff9d",
         'Trading Income': "#ff9f9f",
         'Interest Income': "#b0e0b0",
         'Margin Lending Income': "#cc96ff"
@@ -265,19 +271,30 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
                 if not x_values or not y_values or len(x_values) != len(y_values):
                     continue
 
-                fig.add_trace(
-                    go.Bar(
-                        x=x_values,
-                        y=y_values,
-                        name=f"{broker} - {component_name}",
-                        marker_color=component_colors.get(component_name, '#808080'),
-                        hovertemplate=f"<b>{broker} - {component_name}</b><br>" +
-                                    "Period: %{x}<br>" +
-                                    "Percentage: %{y:.1f}%<br>" +
-                                    "<extra></extra>",
-                        legendgroup=broker
+                # Convert to native Python types for Plotly
+                x_values = [str(x) for x in x_values]  # Ensure strings
+                y_values = [float(y) if not pd.isna(y) else 0.0 for y in y_values]  # Ensure floats
+
+                # Skip if all values are zero
+                if all(y == 0 for y in y_values):
+                    continue
+
+                try:
+                    fig.add_trace(
+                        go.Bar(
+                            x=x_values,
+                            y=y_values,
+                            name=f"{broker} - {component_name}",
+                            marker_color=component_colors.get(component_name, '#808080'),
+                            hovertemplate=f"<b>{broker} - {component_name}</b><br>" +
+                                        "Period: %{x}<br>" +
+                                        "Percentage: %{y:.1f}%<br>" +
+                                        "<extra></extra>",
+                            legendgroup=broker
+                        )
                     )
-                )
+                except Exception as e:
+                    st.warning(f"Skipping trace for {broker} - {component_name}: {str(e)}")
 
     fig.update_layout(
         barmode='stack',
