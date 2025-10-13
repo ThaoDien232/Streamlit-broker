@@ -625,7 +625,7 @@ with tab2:
             with col2:
                 st.metric(
                     label="Quarters Retrieved",
-                    value=len(ms_quarters)
+                    value=len(selected_quarter_labels)
                 )
             
             with col3:
