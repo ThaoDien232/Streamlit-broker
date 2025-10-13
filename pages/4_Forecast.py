@@ -327,13 +327,13 @@ metrics_html = f"""
 .forecast-sticky-inner {{
     display: flex;
     align-items: center;
-    gap: 32px;
+    gap: 24px;
     flex-wrap: wrap;
 }}
 .forecast-sticky-title {{
-    font-size: 20px;
+    font-size: 26px;
     font-weight: 600;
-    margin-right: auto;
+    margin-right: 24px;
 }}
 .forecast-metric {{
     min-width: 180px;
