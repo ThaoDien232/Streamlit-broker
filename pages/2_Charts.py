@@ -162,6 +162,10 @@ def calculate_ma4(df, metric_code, ticker):
 def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
     """Create stacked bar chart showing TOI structure (income streams as % of TOI)"""
 
+    # Validate inputs
+    if filtered_df.empty or not selected_brokers:
+        return None
+
     # TOI = Fee Income + Capital Income
     # Fee Income = Net Brokerage + Net IB + Net Other Operating
     # Capital Income = Net Trading + Interest + Margin Lending
@@ -250,15 +254,23 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
 
         # Create subplots or separate traces for each broker
         for component_name in toi_components.keys():
-            component_data = broker_data[broker_data['Component'] == component_name]
+            component_data = broker_data[broker_data['Component'] == component_name].copy()
 
             if not component_data.empty:
+                # Validate data before adding trace
+                x_values = component_data['Quarter_Label'].tolist()
+                y_values = component_data['Percentage'].tolist()
+
+                # Skip if data is invalid
+                if not x_values or not y_values or len(x_values) != len(y_values):
+                    continue
+
                 fig.add_trace(
                     go.Bar(
-                        x=component_data['Quarter_Label'],
-                        y=component_data['Percentage'],
+                        x=x_values,
+                        y=y_values,
                         name=f"{broker} - {component_name}",
-                        marker_color=component_colors.get(component_name, '#gray'),
+                        marker_color=component_colors.get(component_name, '#808080'),
                         hovertemplate=f"<b>{broker} - {component_name}</b><br>" +
                                     "Period: %{x}<br>" +
                                     "Percentage: %{y:.1f}%<br>" +
