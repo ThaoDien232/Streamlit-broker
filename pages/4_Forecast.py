@@ -143,6 +143,10 @@ def format_bn(value: float) -> float:
     return value / 1e9 if value else 0.0
 
 
+def format_bn_str(value: float) -> str:
+    return f"{format_bn(value):,.0f}"
+
+
 def format_pct(value: float | None) -> str:
     if value is None:
         return "n/a"
@@ -192,6 +196,8 @@ ytd_totals = collect_totals(df_quarters, ytd_mask)
 base_segments = {}
 missing_segments = []
 
+remaining_quarters = 5 - target_quarter
+
 for segment in SEGMENTS:
     fy_value = forecast_map.get(segment['forecast_key'])
     if fy_value is None or math.isnan(fy_value):
@@ -199,10 +205,10 @@ for segment in SEGMENTS:
         fy_value = 0.0
 
     realized = ytd_totals.get(segment['key'], 0.0)
-    base_segments[segment['key']] = fy_value - realized
+    base_segments[segment['key']] = (fy_value - realized) / remaining_quarters
 
 fy_pbt = forecast_map.get('PBT', 0.0)
-base_pbt = fy_pbt - ytd_totals.get('pbt', 0.0)
+base_pbt = (fy_pbt - ytd_totals.get('pbt', 0.0)) / remaining_quarters
 
 sum_base_segments = sum(base_segments.values())
 residual_other = base_pbt - sum_base_segments
@@ -224,10 +230,17 @@ for segment in SEGMENTS:
     base_val = base_segments[segment['key']]
     summary_rows.append({
         "Segment": segment['label'],
-        "FY Forecast (bn VND)": format_bn(fy_val),
-        "Actual YTD (bn VND)": format_bn(realized),
-        f"{target_label} Base (bn VND)": format_bn(base_val),
+        "FY Forecast (bn VND)": format_bn_str(fy_val),
+        "Actual YTD (bn VND)": format_bn_str(realized),
+        f"{target_label} Base (bn VND)": format_bn_str(base_val),
     })
+
+summary_rows.append({
+    "Segment": "PBT",
+    "FY Forecast (bn VND)": format_bn_str(fy_pbt),
+    "Actual YTD (bn VND)": format_bn_str(ytd_totals.get('pbt', 0.0)),
+    f"{target_label} Base (bn VND)": format_bn_str(base_pbt),
+})
 
 summary_df = pd.DataFrame(summary_rows)
 
@@ -247,9 +260,9 @@ for idx, segment in enumerate(SEGMENTS):
             base_bn = 0.0
         value = col.number_input(
             f"{segment['label']} (bn VND)",
-            value=float(round(base_bn, 1)),
+            value=float(round(base_bn)),
             step=10.0,
-            format="%.1f"
+            format="%.0f"
         )
         segment_inputs[segment['key']] = value * 1e9
 
@@ -266,19 +279,18 @@ metrics_columns = st.columns(3)
 
 metrics_columns[0].metric(
     label=f"{target_label} PBT (bn VND)",
-    value=f"{adjusted_pbt / 1e9:,.1f}",
-    delta=f"{impact_vs_base / 1e9:+,.1f} vs base"
+    value=f"{adjusted_pbt / 1e9:,.0f}",
+    delta=f"{impact_vs_base / 1e9:+,.0f} vs base"
 )
 
 metrics_columns[1].metric(
     label="QoQ Growth",
     value=format_pct(qoq_pct),
-    delta=None if prev_pbt == 0 else f"{impact_vs_prev / 1e9:+,.1f} bn vs {latest_label}"
+    delta=None if prev_pbt == 0 else f"{impact_vs_prev / 1e9:+,.0f} bn vs {latest_label}"
 )
 
 metrics_columns[2].metric(
     label="YoY Growth",
     value=format_pct(yoy_pct),
-    delta=None if yoy_pbt in (None, 0) else f"{impact_vs_yoy / 1e9:+,.1f} bn vs {quarter_label(target_year - 1, target_quarter)}"
+    delta=None if yoy_pbt in (None, 0) else f"{impact_vs_yoy / 1e9:+,.0f} bn vs {quarter_label(target_year - 1, target_quarter)}"
 )
-
