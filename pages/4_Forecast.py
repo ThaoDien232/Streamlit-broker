@@ -316,7 +316,7 @@ metrics_html = f"""
 <style>
 #forecast-sticky {{
     position: fixed;
-    top: 110px;
+    top: 70px;
     left: 280px;
     right: 0;
     z-index: 1000;
@@ -361,7 +361,7 @@ metrics_html = f"""
     color: rgba(0,0,0,0.6);
 }}
 .forecast-header-spacer {{
-    height: 110px;
+    height: 80px;
 }}
 @media (max-width: 768px) {{
     #forecast-sticky {{
