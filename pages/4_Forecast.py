@@ -315,7 +315,7 @@ metrics_html = f"""
 <style>
 #forecast-sticky {{
     position: fixed;
-    top: 90px;
+    top: 110px;
     left: 280px;
     right: 0;
     z-index: 1000;
@@ -360,7 +360,7 @@ metrics_html = f"""
     color: rgba(0,0,0,0.6);
 }}
 .forecast-header-spacer {{
-    height: 90px;
+    height: 110px;
 }}
 @media (max-width: 768px) {{
     #forecast-sticky {{
@@ -398,7 +398,8 @@ metrics_html = f"""
     </div>
 </div>
 <div class="forecast-header-spacer"></div>
-<div style="height: 16px;"></div>
 """
 
 sticky_header_placeholder.markdown(metrics_html, unsafe_allow_html=True)
+
+st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
