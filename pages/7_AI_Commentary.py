@@ -869,6 +869,7 @@ with col4:
 
 # Show broker information using 3-step approach
 if selected_ticker and selected_quarter:
+    st.success(f"DEBUG: Selected {selected_ticker} - {selected_quarter}")
     try:
         # Load data ONLY for selected ticker and quarter (with lookback)
         ticker_data = load_ticker_data(selected_ticker, selected_quarter)
