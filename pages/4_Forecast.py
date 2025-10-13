@@ -222,11 +222,7 @@ prev_pbt = float(latest_row['pbt'])
 yoy_row = df_quarters[(df_quarters['YEARREPORT'] == target_year - 1) & (df_quarters['LENGTHREPORT'] == target_quarter)]
 yoy_pbt = float(yoy_row['pbt'].iloc[0]) if not yoy_row.empty else None
 
-st.title("Quarterly Forecast Adjustments")
 st.caption(f"Base assumptions derived from {target_year} full-year forecast minus actual results up to {latest_label}.")
-
-if missing_segments:
-    st.info("Missing forecast values for: " + ", ".join(missing_segments))
 
 sticky_header_placeholder = st.empty()
 
@@ -402,4 +398,7 @@ metrics_html = f"""
 
 sticky_header_placeholder.markdown(metrics_html, unsafe_allow_html=True)
 
-st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+st.markdown("### Quarterly Forecast Adjustments")
+
+if missing_segments:
+    st.info("Missing forecast values for: " + ", ".join(missing_segments))
