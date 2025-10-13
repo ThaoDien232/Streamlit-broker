@@ -82,25 +82,35 @@ def _extract_quarter_data(df: pd.DataFrame, quarter: str) -> Dict[str, float]:
     """Extract key financial metrics for a specific quarter."""
     quarter_df = df[df['QUARTER_LABEL'] == quarter]
 
-    # Helper function to get value safely
-    def get_value(keycode: str) -> float:
-        row = quarter_df[quarter_df['KEYCODE'] == keycode]
+    # Helper function to get value safely - check both KEYCODE and METRIC_CODE
+    def get_value(metric_code: str) -> float:
+        # Try METRIC_CODE first (used in CALC statement type)
+        row = quarter_df[
+            (quarter_df['METRIC_CODE'] == metric_code) &
+            (quarter_df['STATEMENT_TYPE'] == 'CALC')
+        ]
         if not row.empty:
             return float(row.iloc[0]['VALUE'])
+
+        # Fallback to KEYCODE for backward compatibility
+        row = quarter_df[quarter_df.get('KEYCODE', pd.Series()) == metric_code]
+        if not row.empty:
+            return float(row.iloc[0]['VALUE'])
+
         return 0.0
 
     return {
         'quarter': quarter,
         'pbt': get_value('PBT'),
         'net_brokerage': get_value('NET_BROKERAGE_INCOME'),
-        'margin_lending': get_value('NET_MARGIN_LENDING_INCOME'),
+        'margin_lending': get_value('NET_MARGIN_INCOME'),  # Changed from NET_MARGIN_LENDING_INCOME
         'investment_income': get_value('NET_INVESTMENT_INCOME'),
         'ib_income': get_value('NET_IB_INCOME'),
-        'other_operating': get_value('NET_OTHER_OPERATING_INCOME'),
+        'other_operating': get_value('NET_OTHER_INCOME'),  # Changed from NET_OTHER_OPERATING_INCOME
         'sga': get_value('SG_A'),  # Already negative
-        'interest_expense': get_value('INTEREST_EXPENSE'),  # Already negative
+        'interest_expense': get_value('Interest_Expense'),  # Changed to match actual keycode
         'other_income': get_value('NET_OTHER_INCOME'),
-        'total_operating_income': get_value('TOTAL_OPERATING_INCOME')
+        'total_operating_income': get_value('Total_Operating_Income')  # Changed to match actual keycode
     }
 
 
