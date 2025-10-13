@@ -263,7 +263,7 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
                                     "Percentage: %{y:.1f}%<br>" +
                                     "<extra></extra>",
                         legendgroup=broker,
-                        legendgrouptitle_text=broker
+                        legendgrouptitle=dict(text=broker)
                     )
                 )
 
