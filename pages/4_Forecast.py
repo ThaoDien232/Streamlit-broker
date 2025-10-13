@@ -222,7 +222,6 @@ prev_pbt = float(latest_row['pbt'])
 yoy_row = df_quarters[(df_quarters['YEARREPORT'] == target_year - 1) & (df_quarters['LENGTHREPORT'] == target_quarter)]
 yoy_pbt = float(yoy_row['pbt'].iloc[0]) if not yoy_row.empty else None
 
-st.caption(f"Base assumptions derived from {target_year} full-year forecast minus actual results up to {latest_label}.")
 
 sticky_header_placeholder = st.empty()
 
@@ -269,6 +268,13 @@ summary_rows.append(record_pbt)
 columns_order = ["Segment", "FY Forecast (bn VND)"] + [label for _, label in quarter_columns] + [f"{target_label} Base (bn VND)"]
 summary_df = pd.DataFrame(summary_rows)
 summary_df = summary_df[columns_order]
+
+st.subheader("Baseline Breakdown")
+st.markdown("### Quarterly Forecast Adjustments")
+st.caption(f"Base assumptions derived from {target_year} full-year forecast minus actual results up to {latest_label}.")
+
+if missing_segments:
+    st.info("Missing forecast values for: " + ", ".join(missing_segments))
 
 st.subheader("Baseline Breakdown")
 st.dataframe(summary_df, hide_index=True)
@@ -397,8 +403,3 @@ metrics_html = f"""
 """
 
 sticky_header_placeholder.markdown(metrics_html, unsafe_allow_html=True)
-
-st.markdown("### Quarterly Forecast Adjustments")
-
-if missing_segments:
-    st.info("Missing forecast values for: " + ", ".join(missing_segments))
