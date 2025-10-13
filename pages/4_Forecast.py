@@ -398,6 +398,7 @@ metrics_html = f"""
     </div>
 </div>
 <div class="forecast-header-spacer"></div>
+<div style="height: 16px;"></div>
 """
 
 sticky_header_placeholder.markdown(metrics_html, unsafe_allow_html=True)
