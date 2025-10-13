@@ -232,10 +232,11 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
     # Color scheme for components (6 components)
     component_colors = {
         'Brokerage Income': "#89ceffff",
-        'Margin Lending Income': "#cc96ff",
         'IB Income': "#ffaf69",
-        'Investment Income': "#ff9f9f",
-        'Other Income': "#9dff9dc5"
+        'Other Operating Income': "#9dff9dc5",
+        'Trading Income': "#ff9f9f",
+        'Interest Income': "#b0e0b0",
+        'Margin Lending Income': "#cc96ff"
     }
 
     for broker in selected_brokers:
@@ -262,8 +263,7 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
                                     "Period: %{x}<br>" +
                                     "Percentage: %{y:.1f}%<br>" +
                                     "<extra></extra>",
-                        legendgroup=broker,
-                        legendgrouptitle=dict(text=broker)
+                        legendgroup=broker
                     )
                 )
 
@@ -316,8 +316,8 @@ allowed_metrics = [
     'NET_IB_INCOME',
     'NET_OTHER_OP_INCOME',
     'BORROWING_BALANCE',
-    'PBT',
-    'NPAT',
+    'PBT',  # Changed from full name
+    'NPAT',  # Changed from full name
     'SGA',
     'MARGIN_LENDING_INCOME',
     'ROE',
@@ -527,7 +527,7 @@ with tab1:
         else:
             st.warning("Please select brokers to display charts.")
     else:
-        st.info("Please select brokers and years to display charts. The default charts (PBT, ROE, TOI Structure) will be displayed.")
+        st.info("Please select brokers and years to display charts")
 
 with tab2:
     st.header("Brokerage Market Share Data")
