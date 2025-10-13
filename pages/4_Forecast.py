@@ -129,6 +129,26 @@ def prev_quarter(year: int, quarter: int) -> tuple[int, int]:
     return year, quarter - 1
 
 
+def estimate_trading_days(lookup: dict, target_year: int, target_quarter: int) -> int:
+    stats = lookup.get((target_year, target_quarter))
+    if stats:
+        td = stats.get('trading_days')
+        if td and td >= 50:
+            return int(td)
+
+    historical_days = [
+        stats.get('trading_days')
+        for (year, quarter), stats in lookup.items()
+        if quarter == target_quarter and stats.get('trading_days')
+    ]
+
+    filtered_days = [int(d) for d in historical_days if d and d >= 50]
+    if filtered_days:
+        return int(round(sum(filtered_days) / len(filtered_days)))
+
+    return 66
+
+
 def collect_totals(df: pd.DataFrame, mask: pd.Series) -> dict[str, float]:
     subset = df.loc[mask]
     totals = {segment['key']: subset[segment['key']].sum() if not subset.empty else 0.0 for segment in SEGMENTS}
@@ -460,16 +480,13 @@ elif history_fee_bps:
 else:
     fee_default = 2.0
 
-trading_days_forecast = int(round(np.mean(history_trading_days))) if history_trading_days else 63
+trading_days_forecast = estimate_trading_days(quarter_stats_lookup, target_year, target_quarter)
 
 share_default_pct = share_default * 100
 
 target_stats = quarter_stats_lookup.get((target_year, target_quarter))
-if target_stats:
-    if target_stats.get('avg_daily_bn') is not None:
-        avg_daily_default = target_stats['avg_daily_bn']
-    if target_stats.get('trading_days'):
-        trading_days_forecast = target_stats['trading_days']
+if target_stats and target_stats.get('avg_daily_bn') is not None:
+    avg_daily_default = target_stats['avg_daily_bn']
 
 brokerage_input_cols = st.columns(3)
 avg_daily_initial = float(round(avg_daily_default)) if avg_daily_default is not None else 0.0
