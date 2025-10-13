@@ -182,7 +182,7 @@ selected_brokers = st.sidebar.multiselect(
 selected_metrics = st.sidebar.multiselect(
     "Select Metrics:",
     options=allowed_metrics,
-    default=allowed_metrics[:3] if len(allowed_metrics) >= 3 else allowed_metrics,
+    default="Sector",
     format_func=get_metric_display_name,
     key="chart_metrics"
 )
@@ -192,7 +192,7 @@ available_years_filtered = [year for year in available_years if 2021 <= year <= 
 selected_years = st.sidebar.multiselect(
     "Select Years:",
     options=available_years_filtered if available_years_filtered else available_years,
-    default=available_years_filtered[-3:] if len(available_years_filtered) >= 3 else available_years_filtered,
+    default=available_years_filtered[3:] if len(available_years_filtered) >= 3 else available_years_filtered,
     key="chart_years"
 )
 
