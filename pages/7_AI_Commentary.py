@@ -974,6 +974,61 @@ if selected_ticker and selected_quarter:
                 st.write("**Top Proprietary Holdings:**")
                 st.dataframe(prop_holdings_table, use_container_width=True, hide_index=True)
 
+            # Display earnings drivers analysis
+            st.write("**Earnings Drivers Analysis:**")
+            try:
+                from utils.earnings_drivers import calculate_earnings_drivers, format_earnings_drivers_table
+
+                # Create tabs for QoQ and YoY
+                tab_qoq, tab_yoy = st.tabs(["Quarter-over-Quarter", "Year-over-Year"])
+
+                with tab_qoq:
+                    drivers_qoq = calculate_earnings_drivers(selected_ticker, selected_quarter, 'QoQ')
+                    if not drivers_qoq.empty:
+                        # Display formatted table
+                        st.dataframe(
+                            drivers_qoq.style.format({
+                                'Current': '{:.1f}B',
+                                'Prior': '{:.1f}B',
+                                'Change': '{:+.1f}B',
+                                'Impact (pp)': '{:+.1f}pp'
+                            }, na_rep=''),
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
+                        # Show summary metrics
+                        growth_pct = drivers_qoq.attrs.get('growth_pct', 0)
+                        prior_q = drivers_qoq.attrs.get('prior_quarter', '')
+                        st.info(f"PBT Growth: **{growth_pct:+.1f}%** vs {prior_q}")
+                    else:
+                        st.warning("Insufficient data for QoQ analysis (need at least 2 quarters)")
+
+                with tab_yoy:
+                    drivers_yoy = calculate_earnings_drivers(selected_ticker, selected_quarter, 'YoY')
+                    if not drivers_yoy.empty:
+                        # Display formatted table
+                        st.dataframe(
+                            drivers_yoy.style.format({
+                                'Current': '{:.1f}B',
+                                'Prior': '{:.1f}B',
+                                'Change': '{:+.1f}B',
+                                'Impact (pp)': '{:+.1f}pp'
+                            }, na_rep=''),
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
+                        # Show summary metrics
+                        growth_pct = drivers_yoy.attrs.get('growth_pct', 0)
+                        prior_q = drivers_yoy.attrs.get('prior_quarter', '')
+                        st.info(f"PBT Growth: **{growth_pct:+.1f}%** vs {prior_q}")
+                    else:
+                        st.warning("Insufficient data for YoY analysis (need at least 5 quarters)")
+
+            except Exception as e:
+                st.error(f"Error calculating earnings drivers: {e}")
+
             # Show raw metrics for debugging (expandable)
             with st.expander("Detailed Calculation Data"):
                 st.write("**Raw Historical Data (last 10 quarters):**")
@@ -1117,6 +1172,11 @@ if generate_button and selected_ticker and selected_quarter:
                         # Convert analysis table to string for OpenAI
                         analysis_text = analysis_table.to_string(index=False)
 
+                        # Calculate earnings drivers for OpenAI
+                        from utils.earnings_drivers import calculate_earnings_drivers
+                        drivers_qoq = calculate_earnings_drivers(selected_ticker, selected_quarter, 'QoQ')
+                        drivers_yoy = calculate_earnings_drivers(selected_ticker, selected_quarter, 'YoY')
+
                         # Generate commentary and get the prompt
                         result = generate_commentary(
                             ticker=selected_ticker,
@@ -1128,6 +1188,8 @@ if generate_button and selected_ticker and selected_quarter:
                             market_share_table=market_share_table,  # Pass market share table
                             prop_holdings_table=prop_holdings_table,  # Pass prop holdings table
                             investment_composition_table=investment_composition_table,  # Pass investment composition table
+                            earnings_drivers_qoq=drivers_qoq,  # Pass earnings drivers QoQ
+                            earnings_drivers_yoy=drivers_yoy,  # Pass earnings drivers YoY
                             return_prompt=True  # Request the prompt to be returned
                         )
 

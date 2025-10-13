@@ -291,6 +291,8 @@ def generate_commentary(ticker: str, year_quarter: str, df: pd.DataFrame,
                        market_share_table: pd.DataFrame = None,
                        prop_holdings_table: pd.DataFrame = None,
                        investment_composition_table: pd.DataFrame = None,
+                       earnings_drivers_qoq: pd.DataFrame = None,
+                       earnings_drivers_yoy: pd.DataFrame = None,
                        return_prompt: bool = False) -> str:
     """
     Generate AI commentary for a broker's quarterly performance using prepared analysis table.
@@ -389,14 +391,43 @@ Investment Book Composition (Selected Quarter: {year_quarter}):
 {investment_composition_table.to_markdown(index=False, tablefmt='grid')}
 """
 
+    # Add earnings drivers analysis if available
+    if earnings_drivers_qoq is not None and not earnings_drivers_qoq.empty:
+        growth_pct_qoq = earnings_drivers_qoq.attrs.get('growth_pct', 0)
+        prior_q_qoq = earnings_drivers_qoq.attrs.get('prior_quarter', '')
+        prompt += f"""
+Earnings Drivers Analysis (Quarter-over-Quarter):
+PBT Growth: {growth_pct_qoq:+.1f}% vs {prior_q_qoq}
+
+{earnings_drivers_qoq.to_markdown(index=False, tablefmt='grid')}
+
+NOTE: The "Impact (pp)" column shows each component's contribution to PBT growth in percentage points.
+For example, if Net Brokerage Income shows +5.2pp, it means brokerage contributed 5.2 percentage points to the total PBT growth.
+All impacts sum to the total PBT growth rate.
+"""
+
+    if earnings_drivers_yoy is not None and not earnings_drivers_yoy.empty:
+        growth_pct_yoy = earnings_drivers_yoy.attrs.get('growth_pct', 0)
+        prior_q_yoy = earnings_drivers_yoy.attrs.get('prior_quarter', '')
+        prompt += f"""
+Earnings Drivers Analysis (Year-over-Year):
+PBT Growth: {growth_pct_yoy:+.1f}% vs {prior_q_yoy}
+
+{earnings_drivers_yoy.to_markdown(index=False, tablefmt='grid')}
+
+NOTE: The "Impact (pp)" column shows each component's contribution to PBT growth in percentage points.
+"""
+
     prompt += """
 Your answer must follow this structure exactly. Do not add or remove sections.
 
 ## 1. Overall (max 5 bullet points)
 Focus on what kind of quarter this was, what drove it, and how sustainable it looks.
 Start with PBT QoQ and YoY growth, then show the ROE beside it to frame profitability.
-Describe which specific income stream (brokerage, margin, investment, or IB) primarily drove the quarter’s change.
+**Use the Earnings Drivers Analysis to identify which specific income stream (brokerage, margin, investment, or IB) contributed most to PBT growth.**
+For example, if Net Brokerage Income shows +8.5pp impact while Investment Income shows +2.1pp impact, clearly state that brokerage was the primary driver (contributing 8.5 percentage points) with supporting contribution from investment (2.1pp).
 Do not mention total operating income as a driver since it is a sum of all income streams.
+If costs (SG&A or Interest Expense) show negative impact (reducing growth), mention this as a headwind.
 Avoid unrelated income commentary in this section. Use this part to give the investor a clear sense of the overall tone of the quarter (improving, stable, or softening).
 
 ## 2. Traditional brokerage (max 3 bullet points)
@@ -411,7 +442,7 @@ Discuss how the current level implies lending capacity or headroom versus the 20
 Present investment income growth QoQ and YoY and connect it to the composition and any change in the investment book. 
 Go beyond FVTPL, AFS, or HTM classification — describe whether the broker mainly holds bonds, equities, or deposits/CDs, as this determines the nature of its investment style. 
 A broker with large holdings in bonds, deposits, or CDs typically shows stable investment income, while one with heavy listed equity exposure tends to show higher volatility. 
-If the broker has high exposure to listed FVTPL equities, include the top holdings and explain how they may have affected performance. 
+If the broker has high exposure to listed equities (classified under FVTPL), include the top holdings and explain how they may have affected performance. 
 Comment on whether recent shifts in the investment mix suggest a more conservative or aggressive investment posture.
 
 ## 4. IB (max 2 bullet points)
