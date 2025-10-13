@@ -918,22 +918,19 @@ if selected_ticker and selected_quarter:
                 st.write(f"DEBUG: drivers_qoq shape = {drivers_qoq.shape if not drivers_qoq.empty else 'empty'}")
 
                 if not drivers_qoq.empty:
-                    # Display raw table first
-                    st.write("**Raw Data:**")
-                    st.dataframe(drivers_qoq, use_container_width=True)
+                    # Format the dataframe for display
+                    display_df = drivers_qoq.copy()
+                    for idx, row in display_df.iterrows():
+                        # Skip section headers (they have empty string values)
+                        if row['Current'] == '':
+                            continue
+                        # Format numeric values
+                        display_df.at[idx, 'Current'] = f"{row['Current']:.1f}B"
+                        display_df.at[idx, 'Prior'] = f"{row['Prior']:.1f}B"
+                        display_df.at[idx, 'Change'] = f"{row['Change']:+.1f}B"
+                        display_df.at[idx, 'Impact (pp)'] = f"{row['Impact (pp)']:+.1f}pp"
 
-                    # Then display formatted table
-                    st.write("**Formatted Data:**")
-                    st.dataframe(
-                        drivers_qoq.style.format({
-                            'Current': '{:.1f}B',
-                            'Prior': '{:.1f}B',
-                            'Change': '{:+.1f}B',
-                            'Impact (pp)': '{:+.1f}pp'
-                        }, na_rep=''),
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                    st.dataframe(display_df, use_container_width=True, hide_index=True)
 
                     # Show summary metrics
                     growth_pct = drivers_qoq.attrs.get('growth_pct', 0)
@@ -949,22 +946,19 @@ if selected_ticker and selected_quarter:
                 st.write(f"DEBUG: drivers_yoy.empty = {drivers_yoy.empty}")
 
                 if not drivers_yoy.empty:
-                    # Display raw table first
-                    st.write("**Raw Data:**")
-                    st.dataframe(drivers_yoy, use_container_width=True)
+                    # Format the dataframe for display
+                    display_df = drivers_yoy.copy()
+                    for idx, row in display_df.iterrows():
+                        # Skip section headers (they have empty string values)
+                        if row['Current'] == '':
+                            continue
+                        # Format numeric values
+                        display_df.at[idx, 'Current'] = f"{row['Current']:.1f}B"
+                        display_df.at[idx, 'Prior'] = f"{row['Prior']:.1f}B"
+                        display_df.at[idx, 'Change'] = f"{row['Change']:+.1f}B"
+                        display_df.at[idx, 'Impact (pp)'] = f"{row['Impact (pp)']:+.1f}pp"
 
-                    # Then display formatted table
-                    st.write("**Formatted Data:**")
-                    st.dataframe(
-                        drivers_yoy.style.format({
-                            'Current': '{:.1f}B',
-                            'Prior': '{:.1f}B',
-                            'Change': '{:+.1f}B',
-                            'Impact (pp)': '{:+.1f}pp'
-                        }, na_rep=''),
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                    st.dataframe(display_df, use_container_width=True, hide_index=True)
 
                     # Show summary metrics
                     growth_pct = drivers_yoy.attrs.get('growth_pct', 0)
