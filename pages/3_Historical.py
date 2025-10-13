@@ -109,6 +109,8 @@ def display_income_statement(df, ticker, periods, display_mode):
         ('INTEREST_EXPENSE', 'Interest Expense'),
         ('PBT', 'Profit Before Tax'),
         ('NPAT', 'Net Profit After Tax'),
+        ('ROE', 'Return on Equity (%)'),
+        ('ROA', 'Return on Assets (%)'),
     ]
     
     if display_mode == "Absolute Values":
@@ -118,15 +120,22 @@ def display_income_statement(df, ticker, periods, display_mode):
         for metric_code, metric_name in is_calc_metrics:
             row = {'Metric': metric_name}
             has_data = False
-            
+
             for period in periods:
                 year = period['YEARREPORT']
                 quarter = period['LENGTHREPORT']
                 label = f"{year} {period['QUARTER_LABEL']}"
-                
+
                 value = get_calc_metric_value(df, ticker, year, quarter, metric_code)
-                row[label] = format_vnd_billions(value)
-                
+
+                # Format based on metric type
+                if metric_code in ['ROE', 'ROA']:
+                    # These are already percentages (e.g., 15.5 = 15.5%)
+                    row[label] = f"{value:.2f}%" if value != 0 else "-"
+                else:
+                    # Financial values in VND
+                    row[label] = format_vnd_billions(value)
+
                 if value != 0:
                     has_data = True
             

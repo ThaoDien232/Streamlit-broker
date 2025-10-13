@@ -26,9 +26,16 @@ def load_filtered_data(tickers, metrics, years, quarters):
     if not tickers or not metrics or not years or not quarters:
         return pd.DataFrame()
 
+    # If TOTAL_OPERATING_INCOME is requested, also load its components
+    metrics_to_load = list(metrics)
+    if 'TOTAL_OPERATING_INCOME' in metrics:
+        toi_components = ['NET_BROKERAGE_INCOME', 'NET_IB_INCOME', 'NET_OTHER_OP_INCOME',
+                         'NET_TRADING_INCOME', 'MARGIN_LENDING_INCOME', 'INTEREST_INCOME']
+        metrics_to_load.extend([m for m in toi_components if m not in metrics_to_load])
+
     df = load_filtered_brokerage_data(
         tickers=tickers,
-        metrics=metrics,
+        metrics=metrics_to_load,
         years=years,
         quarters=quarters
     )
@@ -135,6 +142,153 @@ def create_quarter_label(row):
     else:
         return f"Q{int(row['LENGTHREPORT'])} {int(row['YEARREPORT'])}"
 
+def calculate_ma4(df, metric_code, ticker):
+    """Calculate MA4 (moving average of 4 most recent quarters) for a metric"""
+    # Filter data for the specific metric and ticker
+    metric_data = df[(df['METRIC_CODE'] == metric_code) & (df['TICKER'] == ticker)].copy()
+
+    if metric_data.empty:
+        return pd.DataFrame()
+
+    # Sort by year and quarter
+    metric_data = metric_data.sort_values(['YEARREPORT', 'LENGTHREPORT'])
+
+    # Calculate rolling average of 4 quarters
+    metric_data['MA4'] = metric_data['VALUE'].rolling(window=4, min_periods=1).mean()
+
+    return metric_data
+
+def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
+    """Create stacked bar chart showing TOI structure (income streams as % of TOI)"""
+
+    # TOI components based on the formula: TOI = Fee Income + Capital Income
+    # Fee Income = Net Brokerage + Net IB + Net Other Operating
+    # Capital Income = Net Trading + Margin Lending + Interest Income
+
+    toi_components = {
+        'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
+        'Net IB Income': 'NET_IB_INCOME',
+        'Net Other Operating Income': 'NET_OTHER_OP_INCOME',
+        'Net Trading Income': 'NET_TRADING_INCOME',
+        'Margin Lending Income': 'MARGIN_LENDING_INCOME',
+        'Interest Income': 'INTEREST_INCOME'
+    }
+
+    # Collect data for each broker
+    all_data = []
+
+    for broker in selected_brokers:
+        # Get TOI values
+        toi_data = filtered_df[(filtered_df['TICKER'] == broker) &
+                               (filtered_df['METRIC_CODE'] == 'TOTAL_OPERATING_INCOME')].copy()
+
+        if toi_data.empty:
+            continue
+
+        toi_data = toi_data.sort_values(['YEARREPORT', 'LENGTHREPORT'])
+
+        for _, toi_row in toi_data.iterrows():
+            year = toi_row['YEARREPORT']
+            quarter = toi_row['LENGTHREPORT']
+            quarter_label = toi_row['Quarter_Label']
+            toi_value = toi_row['VALUE']
+
+            if toi_value == 0:
+                continue
+
+            # Get component values for this period
+            period_data = filtered_df[
+                (filtered_df['TICKER'] == broker) &
+                (filtered_df['YEARREPORT'] == year) &
+                (filtered_df['LENGTHREPORT'] == quarter)
+            ]
+
+            for component_name, component_code in toi_components.items():
+                component_row = period_data[period_data['METRIC_CODE'] == component_code]
+
+                if not component_row.empty:
+                    component_value = component_row.iloc[0]['VALUE']
+                    percentage = (component_value / toi_value) * 100 if toi_value != 0 else 0
+
+                    all_data.append({
+                        'Broker': broker,
+                        'Quarter_Label': quarter_label,
+                        'Component': component_name,
+                        'Percentage': percentage,
+                        'Value': component_value,
+                        'Year': year,
+                        'Quarter': quarter
+                    })
+
+    if not all_data:
+        return None
+
+    df_structure = pd.DataFrame(all_data)
+
+    # Create stacked bar chart for each broker
+    fig = go.Figure()
+
+    # Color scheme for components
+    component_colors = {
+        'Net Brokerage Income': '#1f77b4',
+        'Net IB Income': '#ff7f0e',
+        'Net Other Operating Income': '#2ca02c',
+        'Net Trading Income': '#d62728',
+        'Margin Lending Income': '#9467bd',
+        'Interest Income': '#8c564b'
+    }
+
+    for broker in selected_brokers:
+        broker_data = df_structure[df_structure['Broker'] == broker].copy()
+
+        if broker_data.empty:
+            continue
+
+        # Sort by period
+        broker_data = broker_data.sort_values(['Year', 'Quarter'])
+
+        # Create subplots or separate traces for each broker
+        for component_name in toi_components.keys():
+            component_data = broker_data[broker_data['Component'] == component_name]
+
+            if not component_data.empty:
+                fig.add_trace(
+                    go.Bar(
+                        x=component_data['Quarter_Label'],
+                        y=component_data['Percentage'],
+                        name=f"{broker} - {component_name}",
+                        marker_color=component_colors.get(component_name, '#gray'),
+                        hovertemplate=f"<b>{broker} - {component_name}</b><br>" +
+                                    "Period: %{x}<br>" +
+                                    "Percentage: %{y:.1f}%<br>" +
+                                    "<extra></extra>",
+                        legendgroup=broker,
+                        legendgrouptitle_text=broker
+                    )
+                )
+
+    fig.update_layout(
+        barmode='stack',
+        title=f"Total Operating Income Structure - {timeframe_type}",
+        xaxis_title="Period",
+        yaxis_title="Percentage of TOI (%)",
+        height=500,
+        hovermode='x unified',
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02
+        )
+    )
+
+    # Set y-axis range to 0-100%
+    fig.update_yaxes(range=[0, 100])
+
+    return fig
+
 # Header with reload button
 col1, col2 = st.columns([3, 1])
 with col1:
@@ -170,29 +324,36 @@ allowed_metrics = [
     'ROA'
 ]
 
-# Broker selection
+# Broker selection - NO DEFAULT
 selected_brokers = st.sidebar.multiselect(
     "Select Brokers:",
     options=available_brokers,
-    default=available_brokers[:3] if len(available_brokers) >= 3 else available_brokers,
+    default=[],  # No default brokers
     key="chart_brokers"
 )
 
-# Metrics selection - NOW ALWAYS AVAILABLE
-selected_metrics = st.sidebar.multiselect(
-    "Select Metrics:",
-    options=allowed_metrics,
-    default="Sector",
+# Fixed default charts (always displayed)
+fixed_charts = ['PBT', 'ROE', 'TOTAL_OPERATING_INCOME']
+
+# Additional metrics selection - NOW ALWAYS AVAILABLE
+additional_metrics = st.sidebar.multiselect(
+    "Additional Charts (optional):",
+    options=[m for m in allowed_metrics if m not in fixed_charts],
+    default=[],
     format_func=get_metric_display_name,
     key="chart_metrics"
 )
 
-# Year selection - from metadata
+# Combine fixed and additional metrics
+selected_metrics = fixed_charts + additional_metrics
+
+# Year selection - default to 2023, 2024, 2025
 available_years_filtered = [year for year in available_years if 2021 <= year <= 2025]
+default_years = [y for y in [2023, 2024, 2025] if y in available_years_filtered]
 selected_years = st.sidebar.multiselect(
     "Select Years:",
     options=available_years_filtered if available_years_filtered else available_years,
-    default=available_years_filtered[3:] if len(available_years_filtered) >= 3 else available_years_filtered,
+    default=default_years,
     key="chart_years"
 )
 
@@ -234,110 +395,137 @@ tab1, tab2 = st.tabs(["📊 Financial Charts", "📈 Market Share Data"])
 
 with tab1:
     st.header("Financial Metrics Charts")
-    
+
     if not df_calc.empty and selected_metrics and selected_brokers:
         # Data is already filtered by load_filtered_data, no need to filter again
         filtered_df = df_calc.copy()
 
         if not filtered_df.empty:
-            
-            # Display 2 charts per row using Streamlit columns
-            for idx in range(0, len(selected_metrics), 2):
-                # Create columns for current row
-                if idx + 1 < len(selected_metrics):
-                    col1, col2 = st.columns(2)
-                    metrics_in_row = [selected_metrics[idx], selected_metrics[idx + 1]]
-                    columns = [col1, col2]
-                else:
-                    col1, col2 = st.columns(2)
-                    metrics_in_row = [selected_metrics[idx]]
-                    columns = [col1]
-                
-                # Create charts for metrics in this row
-                for i, metric in enumerate(metrics_in_row):
-                    with columns[i]:
-                        st.subheader(f"{get_metric_display_name(metric)}")
 
-                        # Filter data for current metric (METRIC_CODE is already the right format from database)
-                        metric_data = filtered_df[filtered_df['METRIC_CODE'] == metric].copy()
-                        
-                        if not metric_data.empty:
-                            # Sort data chronologically
-                            metric_data = metric_data.sort_values(['YEARREPORT', 'LENGTHREPORT'])
-                            
-                            # Create bar chart
-                            fig = go.Figure()
-                            
-                            # Color palette
-                            colors = px.colors.qualitative.Set3
-                            
-                            # Add bar for each broker
-                            for j, broker in enumerate(selected_brokers):
-                                broker_data = metric_data[metric_data['TICKER'] == broker].copy()
-                                
-                                if not broker_data.empty:
-                                    # Check if this is ROE or ROA (percentage metrics)
-                                    if metric in ['ROE', 'ROA']:
-                                        # For ROE/ROA, multiply by 100 to convert to percentage
-                                        broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce') * 100
-                                        
-                                        # Annualize quarterly values by multiplying by 4
-                                        # Only annualize if it's quarterly data (LENGTHREPORT != 5)
-                                        quarterly_mask = broker_data['LENGTHREPORT'] != 5
-                                        broker_data.loc[quarterly_mask, 'DISPLAY_VALUE'] *= 4
-                                        
-                                        y_values = broker_data['DISPLAY_VALUE']
-                                        hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}}%<br><extra></extra>"
-                                    else:
-                                        # Convert other values to billions for display
-                                        broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce') / 1_000_000_000
-                                        y_values = broker_data['DISPLAY_VALUE']
-                                        hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.3f}}B VND<br><extra></extra>"
-                                    
-                                    # Sort by period to ensure consistent ordering
-                                    broker_data = broker_data.sort_values(['YEARREPORT', 'LENGTHREPORT'])
-                                    
+            # Display charts - handle TOI structure specially
+            chart_idx = 0
+            for metric in selected_metrics:
+                # Special handling for TOI Structure chart
+                if metric == 'TOTAL_OPERATING_INCOME':
+                    st.subheader("Total Operating Income Structure")
+                    toi_fig = create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type)
+                    if toi_fig:
+                        st.plotly_chart(toi_fig, use_container_width=True)
+                    else:
+                        st.warning("No data available for TOI structure chart.")
+                    continue
+
+                # Standard charts (PBT, ROE, and additional metrics)
+                # Display 2 charts per row
+                if chart_idx % 2 == 0:
+                    col1, col2 = st.columns(2)
+
+                with col1 if chart_idx % 2 == 0 else col2:
+                    st.subheader(f"{get_metric_display_name(metric)}")
+
+                    # Filter data for current metric
+                    metric_data = filtered_df[filtered_df['METRIC_CODE'] == metric].copy()
+
+                    if not metric_data.empty:
+                        # Sort data chronologically
+                        metric_data = metric_data.sort_values(['YEARREPORT', 'LENGTHREPORT'])
+
+                        # Create bar chart
+                        fig = go.Figure()
+
+                        # Color palette
+                        colors = px.colors.qualitative.Set3
+
+                        # Add bar and MA4 line for each broker
+                        for j, broker in enumerate(selected_brokers):
+                            broker_data = metric_data[metric_data['TICKER'] == broker].copy()
+
+                            if not broker_data.empty:
+                                # Sort by period to ensure consistent ordering
+                                broker_data = broker_data.sort_values(['YEARREPORT', 'LENGTHREPORT'])
+
+                                # Calculate MA4 for this broker
+                                broker_data_with_ma4 = calculate_ma4(filtered_df, metric, broker)
+
+                                # Check if this is ROE or ROA (percentage metrics)
+                                if metric in ['ROE', 'ROA']:
+                                    broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce')
+                                    y_values = broker_data['DISPLAY_VALUE']
+                                    hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}}%<br><extra></extra>"
+
+                                    if not broker_data_with_ma4.empty:
+                                        broker_data_with_ma4['MA4_DISPLAY'] = broker_data_with_ma4['MA4']
+                                else:
+                                    # Convert other values to billions for display
+                                    broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce') / 1_000_000_000
+                                    y_values = broker_data['DISPLAY_VALUE']
+                                    hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.3f}}B VND<br><extra></extra>"
+
+                                    if not broker_data_with_ma4.empty:
+                                        broker_data_with_ma4['MA4_DISPLAY'] = broker_data_with_ma4['MA4'] / 1_000_000_000
+
+                                # Add bar trace
+                                fig.add_trace(
+                                    go.Bar(
+                                        x=broker_data['Quarter_Label'],
+                                        y=y_values,
+                                        name=broker,
+                                        marker_color=colors[j % len(colors)],
+                                        hovertemplate=hover_template,
+                                        legendgroup=broker
+                                    )
+                                )
+
+                                # Add MA4 line trace
+                                if not broker_data_with_ma4.empty and len(broker_data_with_ma4) >= 4:
                                     fig.add_trace(
-                                        go.Bar(
-                                            x=broker_data['Quarter_Label'],
-                                            y=y_values,
-                                            name=broker,
-                                            marker_color=colors[j % len(colors)],
-                                            hovertemplate=hover_template
+                                        go.Scatter(
+                                            x=broker_data_with_ma4['Quarter_Label'],
+                                            y=broker_data_with_ma4['MA4_DISPLAY'],
+                                            name=f"{broker} MA4",
+                                            mode='lines+markers',
+                                            line=dict(color=colors[j % len(colors)], dash='dash', width=2),
+                                            marker=dict(size=6),
+                                            hovertemplate=f"<b>{broker} MA4</b><br>Period: %{{x}}<br>MA4: %{{y:,.2f}}<br><extra></extra>",
+                                            legendgroup=broker
                                         )
                                     )
-                            
-                            # Set y-axis title and format based on metric type
-                            if metric in ['ROE', 'ROA']:
-                                yaxis_title = "Percentage (%)"
-                                tick_format = ".2f"
-                            else:
-                                yaxis_title = "Value (Billions VND)"
-                                tick_format = ".0f"
-                            
-                            # Update layout
-                            fig.update_layout(
-                                height=400,
-                                title=f"{get_metric_display_name(metric)} - {timeframe_type} Comparison",
-                                xaxis_title="Period",
-                                yaxis_title=yaxis_title,
-                                hovermode='x unified',
-                                showlegend=True,
-                                legend=dict(
-                                    orientation="h",
-                                    yanchor="bottom",
-                                    y=1.02,
-                                    xanchor="right",
-                                    x=1
-                                ),
-                                barmode='group'
-                            )
-                            fig.update_yaxes(tickformat=tick_format)
-                            st.plotly_chart(fig, use_container_width=True)
+
+                        # Set y-axis title and format based on metric type
+                        if metric in ['ROE', 'ROA']:
+                            yaxis_title = "Percentage (%)"
+                            tick_format = ".2f"
                         else:
-                            st.warning(f"No data available for {get_metric_display_name(metric)} with current filters.")
+                            yaxis_title = "Value (Billions VND)"
+                            tick_format = ".0f"
+
+                        # Update layout
+                        fig.update_layout(
+                            height=400,
+                            title=f"{get_metric_display_name(metric)} - {timeframe_type} Comparison",
+                            xaxis_title="Period",
+                            yaxis_title=yaxis_title,
+                            hovermode='x unified',
+                            showlegend=True,
+                            legend=dict(
+                                orientation="h",
+                                yanchor="bottom",
+                                y=1.02,
+                                xanchor="right",
+                                x=1
+                            ),
+                            barmode='group'
+                        )
+                        fig.update_yaxes(tickformat=tick_format)
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning(f"No data available for {get_metric_display_name(metric)} with current filters.")
+
+                chart_idx += 1
         else:
-            st.warning("Please select brokers and metrics to display charts.")
+            st.warning("Please select brokers to display charts.")
+    else:
+        st.info("Please select brokers and years to display charts. The default charts (PBT, ROE, TOI Structure) will be displayed.")
 
 with tab2:
     st.header("Brokerage Market Share Data")

@@ -45,9 +45,9 @@ METRIC_TO_DB_KEYCODE = {
     'TOTAL_ASSETS': 'BS.92',  # TOTAL ASSETS
     'TOTAL_EQUITY': 'BS.142',  # OWNER'S EQUITY
 
-    # Ratios - ROE/ROA are already stored in database as calculated metrics
-    'ROE': 'ROE',  # Already calculated and stored in database (KEYCODE='ROE')
-    'ROA': 'ROA',  # Already calculated and stored in database (KEYCODE='ROA')
+    # Ratios - These need to be calculated (not stored in database)
+    'ROE': None,  # Calculate: NPAT / TOTAL_EQUITY * 100 * 4 (annualized)
+    'ROA': None,  # Calculate: NPAT / TOTAL_ASSETS * 100 * 4 (annualized)
     'INTEREST_RATE': None,  # Calculate: INTEREST_EXPENSE / AVG_BORROWING * 4 (annualized)
 }
 
@@ -118,10 +118,19 @@ PORTFOLIO_KEYCODES = {
 
 # ============================================================================
 # METRICS REQUIRING CALCULATION (not in database)
-# Note: ROE and ROA are already in database, removed from this dict
 # ============================================================================
 
 CALCULATED_METRICS = {
+    'ROE': {
+        'formula': 'NPAT / TOTAL_EQUITY * 100',
+        'components': ['NPAT', 'TOTAL_EQUITY'],
+        'annualize_quarterly': True,
+    },
+    'ROA': {
+        'formula': 'NPAT / TOTAL_ASSETS * 100',
+        'components': ['NPAT', 'TOTAL_ASSETS'],
+        'annualize_quarterly': True,
+    },
     'INTEREST_RATE': {
         'formula': 'INTEREST_EXPENSE / AVG_BORROWING_BALANCE',
         'components': ['INTEREST_EXPENSE', 'BORROWING_BALANCE'],
