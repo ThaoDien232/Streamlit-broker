@@ -315,7 +315,7 @@ metrics_html = f"""
 <style>
 #forecast-sticky {{
     position: fixed;
-    top: 60px;
+    top: 90px;
     left: 280px;
     right: 0;
     z-index: 1000;
@@ -327,13 +327,19 @@ metrics_html = f"""
 .forecast-sticky-inner {{
     display: flex;
     align-items: center;
-    gap: 24px;
+    justify-content: space-between;
+    gap: 16px;
     flex-wrap: wrap;
 }}
 .forecast-sticky-title {{
     font-size: 26px;
     font-weight: 600;
-    margin-right: 24px;
+}}
+.forecast-metrics-group {{
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
 }}
 .forecast-metric {{
     min-width: 180px;
@@ -354,18 +360,15 @@ metrics_html = f"""
     color: rgba(0,0,0,0.6);
 }}
 .forecast-header-spacer {{
-    height: 140px;
+    height: 90px;
 }}
 @media (max-width: 768px) {{
     #forecast-sticky {{
         left: 0;
         padding: 12px 16px;
     }}
-    .forecast-sticky-inner {{
+    .forecast-metrics-group {{
         gap: 16px;
-    }}
-    .forecast-metric {{
-        min-width: 140px;
     }}
     .forecast-metric-value {{
         font-size: 22px;
@@ -375,20 +378,22 @@ metrics_html = f"""
 <div id="forecast-sticky">
     <div class="forecast-sticky-inner">
         <div class="forecast-sticky-title">{selected_broker} – {target_label}</div>
-        <div class="forecast-metric">
-            <div class="forecast-metric-label">PBT</div>
-            <div class="forecast-metric-value">{adjusted_pbt / 1e9:,.0f} bn</div>
-            <div class="forecast-metric-delta">{impact_vs_base / 1e9:+,.0f} vs base</div>
-        </div>
-        <div class="forecast-metric">
-            <div class="forecast-metric-label">QoQ Growth</div>
-            <div class="forecast-metric-value">{qoq_value}</div>
-            <div class="forecast-metric-delta">{qoq_delta}</div>
-        </div>
-        <div class="forecast-metric">
-            <div class="forecast-metric-label">YoY Growth</div>
-            <div class="forecast-metric-value">{yoy_value}</div>
-            <div class="forecast-metric-delta">{yoy_delta}</div>
+        <div class="forecast-metrics-group">
+            <div class="forecast-metric">
+                <div class="forecast-metric-label">PBT</div>
+                <div class="forecast-metric-value">{adjusted_pbt / 1e9:,.0f} bn</div>
+                <div class="forecast-metric-delta">{impact_vs_base / 1e9:+,.0f} vs base</div>
+            </div>
+            <div class="forecast-metric">
+                <div class="forecast-metric-label">QoQ Growth</div>
+                <div class="forecast-metric-value">{qoq_value}</div>
+                <div class="forecast-metric-delta">{qoq_delta}</div>
+            </div>
+            <div class="forecast-metric">
+                <div class="forecast-metric-label">YoY Growth</div>
+                <div class="forecast-metric-value">{yoy_value}</div>
+                <div class="forecast-metric-delta">{yoy_delta}</div>
+            </div>
         </div>
     </div>
 </div>
