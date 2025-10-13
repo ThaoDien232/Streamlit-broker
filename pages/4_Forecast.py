@@ -464,6 +464,13 @@ trading_days_forecast = int(round(np.mean(history_trading_days))) if history_tra
 
 share_default_pct = share_default * 100
 
+target_stats = quarter_stats_lookup.get((target_year, target_quarter))
+if target_stats:
+    if target_stats.get('avg_daily_bn') is not None:
+        avg_daily_default = target_stats['avg_daily_bn']
+    if target_stats.get('trading_days'):
+        trading_days_forecast = target_stats['trading_days']
+
 brokerage_input_cols = st.columns(3)
 avg_daily_initial = float(round(avg_daily_default)) if avg_daily_default is not None else 0.0
 avg_daily_input = brokerage_input_cols[0].number_input(
