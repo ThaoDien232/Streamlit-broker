@@ -3,6 +3,7 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+import requests
 import streamlit as st
 import toml
 
@@ -352,7 +353,31 @@ def get_share_for_year(year: int) -> float | None:
         return turnover_share_lookup[future_years[0]]
     return None
 
-history_metrics_raw = []
+@st.cache_data(ttl=3600)
+def fetch_market_share_api(broker: str, year: int, quarter: int):
+    try:
+        url = "https://api.hsx.vn/s/api/v1/1/brokeragemarketshare/top/ten"
+        params = {
+            'pageIndex': 1,
+            'pageSize': 30,
+            'year': year,
+            'period': quarter,
+            'dateType': 1
+        }
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get('success') and 'data' in data:
+            for item in data['data'].get('brokerageStock', []):
+                if item.get('shortenName', '').upper() == broker.upper():
+                    return float(item.get('percentage', 0))
+    except Exception:
+        return None
+    return None
+
+history_metrics = []
+year_fee_observations = {}
+
 for y, q in brokerage_history_quarters:
     stats = quarter_stats_lookup.get((y, q), {})
     total_turnover = stats.get('total_turnover')
@@ -364,84 +389,77 @@ for y, q in brokerage_history_quarters:
     ]
     net_brokerage = float(quarter_row['brokerage_fee'].iloc[0]) if not quarter_row.empty else None
 
-    history_metrics_raw.append({
+    api_share_pct = fetch_market_share_api(selected_broker, y, q)
+
+    share_decimal = None
+    share_pct_display = None
+    if api_share_pct:
+        share_decimal = (api_share_pct / 100) / 2
+        share_pct_display = share_decimal * 100
+    else:
+        share_year = get_share_for_year(y)
+        if share_year:
+            share_decimal = share_year / 2
+            share_pct_display = share_decimal * 100
+
+    fee_decimal = None
+    if (
+        share_decimal
+        and share_decimal > 0
+        and total_turnover not in (None, 0)
+        and net_brokerage not in (None, 0)
+    ):
+        fee_decimal = net_brokerage / (total_turnover * 2 * share_decimal)
+        if fee_decimal <= 0:
+            fee_decimal = None
+
+    if fee_decimal:
+        year_fee_observations.setdefault(y, []).append(fee_decimal)
+
+    history_metrics.append({
         'label': quarter_label(y, q),
         'year': y,
         'quarter': q,
         'avg_daily_bn': avg_daily_bn,
+        'share_pct': share_pct_display,
+        'fee_bps': fee_decimal * 10000 if fee_decimal else None,
         'net_brokerage_bn': net_brokerage / 1e9 if net_brokerage is not None else None,
         'total_turnover': total_turnover,
         'trading_days': trading_days,
         'net_brokerage': net_brokerage,
-    })
-
-year_fee_constant = {}
-for metrics in history_metrics_raw:
-    y = metrics['year']
-    share_year = get_share_for_year(y)
-    if share_year in (None, 0):
-        continue
-    if metrics['net_brokerage'] in (None, 0) or metrics['total_turnover'] in (None, 0):
-        continue
-    year_totals = year_fee_constant.setdefault(y, {'net_brokerage': 0.0, 'turnover': 0.0})
-    year_totals['net_brokerage'] += metrics['net_brokerage']
-    year_totals['turnover'] += metrics['total_turnover']
-
-for y, totals in list(year_fee_constant.items()):
-    share_year = get_share_for_year(y)
-    denom = totals['turnover'] * 2 * share_year if share_year else 0
-    if denom:
-        fee_decimal = totals['net_brokerage'] / denom
-        if fee_decimal > 0:
-            year_fee_constant[y] = fee_decimal
-        else:
-            year_fee_constant.pop(y)
-    else:
-        year_fee_constant.pop(y)
-
-history_metrics = []
-for metrics in history_metrics_raw:
-    y = metrics['year']
-    total_turnover = metrics['total_turnover']
-    net_brokerage = metrics['net_brokerage']
-    fee_decimal = year_fee_constant.get(y)
-
-    share_pct = None
-    fee_bps = None
-    if (
-        fee_decimal
-        and total_turnover not in (None, 0)
-        and net_brokerage not in (None, 0)
-    ):
-        share_decimal = net_brokerage / (total_turnover * 2 * fee_decimal)
-        share_pct = share_decimal * 100
-        fee_bps = fee_decimal * 10000
-    else:
-        share_year = get_share_for_year(y)
-        if share_year:
-            share_pct = share_year * 100
-
-    history_metrics.append({
-        **metrics,
-        'share_pct': share_pct,
-        'fee_bps': fee_bps,
+        'share_decimal': share_decimal,
     })
 
 history_avg_daily = [m['avg_daily_bn'] for m in history_metrics if m['avg_daily_bn'] is not None]
 history_fee_bps = [m['fee_bps'] for m in history_metrics if m['fee_bps'] is not None]
 history_trading_days = [m['trading_days'] for m in history_metrics if m['trading_days']]
 
+fee_decimal_default = None
+if year_fee_observations:
+    latest_year = max(year_fee_observations.keys())
+    fees = [f for f in year_fee_observations[latest_year] if f]
+    if fees:
+        fee_decimal_default = float(np.mean(fees))
+
 share_default = None
-last_with_share = next((m for m in reversed(history_metrics) if m['share_pct'] is not None), None)
+last_with_share = next((m for m in reversed(history_metrics) if m['share_decimal'] is not None), None)
 if last_with_share:
-    share_default = last_with_share['share_pct'] / 100
+    share_default = last_with_share['share_decimal']
 if share_default is None:
-    share_default = get_share_for_year(target_year)
+    share_year = get_share_for_year(target_year)
+    if share_year is not None:
+        share_default = share_year / 2
 if share_default is None:
     share_default = 0.05
 
 avg_daily_default = history_avg_daily[-1] if history_avg_daily else 0.0
-fee_default = history_fee_bps[-1] if history_fee_bps else 2.0
+if fee_decimal_default:
+    fee_default = fee_decimal_default * 10000
+elif history_fee_bps:
+    fee_default = history_fee_bps[-1]
+else:
+    fee_default = 2.0
+
 trading_days_forecast = int(round(np.mean(history_trading_days))) if history_trading_days else 63
 
 share_default_pct = share_default * 100
