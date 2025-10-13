@@ -153,7 +153,12 @@ def format_pct(value: float | None) -> str:
     return f"{value * 100:,.1f}%"
 
 
-_, df_is_quarterly, df_forecast = load_data()
+theme_config, df_is_quarterly, df_forecast = load_data()
+
+theme = theme_config.get("theme", {}) if isinstance(theme_config, dict) else {}
+background_color = theme.get("backgroundColor", "#FFFFFF")
+text_color = theme.get("textColor", "#000000")
+primary_color = theme.get("primaryColor", "#FF4B4B")
 
 available_brokers = sorted(df_is_quarterly['TICKER'].dropna().unique())
 if not available_brokers:
@@ -217,32 +222,53 @@ prev_pbt = float(latest_row['pbt'])
 yoy_row = df_quarters[(df_quarters['YEARREPORT'] == target_year - 1) & (df_quarters['LENGTHREPORT'] == target_quarter)]
 yoy_pbt = float(yoy_row['pbt'].iloc[0]) if not yoy_row.empty else None
 
-st.title("Quarterly Forecast Adjustments")
 st.caption(f"Base assumptions derived from {target_year} full-year forecast minus actual results up to {latest_label}.")
 
-if missing_segments:
-    st.info("Missing forecast values for: " + ", ".join(missing_segments))
+sticky_header_placeholder = st.empty()
 
 summary_rows = []
+quarter_columns = []
+for q in range(1, target_quarter):
+    quarter_columns.append((q, f"{target_year} Q{q} (bn VND)"))
+
 for segment in SEGMENTS:
     fy_val = forecast_map.get(segment['forecast_key'], 0.0)
-    realized = ytd_totals.get(segment['key'], 0.0)
     base_val = base_segments[segment['key']]
-    summary_rows.append({
+    record = {
         "Segment": segment['label'],
         "FY Forecast (bn VND)": format_bn_str(fy_val),
-        "Actual YTD (bn VND)": format_bn_str(realized),
         f"{target_label} Base (bn VND)": format_bn_str(base_val),
-    })
+    }
 
-summary_rows.append({
+    for quarter_num, column_label in quarter_columns:
+        quarter_row = df_quarters[
+            (df_quarters['YEARREPORT'] == target_year) &
+            (df_quarters['LENGTHREPORT'] == quarter_num)
+        ]
+        quarter_value = float(quarter_row[segment['key']].iloc[0]) if not quarter_row.empty else 0.0
+        record[column_label] = format_bn_str(quarter_value)
+
+    summary_rows.append(record)
+
+record_pbt = {
     "Segment": "PBT",
     "FY Forecast (bn VND)": format_bn_str(fy_pbt),
-    "Actual YTD (bn VND)": format_bn_str(ytd_totals.get('pbt', 0.0)),
     f"{target_label} Base (bn VND)": format_bn_str(base_pbt),
-})
+}
 
+for quarter_num, column_label in quarter_columns:
+    quarter_row = df_quarters[
+        (df_quarters['YEARREPORT'] == target_year) &
+        (df_quarters['LENGTHREPORT'] == quarter_num)
+    ]
+    quarter_value = float(quarter_row['pbt'].iloc[0]) if not quarter_row.empty else 0.0
+    record_pbt[column_label] = format_bn_str(quarter_value)
+
+summary_rows.append(record_pbt)
+
+columns_order = ["Segment", "FY Forecast (bn VND)"] + [label for _, label in quarter_columns] + [f"{target_label} Base (bn VND)"]
 summary_df = pd.DataFrame(summary_rows)
+summary_df = summary_df[columns_order]
 
 st.subheader("Baseline Breakdown")
 st.dataframe(summary_df, hide_index=True)
@@ -275,22 +301,104 @@ impact_vs_yoy = None if yoy_pbt is None else adjusted_pbt - yoy_pbt
 qoq_pct = None if prev_pbt == 0 else impact_vs_prev / prev_pbt
 yoy_pct = None if yoy_pbt in (None, 0) else impact_vs_yoy / yoy_pbt
 
-metrics_columns = st.columns(3)
+qoq_value = format_pct(qoq_pct)
+qoq_delta = "n/a" if prev_pbt == 0 else f"{impact_vs_prev / 1e9:+,.0f} bn vs {latest_label}"
 
-metrics_columns[0].metric(
-    label=f"{target_label} PBT (bn VND)",
-    value=f"{adjusted_pbt / 1e9:,.0f}",
-    delta=f"{impact_vs_base / 1e9:+,.0f} vs base"
-)
+yoy_value = format_pct(yoy_pct)
+yoy_delta = "n/a" if yoy_pbt in (None, 0) else f"{impact_vs_yoy / 1e9:+,.0f} bn vs {quarter_label(target_year - 1, target_quarter)}"
 
-metrics_columns[1].metric(
-    label="QoQ Growth",
-    value=format_pct(qoq_pct),
-    delta=None if prev_pbt == 0 else f"{impact_vs_prev / 1e9:+,.0f} bn vs {latest_label}"
-)
+metrics_html = f"""
+<style>
+#forecast-sticky {{
+    position: fixed;
+    top: 110px;
+    left: 280px;
+    right: 0;
+    z-index: 1000;
+    background-color: {background_color};
+    color: {text_color};
+    padding: 16px 24px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}}
+.forecast-sticky-inner {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}}
+.forecast-sticky-title {{
+    font-size: 26px;
+    font-weight: 600;
+}}
+.forecast-metrics-group {{
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+}}
+.forecast-metric {{
+    min-width: 180px;
+}}
+.forecast-metric-label {{
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: {primary_color};
+    margin-bottom: 4px;
+}}
+.forecast-metric-value {{
+    font-size: 28px;
+    font-weight: 600;
+}}
+.forecast-metric-delta {{
+    font-size: 13px;
+    color: rgba(0,0,0,0.6);
+}}
+.forecast-header-spacer {{
+    height: 110px;
+}}
+@media (max-width: 768px) {{
+    #forecast-sticky {{
+        left: 0;
+        padding: 12px 16px;
+    }}
+    .forecast-metrics-group {{
+        gap: 16px;
+    }}
+    .forecast-metric-value {{
+        font-size: 22px;
+    }}
+}}
+</style>
+<div id="forecast-sticky">
+    <div class="forecast-sticky-inner">
+        <div class="forecast-sticky-title">{selected_broker} – {target_label}</div>
+        <div class="forecast-metrics-group">
+            <div class="forecast-metric">
+                <div class="forecast-metric-label">PBT</div>
+                <div class="forecast-metric-value">{adjusted_pbt / 1e9:,.0f} bn</div>
+                <div class="forecast-metric-delta">{impact_vs_base / 1e9:+,.0f} vs base</div>
+            </div>
+            <div class="forecast-metric">
+                <div class="forecast-metric-label">QoQ Growth</div>
+                <div class="forecast-metric-value">{qoq_value}</div>
+                <div class="forecast-metric-delta">{qoq_delta}</div>
+            </div>
+            <div class="forecast-metric">
+                <div class="forecast-metric-label">YoY Growth</div>
+                <div class="forecast-metric-value">{yoy_value}</div>
+                <div class="forecast-metric-delta">{yoy_delta}</div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="forecast-header-spacer"></div>
+"""
 
-metrics_columns[2].metric(
-    label="YoY Growth",
-    value=format_pct(yoy_pct),
-    delta=None if yoy_pbt in (None, 0) else f"{impact_vs_yoy / 1e9:+,.0f} bn vs {quarter_label(target_year - 1, target_quarter)}"
-)
+sticky_header_placeholder.markdown(metrics_html, unsafe_allow_html=True)
+
+st.markdown("### Quarterly Forecast Adjustments")
+
+if missing_segments:
+    st.info("Missing forecast values for: " + ", ".join(missing_segments))
