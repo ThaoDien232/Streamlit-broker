@@ -269,7 +269,6 @@ columns_order = ["Segment", "FY Forecast (bn VND)"] + [label for _, label in qua
 summary_df = pd.DataFrame(summary_rows)
 summary_df = summary_df[columns_order]
 
-st.subheader("Baseline Breakdown")
 st.markdown("### Quarterly Forecast Adjustments")
 st.caption(f"Base assumptions derived from {target_year} full-year forecast minus actual results up to {latest_label}.")
 
