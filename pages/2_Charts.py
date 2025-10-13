@@ -172,11 +172,11 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
     # So the 6 components that sum to 100% of TOI are:
     toi_components = {
         'Brokerage Income': 'NET_BROKERAGE_INCOME',
-        'IB Income': 'NET_IB_INCOME',
-        'Other Operating Income': 'NET_OTHER_OP_INCOME',
+        'Margin Lending Income': 'MARGIN_LENDING_INCOME',
         'Trading Income': 'NET_TRADING_INCOME',
         'Interest Income': 'INTEREST_INCOME',
-        'Margin Lending Income': 'MARGIN_LENDING_INCOME'
+        'IB Income': 'NET_IB_INCOME',
+        'Other Operating Income': 'NET_OTHER_OP_INCOME'
     }
 
     # Collect data for each broker
@@ -241,12 +241,12 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
 
     # Color scheme for components (6 components)
     component_colors = {
-        'Brokerage Income': "#89ceff",
-        'IB Income': "#ffaf69",
-        'Other Operating Income': "#9dff9d",
-        'Trading Income': "#ff9f9f",
-        'Interest Income': "#b0e0b0",
-        'Margin Lending Income': "#cc96ff"
+        'Brokerage Income': "#66c2a5",
+        'IB Income': "#fc8d62",
+        'Other Operating Income': "#cc96ff",
+        'Trading Income': "#e5c494",
+        'Interest Income': "#ffd92f",
+        'Margin Lending Income': "#b0e0b0"
     }
 
     for broker in selected_brokers:
@@ -463,7 +463,7 @@ with tab1:
                         fig = go.Figure()
 
                         # Color palette
-                        colors = px.colors.qualitative.Set3
+                        colors = px.colors.qualitative.Set2
 
                         # Add bar and MA4 line for each broker
                         for j, broker in enumerate(selected_brokers):
