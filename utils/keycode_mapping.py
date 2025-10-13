@@ -20,7 +20,6 @@ METRIC_TO_DB_KEYCODE = {
     'FEE_INCOME': 'Net_Fee_Income',
     'CAPITAL_INCOME': 'Net_Capital_Income',
     'TOTAL_OPERATING_INCOME': 'Total_Operating_Income',
-    'NET_MARGIN_INCOME': 'Net_Margin_lending_Income',  # Alias
 
     # Income Statement - Other Items
     'FX_GAIN_LOSS': 'FX_Income',
