@@ -977,15 +977,28 @@ if selected_ticker and selected_quarter:
             # Display earnings drivers analysis
             st.write("**Earnings Drivers Analysis:**")
             try:
-                from utils.earnings_drivers import calculate_earnings_drivers, format_earnings_drivers_table
+                from utils.earnings_drivers import calculate_earnings_drivers
+
+                # Debug: Show what we're calculating
+                st.info(f"Calculating earnings drivers for {selected_ticker} - {selected_quarter}")
 
                 # Create tabs for QoQ and YoY
                 tab_qoq, tab_yoy = st.tabs(["Quarter-over-Quarter", "Year-over-Year"])
 
                 with tab_qoq:
+                    st.write("Attempting QoQ calculation...")
                     drivers_qoq = calculate_earnings_drivers(selected_ticker, selected_quarter, 'QoQ')
+
+                    st.write(f"DEBUG: drivers_qoq.empty = {drivers_qoq.empty}")
+                    st.write(f"DEBUG: drivers_qoq shape = {drivers_qoq.shape if not drivers_qoq.empty else 'empty'}")
+
                     if not drivers_qoq.empty:
-                        # Display formatted table
+                        # Display raw table first
+                        st.write("**Raw Data:**")
+                        st.dataframe(drivers_qoq, use_container_width=True)
+
+                        # Then display formatted table
+                        st.write("**Formatted Data:**")
                         st.dataframe(
                             drivers_qoq.style.format({
                                 'Current': '{:.1f}B',
@@ -1005,9 +1018,18 @@ if selected_ticker and selected_quarter:
                         st.warning("Insufficient data for QoQ analysis (need at least 2 quarters)")
 
                 with tab_yoy:
+                    st.write("Attempting YoY calculation...")
                     drivers_yoy = calculate_earnings_drivers(selected_ticker, selected_quarter, 'YoY')
+
+                    st.write(f"DEBUG: drivers_yoy.empty = {drivers_yoy.empty}")
+
                     if not drivers_yoy.empty:
-                        # Display formatted table
+                        # Display raw table first
+                        st.write("**Raw Data:**")
+                        st.dataframe(drivers_yoy, use_container_width=True)
+
+                        # Then display formatted table
+                        st.write("**Formatted Data:**")
                         st.dataframe(
                             drivers_yoy.style.format({
                                 'Current': '{:.1f}B',
@@ -1027,7 +1049,9 @@ if selected_ticker and selected_quarter:
                         st.warning("Insufficient data for YoY analysis (need at least 5 quarters)")
 
             except Exception as e:
+                import traceback
                 st.error(f"Error calculating earnings drivers: {e}")
+                st.code(traceback.format_exc())
 
             # Show raw metrics for debugging (expandable)
             with st.expander("Detailed Calculation Data"):
