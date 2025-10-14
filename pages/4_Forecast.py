@@ -389,24 +389,23 @@ def fetch_market_share_quarter(year: int, quarter: int):
         resp = requests.get(url, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-        results = {}
+        records = []
         if data.get('success') and 'data' in data:
             for item in data['data'].get('brokerageStock', []):
-                identifiers = []
-                for key in ('shortenName', 'code', 'organCode', 'brokerCode', 'name'):
-                    raw = item.get(key)
-                    if raw:
-                        identifiers.append(str(raw).strip().upper())
                 try:
                     percent = float(item.get('percentage', 0))
                 except (TypeError, ValueError):
-                    continue
-                for ident in identifiers:
-                    if ident:
-                        results[ident] = percent
-        return results
+                    percent = None
+                records.append({
+                    'Brokerage_Code': item.get('shortenName', '').strip().upper(),
+                    'Brokerage_Name': item.get('name', ''),
+                    'Market_Share_Percent': percent,
+                    'Year': year,
+                    'Quarter': quarter,
+                })
+        return pd.DataFrame(records)
     except Exception:
-        return {}
+        return pd.DataFrame()
 
 history_metrics = []
 year_fee_observations = {}
@@ -426,10 +425,13 @@ for y, q in brokerage_history_quarters:
     net_brokerage = float(quarter_row['brokerage_fee'].iloc[0]) if not quarter_row.empty else None
 
     api_share_pct = None
-    share_map = {}
+    share_df = pd.DataFrame()
     if broker_code_norm:
-        share_map = fetch_market_share_quarter(y, q)
-        api_share_pct = share_map.get(broker_code_norm)
+        share_df = fetch_market_share_quarter(y, q)
+        if not share_df.empty:
+            match = share_df[share_df['Brokerage_Code'] == broker_code_norm]
+            if not match.empty:
+                api_share_pct = match.iloc[0]['Market_Share_Percent']
 
     share_decimal = None
     share_pct_display = None
@@ -473,7 +475,7 @@ for y, q in brokerage_history_quarters:
     market_share_debug.append({
         'Period': quarter_label(y, q),
         'Broker Code': broker_code_norm or '-',
-        'API Keys': ", ".join(sorted(share_map.keys())) if share_map else '-',
+        'API Rows': int(len(share_df)) if not share_df.empty else 0,
         'API Share %': api_share_pct if api_share_pct is not None else None,
         'Turnover Share %': share_decimal * 100 if (share_decimal and api_share_pct is None) else None,
         'Final Share %': share_pct_display,
@@ -555,12 +557,16 @@ forecast_metrics = {
     'net_brokerage_bn': net_brokerage_forecast_bn,
 }
 
-target_share_map = fetch_market_share_quarter(target_year, target_quarter) if broker_code_norm else {}
-target_api_share = target_share_map.get(broker_code_norm) if broker_code_norm else None
+target_share_df = fetch_market_share_quarter(target_year, target_quarter) if broker_code_norm else pd.DataFrame()
+target_api_share = None
+if broker_code_norm and not target_share_df.empty:
+    match = target_share_df[target_share_df['Brokerage_Code'] == broker_code_norm]
+    if not match.empty:
+        target_api_share = match.iloc[0]['Market_Share_Percent']
 market_share_debug.append({
     'Period': target_label,
     'Broker Code': broker_code_norm or '-',
-    'API Keys': ", ".join(sorted(target_share_map.keys())) if target_share_map else '-',
+    'API Rows': int(len(target_share_df)) if not target_share_df.empty else 0,
     'API Share %': target_api_share,
     'Turnover Share %': share_default_pct if (share_default_pct is not None and target_api_share is None) else None,
     'Final Share %': forecast_metrics['share_pct'],
