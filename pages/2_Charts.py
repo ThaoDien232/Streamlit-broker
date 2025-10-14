@@ -106,6 +106,33 @@ def fetch_market_share_data(year, quarters):
     
     return pd.DataFrame(all_data)
 
+
+def get_available_market_share_periods(start_year: int = 2021) -> list[tuple[int, int]]:
+    """Generate all available year-quarter combinations up to the current quarter."""
+    periods: list[tuple[int, int]] = []
+    today = pd.Timestamp.today()
+    current_year = today.year
+    current_quarter = (today.month - 1) // 3 + 1
+
+    year = start_year
+    while year < current_year:
+        for quarter in range(1, 5):
+            periods.append((year, quarter))
+        year += 1
+
+    for quarter in range(1, current_quarter + 1):
+        periods.append((current_year, quarter))
+
+    return periods
+
+
+def get_recent_market_share_periods(count: int) -> list[tuple[int, int]]:
+    """Return the most recent N year-quarter combinations."""
+    periods = get_available_market_share_periods()
+    if not periods:
+        return []
+    return periods[-count:] if count < len(periods) else periods
+
 def get_metric_display_name(metric_code):
     """Convert metric code to display name"""
     metric_names = {
@@ -601,41 +628,35 @@ with tab2:
     # Filters for Market Share tab
     st.subheader("Filters")
 
-    col1, col2 = st.columns(2)
+    col_recent, col_info = st.columns([1, 1])
 
-    with col1:
-        # Year selection
-        available_ms_years = list(range(2021, 2026))
-        selected_ms_years = st.multiselect(
-            "Select Years:",
-            options=available_ms_years,
-            default=[2024],
-            key="market_share_years"
+    with col_recent:
+        recent_quarter_count = int(
+            st.number_input(
+                "Most recent quarters",
+                min_value=1,
+                max_value=16,
+                value=6,
+                step=1,
+                key="market_share_recent_periods"
+            )
         )
 
-    with col2:
-        # Quarter selection
-        selected_ms_quarters = st.multiselect(
-            "Select Quarters:",
-            options=[1, 2, 3, 4],
-            default=[1, 2, 3, 4],
-            format_func=lambda x: f"Q{x}",
-            key="market_share_quarters"
-        )
+    with col_info:
+        st.caption("View aggregated HSX top-10 brokerage market share for the latest N quarters.")
 
-    # First, we need to get top 10 brokers - fetch a sample to determine top 10
-    # We'll get the top 10 based on latest available data
-    if selected_ms_years and selected_ms_quarters:
-        # Quick fetch to get top 10 brokers
-        latest_year = max(selected_ms_years)
-        latest_quarter = max(selected_ms_quarters)
-        sample_data = fetch_market_share_data(latest_year, [latest_quarter])
+    selected_periods = get_recent_market_share_periods(recent_quarter_count)
+    if not selected_periods:
+        st.warning("No market share periods available. Please try again later.")
+        st.stop()
 
-        if not sample_data.empty:
-            top_10_broker_codes = sample_data.nlargest(10, 'Market_Share_Percent')['Brokerage_Code'].tolist()
-            top_10_options = top_10_broker_codes + ['All']
-        else:
-            top_10_options = ['All']
+    # Determine top 10 brokers based on the most recent period
+    latest_year, latest_quarter = selected_periods[-1]
+    sample_data = fetch_market_share_data(latest_year, [latest_quarter])
+
+    if not sample_data.empty:
+        top_10_broker_codes = sample_data.nlargest(10, 'Market_Share_Percent')['Brokerage_Code'].tolist()
+        top_10_options = top_10_broker_codes + ['All']
     else:
         top_10_options = ['All']
 
@@ -648,15 +669,14 @@ with tab2:
         help="Select one or more brokers from top 10, or 'All' to show all top 10"
     )
 
-    if selected_ms_years and selected_ms_quarters:
-        # Fetch data for all selected year-quarter combinations
+    if selected_periods:
+        # Fetch data for all selected periods
         with st.spinner("Fetching market share data..."):
             all_market_share_data = []
-            for year in selected_ms_years:
-                if 2021 <= year <= 2025:
-                    year_data = fetch_market_share_data(year, selected_ms_quarters)
-                    if not year_data.empty:
-                        all_market_share_data.append(year_data)
+            for year, quarter in selected_periods:
+                year_data = fetch_market_share_data(year, [quarter])
+                if not year_data.empty:
+                    all_market_share_data.append(year_data)
 
             if all_market_share_data:
                 market_share_df = pd.concat(all_market_share_data, ignore_index=True)
@@ -664,213 +684,190 @@ with tab2:
                 market_share_df = pd.DataFrame()
 
         # Create period labels for display
-        selected_quarter_labels = []
-        for year in sorted(selected_ms_years):
-            for quarter in sorted(selected_ms_quarters):
-                selected_quarter_labels.append(f"Q{quarter} {year}")
+        selected_quarter_labels = [f"{year} Q{quarter}" for year, quarter in selected_periods]
 
         if not market_share_df.empty:
-            # Create dynamic title based on selected quarters
-            time_period_label = ", ".join(selected_quarter_labels)
-            st.subheader(f"Market Share Data")
-            
-            # Display summary statistics
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric(
-                    label="Total Brokers",
-                    value=market_share_df['Brokerage_Code'].nunique()
-                )
-            
-            with col2:
-                st.metric(
-                    label="Quarters Retrieved",
-                    value=len(selected_quarter_labels)
-                )
-            
-            with col3:
-                # Calculate QoQ gainer using latest available quarters in the data
-                available_quarters = sorted([int(q.replace('Q', '')) for q in market_share_df['Quarter'].unique()])
-                
-                if len(available_quarters) >= 2:
-                    # Use the two most recent quarters available in the data
-                    last_quarter_num = max(available_quarters)
-                    prev_quarter_num = sorted(available_quarters)[-2]  # Second highest
-                    
-                    last_quarter = f"Q{last_quarter_num}"
-                    prev_quarter = f"Q{prev_quarter_num}"
-                    
-                    # Calculate QoQ change for each broker
-                    qoq_data = []
-                    for broker in market_share_df['Brokerage_Code'].unique():
-                        broker_data = market_share_df[market_share_df['Brokerage_Code'] == broker]
-                        last_q_data = broker_data[broker_data['Quarter'] == last_quarter]
-                        prev_q_data = broker_data[broker_data['Quarter'] == prev_quarter]
-                        
-                        if not last_q_data.empty and not prev_q_data.empty:
-                            last_share = last_q_data['Market_Share_Percent'].iloc[0]
-                            prev_share = prev_q_data['Market_Share_Percent'].iloc[0]
-                            qoq_change = last_share - prev_share
-                            qoq_data.append({
-                                'broker': broker,
-                                'qoq_change': qoq_change,
-                                'last_share': last_share,
-                                'prev_share': prev_share
-                            })
-                    
-                    if qoq_data:
-                        top_gainer = max(qoq_data, key=lambda x: x['qoq_change'])
-                        st.metric(
-                            label=f"Top QoQ Gainer ({prev_quarter}→{last_quarter})",
-                            value=f"{top_gainer['broker']}",
-                            delta=f"+{top_gainer['qoq_change']:.2f}%"
-                        )
+            market_share_df['Market_Share_Percent'] = pd.to_numeric(market_share_df['Market_Share_Percent'], errors='coerce')
+            market_share_df = market_share_df.dropna(subset=['Market_Share_Percent'])
+
+            market_share_df['Quarter_Number'] = pd.to_numeric(
+                market_share_df['Quarter'].astype(str).str.replace('Q', ''),
+                errors='coerce'
+            )
+            market_share_df = market_share_df.dropna(subset=['Quarter_Number'])
+            market_share_df['Quarter_Number'] = market_share_df['Quarter_Number'].astype(int)
+            market_share_df['Period_Label'] = market_share_df.apply(
+                lambda row: f"{int(row['Year'])} Q{int(row['Quarter_Number'])}", axis=1
+            )
+            period_order_map = {
+                (year, quarter): idx for idx, (year, quarter) in enumerate(selected_periods)
+            }
+            market_share_df['Period_Order'] = market_share_df.apply(
+                lambda row: period_order_map.get((int(row['Year']), int(row['Quarter_Number']))),
+                axis=1
+            )
+
+            market_share_df = market_share_df[market_share_df['Period_Order'].notna()].copy()
+            market_share_df = market_share_df.sort_values(['Period_Order', 'Brokerage_Code']).reset_index(drop=True)
+
+            if market_share_df.empty:
+                st.warning("No market share data available for the selected quarters.")
+            else:
+                st.subheader("Market Share Data")
+
+                period_labels = [f"{year} Q{quarter}" for year, quarter in selected_periods]
+
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.metric(
+                        label="Total Brokers",
+                        value=market_share_df['Brokerage_Code'].nunique()
+                    )
+
+                with col2:
+                    st.metric(
+                        label="Quarters Retrieved",
+                        value=len(period_labels)
+                    )
+
+                with col3:
+                    if len(selected_periods) >= 2:
+                        prev_year, prev_quarter = selected_periods[-2]
+                        last_year, last_quarter = selected_periods[-1]
+                        prev_label = f"{prev_year} Q{prev_quarter}"
+                        last_label = f"{last_year} Q{last_quarter}"
+
+                        last_data = market_share_df[
+                            (market_share_df['Year'] == last_year)
+                            & (market_share_df['Quarter_Number'] == last_quarter)
+                        ]
+                        prev_data = market_share_df[
+                            (market_share_df['Year'] == prev_year)
+                            & (market_share_df['Quarter_Number'] == prev_quarter)
+                        ]
+
+                        if not last_data.empty and not prev_data.empty:
+                            last_series = last_data.set_index('Brokerage_Code')['Market_Share_Percent']
+                            prev_series = prev_data.set_index('Brokerage_Code')['Market_Share_Percent']
+                            common_brokers = last_series.index.intersection(prev_series.index)
+
+                            qoq_data = []
+                            for broker in common_brokers:
+                                last_share = float(last_series.loc[broker])
+                                prev_share = float(prev_series.loc[broker])
+                                qoq_data.append({
+                                    'broker': broker,
+                                    'qoq_change': last_share - prev_share,
+                                    'last_share': last_share,
+                                    'prev_share': prev_share
+                                })
+
+                            if qoq_data:
+                                top_gainer = max(qoq_data, key=lambda x: x['qoq_change'])
+                                st.metric(
+                                    label=f"Top QoQ Gainer ({prev_label}→{last_label})",
+                                    value=top_gainer['broker'],
+                                    delta=f"{top_gainer['qoq_change']:+.2f}%"
+                                )
+                            else:
+                                st.metric(label="Top QoQ Gainer", value="No data")
+                        else:
+                            st.metric(label="Top QoQ Gainer", value="No data")
                     else:
-                        st.metric(label="Top QoQ Gainer", value="No data")
-                else:
-                    # Fallback to top broker if only one quarter available
-                    if not market_share_df.empty:
-                        top_broker = market_share_df.loc[market_share_df['Market_Share_Percent'].idxmax()]
+                        top_row = market_share_df.loc[market_share_df['Market_Share_Percent'].idxmax()]
                         st.metric(
                             label="Top Broker",
-                            value=f"{top_broker['Brokerage_Code']}",
-                            delta=f"{top_broker['Market_Share_Percent']:.2f}%"
+                            value=top_row['Brokerage_Code'],
+                            delta=f"{top_row['Market_Share_Percent']:.2f}%"
                         )
-                    else:
-                        st.metric(label="Top Broker", value="No data")
-            
-            # Create pivot table for better display
-            pivot_df = market_share_df.pivot_table(
-                index=['Brokerage_Code', 'Brokerage_Name'],
-                columns='Quarter',
-                values='Market_Share_Percent',
-                aggfunc='first'
-            ).reset_index()
-            
-            # Fill NaN values with 0
-            pivot_df = pivot_df.fillna(0)
-            
-            # Sort by largest to smallest using the latest available quarter in the data
-            available_quarters = [col for col in pivot_df.columns if col.startswith('Q')]
-            if available_quarters:
-                # Get the latest quarter available in the data
-                quarter_nums = [int(q.replace('Q', '')) for q in available_quarters]
-                latest_quarter_num = max(quarter_nums)
-                latest_quarter_col = f"Q{latest_quarter_num}"
-                
-                if latest_quarter_col in pivot_df.columns:
-                    # Create a copy to avoid modifying the original
-                    sort_df = pivot_df.copy()
-                    
-                    # Convert percentage strings back to numbers for sorting
-                    sort_col = sort_df[latest_quarter_col].astype(str)
-                    sort_col = sort_col.str.replace('%', '', regex=False)
-                    sort_col = sort_col.str.replace('-', '0', regex=False)
-                    sort_col = pd.to_numeric(sort_col, errors='coerce').fillna(0)
-                    
-                    # Sort by the numeric values (descending)
-                    sort_idx = sort_col.argsort()[::-1]
-                    pivot_df = pivot_df.iloc[sort_idx]
-            
-            # Format percentage columns
-            for col in pivot_df.columns:
-                if col.startswith('Q'):
-                    pivot_df[col] = pivot_df[col].apply(lambda x: f"{x:.2f}%" if x > 0 else "-")
-            
-            # Display the table
-            st.subheader("Market Share by Quarter")
-            st.dataframe(
-                pivot_df,
-                use_container_width=True,
-                hide_index=True
-            )
-            
-            # Create visualization
-            if len(selected_quarter_labels) > 1:
-                st.subheader("Market Share Trends")
 
-                # Determine which brokers to display
-                if 'All' in selected_ms_brokers or not selected_ms_brokers:
-                    # Get top 10 brokers by market share using the latest available quarter across all years
-                    # Sort dataframe to get the most recent period
-                    market_share_df_sorted = market_share_df.sort_values(['Year', 'Quarter'], ascending=[True, True])
+                # Pivot table display
+                pivot_df = market_share_df.pivot_table(
+                    index=['Brokerage_Code', 'Brokerage_Name'],
+                    columns='Period_Label',
+                    values='Market_Share_Percent',
+                    aggfunc='first'
+                ).reset_index()
 
-                    # Get the latest period
-                    latest_row = market_share_df_sorted.iloc[-1]
-                    latest_quarter = latest_row['Quarter']
-                    latest_year = latest_row['Year']
+                period_columns = [label for label in period_labels if label in pivot_df.columns]
+                pivot_df = pivot_df[['Brokerage_Code', 'Brokerage_Name', *period_columns]].fillna(0)
 
-                    # Get data for the latest period
-                    latest_quarter_data = market_share_df[
-                        (market_share_df['Quarter'] == latest_quarter) &
-                        (market_share_df['Year'] == latest_year)
-                    ]
+                if period_columns:
+                    latest_label = period_columns[-1]
+                    pivot_df = pivot_df.sort_values(by=latest_label, ascending=False)
 
-                    if not latest_quarter_data.empty:
-                        brokers_to_display = latest_quarter_data.nlargest(10, 'Market_Share_Percent')['Brokerage_Code'].tolist()
-                    else:
-                        # Fallback to average if latest quarter has no data
-                        avg_share = market_share_df.groupby('Brokerage_Code')['Market_Share_Percent'].mean().sort_values(ascending=False)
-                        brokers_to_display = avg_share.head(10).index.tolist()
-                else:
-                    # Use user-selected brokers (filter out 'All' if somehow present)
-                    brokers_to_display = [b for b in selected_ms_brokers if b != 'All']
+                for col in period_columns:
+                    pivot_df[col] = pivot_df[col].apply(
+                        lambda x: f"{x:.2f}%" if pd.notna(x) and x > 0 else "-"
+                    )
 
-                # Filter data for selected brokers
-                if brokers_to_display:
-                    top_brokers_data = market_share_df[market_share_df['Brokerage_Code'].isin(brokers_to_display)].copy()
-                else:
-                    top_brokers_data = pd.DataFrame()
+                st.subheader("Market Share by Quarter")
+                st.dataframe(
+                    pivot_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
 
-                if not top_brokers_data.empty:
-                    # Create a combined Period label for x-axis (e.g., "Q1 2024")
-                    top_brokers_data['Period_Label'] = top_brokers_data['Quarter'] + ' ' + top_brokers_data['Year'].astype(str)
+                # Visualization
+                if len(period_columns) > 1:
+                    st.subheader("Market Share Trends")
 
-                    # Sort by Year and Quarter for proper ordering
-                    top_brokers_data = top_brokers_data.sort_values(['Year', 'Quarter'])
-
-                    # Determine chart title
                     if 'All' in selected_ms_brokers or not selected_ms_brokers:
-                        chart_title = "Top 10 Brokers Market Share Trends"
+                        latest_year, latest_quarter = selected_periods[-1]
+                        latest_quarter_data = market_share_df[
+                            (market_share_df['Year'] == latest_year)
+                            & (market_share_df['Quarter_Number'] == latest_quarter)
+                        ]
+
+                        if not latest_quarter_data.empty:
+                            brokers_to_display = latest_quarter_data.nlargest(10, 'Market_Share_Percent')['Brokerage_Code'].tolist()
+                        else:
+                            avg_share = market_share_df.groupby('Brokerage_Code')['Market_Share_Percent'].mean().sort_values(ascending=False)
+                            brokers_to_display = avg_share.head(10).index.tolist()
                     else:
-                        chart_title = f"Market Share Trends - {len(brokers_to_display)} Broker(s)"
+                        brokers_to_display = [b for b in selected_ms_brokers if b != 'All']
 
-                    # Create line chart
-                    fig = px.line(
-                        top_brokers_data,
-                        x='Period_Label',
-                        y='Market_Share_Percent',
-                        color='Brokerage_Code',
-                        title=chart_title,
-                        labels={
-                            'Market_Share_Percent': 'Market Share (%)',
-                            'Period_Label': 'Period',
-                            'Brokerage_Code': 'Broker'
-                        }
-                    )
-                
-                    fig.update_layout(
-                        height=500,
-                        hovermode='x unified'
-                    )
+                    if brokers_to_display:
+                        top_brokers_data = market_share_df[market_share_df['Brokerage_Code'].isin(brokers_to_display)].copy()
+                    else:
+                        top_brokers_data = pd.DataFrame()
 
-                    st.plotly_chart(fig, use_container_width=True)
-            
-            # Download option
-            csv = market_share_df.to_csv(index=False)
-            # Create a filename based on selected quarters
-            filename_periods = "_".join([label.replace(' ', '') for label in selected_quarter_labels[:3]])
-            if len(selected_quarter_labels) > 3:
-                filename_periods += f"_and_{len(selected_quarter_labels)-3}_more"
-            st.download_button(
-                label="Download Market Share Data as CSV",
-                data=csv,
-                file_name=f"market_share_{filename_periods}.csv",
-                mime="text/csv"
-            )
+                    if not top_brokers_data.empty:
+                        top_brokers_data = top_brokers_data.sort_values('Period_Order')
+
+                        chart_title = "Top 10 Brokers Market Share Trends" if ('All' in selected_ms_brokers or not selected_ms_brokers) else f"Market Share Trends - {len(brokers_to_display)} Broker(s)"
+
+                        fig = px.line(
+                            top_brokers_data,
+                            x='Period_Label',
+                            y='Market_Share_Percent',
+                            color='Brokerage_Code',
+                            title=chart_title,
+                            labels={
+                                'Market_Share_Percent': 'Market Share (%)',
+                                'Period_Label': 'Period',
+                                'Brokerage_Code': 'Broker'
+                            },
+                            category_orders={'Period_Label': period_columns}
+                        )
+
+                        fig.update_layout(height=500, hovermode='x unified')
+                        st.plotly_chart(fig, use_container_width=True)
+
+                csv = market_share_df.to_csv(index=False)
+                filename_periods = "_".join([label.replace(' ', '') for label in period_labels[:3]])
+                if len(period_labels) > 3:
+                    filename_periods += f"_and_{len(period_labels)-3}_more"
+
+                st.download_button(
+                    label="Download Market Share Data as CSV",
+                    data=csv,
+                    file_name=f"market_share_{filename_periods}.csv",
+                    mime="text/csv"
+                )
 
         else:
-            st.warning("No market share data available for the selected parameters.")
+            st.warning("No market share data available for the selected quarters.")
     else:
-        st.info("Select years and quarters above.")
+        st.info("Adjust the number of recent quarters above.")

@@ -342,10 +342,10 @@ def load_investment_metrics(ticker: str, start_year: int) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None, list[dict[str, float | str | None]]]:
+def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None]:
     df_book = load_prop_book_data()
     if df_book.empty or 'FVTPL value' not in df_book.columns:
-        return None, None, []
+        return None, None
 
     mask = (
         (df_book['Broker'] == broker)
@@ -355,7 +355,7 @@ def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None,
     broker_df = df_book[mask].copy()
 
     if broker_df.empty:
-        return None, None, []
+        return None, None
 
     quarters = sort_quarters_by_date(broker_df['Quarter'].unique().tolist())
     if not quarters:
@@ -379,14 +379,13 @@ def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None,
         break
 
     if selected_quarter is None or quarter_holdings is None or quarter_holdings.empty:
-        return None, None, []
+        return None, None
 
     tickers = quarter_holdings['Ticker'].tolist()
     quarter_prices = get_quarter_end_prices(tickers, selected_quarter)
     current_prices = get_current_prices(tickers)
 
     profit_total = 0.0
-    debug_rows: list[dict[str, float | str | None]] = []
 
     for _, row in quarter_holdings.iterrows():
         ticker = row['Ticker']
@@ -394,42 +393,17 @@ def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None,
         quarter_price = quarter_prices.get(ticker)
         current_price = current_prices.get(ticker)
 
-        debug_entry = {
-            'Ticker': ticker,
-            'Quarter': selected_quarter,
-            'Holding (raw)': value,
-            'Quarter Price': quarter_price,
-            'Current Price': current_price,
-            'Volume Est': None,
-            'Profit': None,
-            'Note': '',
-        }
-
-        if quarter_price in (None, 0):
-            debug_entry['Note'] = 'Missing quarter price'
-            debug_rows.append(debug_entry)
-            continue
-        if current_price in (None, 0):
-            debug_entry['Note'] = 'Missing current price'
-            debug_rows.append(debug_entry)
-            continue
-        if value == 0:
-            debug_entry['Note'] = 'Zero holding'
-            debug_rows.append(debug_entry)
+        if quarter_price in (None, 0) or current_price in (None, 0) or value == 0:
             continue
 
         volume = value / quarter_price
         profit = volume * (current_price - quarter_price)
         profit_total += profit
 
-        debug_entry['Volume Est'] = volume
-        debug_entry['Profit'] = profit
-        debug_rows.append(debug_entry)
-
     if profit_total == 0.0:
-        return None, None, debug_rows
+        return None, None
 
-    return profit_total, selected_quarter, debug_rows
+    return profit_total, selected_quarter
 
 
 
@@ -448,7 +422,6 @@ if not available_brokers:
 default_broker = 'SSI' if 'SSI' in available_brokers else available_brokers[0]
 selected_broker = st.sidebar.selectbox("Select Broker", options=available_brokers, index=available_brokers.index(default_broker))
 show_share_debug = st.sidebar.checkbox("Show market share debug", value=False)
-show_fvtpl_debug = st.sidebar.checkbox("Show FVTPL calc debug", value=False)
 
 df_quarters = prepare_quarter_metrics(df_is_quarterly, selected_broker)
 if df_quarters.empty:
@@ -1159,7 +1132,7 @@ else:
 
 st.markdown(f"#### {target_label} Investment Income Override")
 
-fvtpl_profit_value, fvtpl_reference_quarter, fvtpl_debug_rows = calculate_fvtpl_profit_total(selected_broker)
+fvtpl_profit_value, fvtpl_reference_quarter = calculate_fvtpl_profit_total(selected_broker)
 
 investment_history = (
     df_actual[['YEARREPORT', 'LENGTHREPORT', 'investment_income']]
@@ -1179,11 +1152,6 @@ if not recent_investment_history.empty:
         **{"Investment Income (bn)": recent_investment_history['investment_income'].apply(lambda v: v / 1e9)}
     )[['Quarter', 'Investment Income (bn)']]
     investment_display_df = pd.concat([investment_display_df, recent_investment_history], ignore_index=True)
-
-if show_fvtpl_debug and fvtpl_debug_rows:
-    debug_df = pd.DataFrame(fvtpl_debug_rows)
-    st.markdown("**FVTPL Calculation Details**")
-    st.dataframe(debug_df, use_container_width=True)
 
 if fvtpl_profit_value is not None:
     reference_label = fvtpl_reference_quarter or "latest quarter"
