@@ -490,26 +490,26 @@ if not df_calc.empty and ('NET_BROKERAGE_FEE' in selected_metrics or 'MARGIN_LEN
                 net_brok_data = pd.DataFrame()
 
             # Check for INSTITUTION_SHARES_TRADING_VALUE
-            inst_data = df_calc[df_calc['KEYCODE'] == 'Institution_shares_trading_value']
-            st.write(f"**Institution_shares_trading_value** rows found: {len(inst_data)}")
+            inst_data = df_calc[df_calc['METRIC_CODE'] == 'INSTITUTION_SHARES_TRADING_VALUE']
+            st.write(f"**INSTITUTION_SHARES_TRADING_VALUE** rows found: {len(inst_data)}")
             if not inst_data.empty:
                 st.dataframe(inst_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
             else:
                 # Try with KEYCODE NOS101
-                inst_data_alt = df_calc[df_calc['KEYCODE'] == 'NOS101']
-                st.write(f"**NOS101 (KEYCODE)** rows found: {len(inst_data_alt)}")
+                inst_data_alt = df_calc[df_calc['KEYCODE'] == 'Institution_shares_trading_value']
+                st.write(f"**Institution_shares_trading_value (KEYCODE)** rows found: {len(inst_data_alt)}")
                 if not inst_data_alt.empty:
                     st.dataframe(inst_data_alt[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'KEYCODE', 'VALUE', 'QUARTER_LABEL']].head(10))
 
             # Check for INVESTOR_SHARES_TRADING_VALUE
-            inv_data = df_calc[df_calc['KEYCODE'] == 'Investor_shares_trading_value']
-            st.write(f"**Investor_shares_trading_value** rows found: {len(inv_data)}")
+            inv_data = df_calc[df_calc['METRIC_CODE'] == 'INVESTOR_SHARES_TRADING_VALUE']
+            st.write(f"**INVESTOR_SHARES_TRADING_VALUE** rows found: {len(inv_data)}")
             if not inv_data.empty:
-                st.dataframe(inv_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'KEYCODE', 'VALUE', 'QUARTER_LABEL']].head(10))
+                st.dataframe(inv_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
             else:
                 # Try with KEYCODE NOS109
-                inv_data_alt = df_calc[df_calc['KEYCODE'] == 'NOS109']
-                st.write(f"**NOS109 (KEYCODE)** rows found: {len(inv_data_alt)}")
+                inv_data_alt = df_calc[df_calc['KEYCODE'] == 'Investor_shares_trading_value']
+                st.write(f"**Investor_shares_trading_value (KEYCODE)** rows found: {len(inv_data_alt)}")
                 if not inv_data_alt.empty:
                     st.dataframe(inv_data_alt[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'KEYCODE', 'VALUE', 'QUARTER_LABEL']].head(10))
 
@@ -529,10 +529,10 @@ if not df_calc.empty and ('NET_BROKERAGE_FEE' in selected_metrics or 'MARGIN_LEN
                     st.dataframe(margin_income_alt[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'KEYCODE', 'VALUE', 'QUARTER_LABEL']].head(10))
 
             # Check for MARGIN_BALANCE
-            margin_balance_data = df_calc[df_calc['KEYCODE'] == 'MARGIN_BALANCE']
+            margin_balance_data = df_calc[df_calc['METRIC_CODE'] == 'MARGIN_BALANCE']
             st.write(f"**MARGIN_BALANCE** rows found: {len(margin_balance_data)}")
             if not margin_balance_data.empty:
-                st.dataframe(margin_balance_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'KEYCODE', 'VALUE', 'QUARTER_LABEL']].head(10))
+                st.dataframe(margin_balance_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
             else:
                 # Try with KEYCODE
                 margin_balance_alt = df_calc[df_calc['KEYCODE'] == 'Margin_Lending_book']
