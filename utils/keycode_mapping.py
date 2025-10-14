@@ -44,12 +44,12 @@ METRIC_TO_DB_KEYCODE = {
     'TOTAL_ASSETS': 'BS.92',  # TOTAL ASSETS
     'TOTAL_EQUITY': 'BS.142',  # OWNER'S EQUITY
 
-    # Trading Values (Note items - NOS101-110)
-    # Actual KEYCODEs in database are NOS codes, per user feedback
-    'INSTITUTION_SHARES_TRADING_VALUE': 'NOS101',  # Institution shares trading volume
-    'INSTITUTION_BOND_TRADING_VALUE': 'NOS103',  # Institution bond trading volume
-    'INVESTOR_SHARES_TRADING_VALUE': 'NOS109',  # Investor shares trading volume
-    'INVESTOR_BOND_TRADING_VALUE': 'NOS110',  # Investor bond trading volume
+    # Trading Values (Note items - NOS101-110 section per DATABASE_SCHEMA.md lines 403-409)
+    # KEYCODE column shows actual database values (descriptive names, not NOS codes)
+    'INSTITUTION_SHARES_TRADING_VALUE': 'Institution_shares_trading_value',
+    'INSTITUTION_BOND_TRADING_VALUE': 'Institution_bond_trading_value',
+    'INVESTOR_SHARES_TRADING_VALUE': 'Investor_shares_trading_value',
+    'INVESTOR_BOND_TRADING_VALUE': 'Investor_bond_trading_value',
 
     # Calculated Ratios - These need to be calculated (not stored in database)
     'ROE': None,  # Calculate: NPAT / TOTAL_EQUITY * 100 * 4 (annualized)
