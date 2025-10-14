@@ -307,9 +307,9 @@ def calculate_sector_metrics(calculated_records):
 
 def calculate_ratios(calculated_metrics):
     """
-    Calculate Interest Rate ratios that require previous period data.
+    Calculate Interest Rate and Margin Lending Rate ratios that require previous period data.
     """
-    print("Calculating Interest Rate ratios...")
+    print("Calculating Interest Rate and Margin Lending Rate ratios...")
 
     # Load ALL calculated metrics from the database to have complete data for ratios
     combined_df = load_combined_data()
@@ -319,13 +319,18 @@ def calculate_ratios(calculated_metrics):
         print("No CALC metrics found in database")
         return calculated_metrics
 
-    # Check which interest rates already exist
+    # Check which rates already exist
     existing_interest_rates = set()
-    for _, row in calc_df[calc_df['METRIC_CODE'] == 'INTEREST_RATE'].iterrows():
+    existing_margin_lending_rates = set()
+    for _, row in calc_df.iterrows():
         key = (row['TICKER'], row['YEARREPORT'], row['LENGTHREPORT'])
-        existing_interest_rates.add(key)
+        if row['METRIC_CODE'] == 'INTEREST_RATE':
+            existing_interest_rates.add(key)
+        elif row['METRIC_CODE'] == 'MARGIN_LENDING_RATE':
+            existing_margin_lending_rates.add(key)
 
     print(f"Found {len(existing_interest_rates)} existing interest rate records")
+    print(f"Found {len(existing_margin_lending_rates)} existing margin lending rate records")
 
     ratio_records = []
 
@@ -333,12 +338,14 @@ def calculate_ratios(calculated_metrics):
     for ticker in calc_df['TICKER'].unique():
         ticker_data = calc_df[calc_df['TICKER'] == ticker].sort_values(['YEARREPORT', 'LENGTHREPORT'])
 
-        # Get NPAT, Total Equity, Total Assets, Interest Expense, and Borrowing Balance by period
+        # Get NPAT, Total Equity, Total Assets, Interest Expense, Borrowing Balance, Margin Balance, and Net Margin Income by period
         npat_data = {}
         equity_data = {}
         assets_data = {}
         interest_expense_data = {}
         borrowing_balance_data = {}
+        margin_balance_data = {}
+        net_margin_income_data = {}
 
         for _, row in ticker_data.iterrows():
             key = (row['YEARREPORT'], row['LENGTHREPORT'])
@@ -353,10 +360,15 @@ def calculate_ratios(calculated_metrics):
                 interest_expense_data[key] = row['VALUE']
             elif row['METRIC_CODE'] == 'BORROWING_BALANCE':
                 borrowing_balance_data[key] = row['VALUE']
-        
-        # Calculate ROE, ROA, and Interest Rate for each period
+            elif row['METRIC_CODE'] == 'MARGIN_BALANCE':
+                margin_balance_data[key] = row['VALUE']
+            elif row['METRIC_CODE'] == 'NET_MARGIN_INCOME':
+                net_margin_income_data[key] = row['VALUE']
+
+        # Calculate ROE, ROA, Interest Rate, and Margin Lending Rate for each period
         periods = sorted(set(npat_data.keys()) | set(equity_data.keys()) | set(assets_data.keys()) |
-                        set(interest_expense_data.keys()) | set(borrowing_balance_data.keys()))
+                        set(interest_expense_data.keys()) | set(borrowing_balance_data.keys()) |
+                        set(margin_balance_data.keys()) | set(net_margin_income_data.keys()))
 
         for i, period in enumerate(periods):
             year, quarter = period
@@ -365,6 +377,8 @@ def calculate_ratios(calculated_metrics):
             current_assets = assets_data.get(period, 0)
             interest_expense = interest_expense_data.get(period, 0)
             current_borrowing = borrowing_balance_data.get(period, 0)
+            current_margin_balance = margin_balance_data.get(period, 0)
+            net_margin_income = net_margin_income_data.get(period, 0)
 
             # Get previous period data
             if i > 0:
@@ -372,17 +386,20 @@ def calculate_ratios(calculated_metrics):
                 prev_equity = equity_data.get(prev_period, current_equity)
                 prev_assets = assets_data.get(prev_period, current_assets)
                 prev_borrowing = borrowing_balance_data.get(prev_period, current_borrowing)
+                prev_margin_balance = margin_balance_data.get(prev_period, current_margin_balance)
             else:
                 prev_equity = current_equity
                 prev_assets = current_assets
                 prev_borrowing = current_borrowing
+                prev_margin_balance = current_margin_balance
 
             # Skip ROE and ROA - they already exist
-            # Only calculate new Interest Rate metric
+            # Only calculate new Interest Rate and Margin Lending Rate metrics
+
+            period_key = (ticker, year, quarter)
 
             # Calculate Interest Rate (Interest Expense / Avg Borrowing Balance)
             # Only if it doesn't already exist
-            period_key = (ticker, year, quarter)
             if period_key not in existing_interest_rates:
                 # Annualize for quarterly data: multiply by 4
                 avg_borrowing = (current_borrowing + prev_borrowing) / 2 if prev_borrowing > 0 else current_borrowing
@@ -407,7 +424,33 @@ def calculate_ratios(calculated_metrics):
                         'QUARTER_LABEL': f'{quarter}Q{year % 100:02d}' if quarter in [1,2,3,4] else 'Annual'
                     })
 
-    print(f"Calculated {len(ratio_records):,} Interest Rate records")
+            # Calculate Margin Lending Rate (Net Margin Income / Avg Margin Balance)
+            # Only if it doesn't already exist
+            if period_key not in existing_margin_lending_rates:
+                # Annualize for quarterly data: multiply by 4
+                avg_margin_balance = (current_margin_balance + prev_margin_balance) / 2 if prev_margin_balance > 0 else current_margin_balance
+                if avg_margin_balance > 0 and net_margin_income != 0:
+                    margin_lending_rate = net_margin_income / avg_margin_balance
+                    # Annualize quarterly data (multiply by 4), leave annual data as is
+                    if quarter in [1, 2, 3, 4]:
+                        margin_lending_rate = margin_lending_rate * 4
+
+                    ratio_records.append({
+                        'TICKER': ticker,
+                        'YEARREPORT': year,
+                        'LENGTHREPORT': quarter,
+                        'STARTDATE': '',
+                        'ENDDATE': '',
+                        'NOTE': 'Calculated: Net Margin Income / Avg Margin Balance (annualized for quarterly)',
+                        'STATEMENT_TYPE': 'CALC',
+                        'METRIC_CODE': 'MARGIN_LENDING_RATE',
+                        'VALUE': float(margin_lending_rate),
+                        'KEYCODE': 'MARGIN_LENDING_RATE',
+                        'KEYCODE_NAME': 'Margin Lending Rate',
+                        'QUARTER_LABEL': f'{quarter}Q{year % 100:02d}' if quarter in [1,2,3,4] else 'Annual'
+                    })
+
+    print(f"Calculated {len(ratio_records):,} rate records (Interest Rate + Margin Lending Rate)")
 
     # Add ratio records to the original list
     calculated_metrics.extend(ratio_records)
