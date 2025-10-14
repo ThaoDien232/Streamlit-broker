@@ -777,9 +777,22 @@ with tab2:
                 pivot_df = pivot_df.iloc[sort_idx]
             
             # Format percentage columns
+            def format_percent(value):
+                try:
+                    if value is None:
+                        return "-"
+                    if isinstance(value, str):
+                        value = value.strip()
+                        if not value:
+                            return "-"
+                    num = float(value)
+                    return f"{num:.2f}%" if num > 0 else "-"
+                except Exception:
+                    return "-"
+
             for col in pivot_df.columns:
                 if col not in ('Brokerage_Code', 'Brokerage_Name'):
-                    pivot_df[col] = pivot_df[col].apply(lambda x: f"{x:.2f}%" if x and x > 0 else "-")
+                    pivot_df[col] = pivot_df[col].apply(format_percent)
             
             # Display the table
             st.subheader("Market Share by Quarter")
