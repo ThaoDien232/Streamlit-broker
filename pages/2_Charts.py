@@ -490,8 +490,8 @@ if not df_calc.empty and ('NET_BROKERAGE_FEE' in selected_metrics or 'MARGIN_LEN
                 net_brok_data = pd.DataFrame()
 
             # Check for INSTITUTION_SHARES_TRADING_VALUE
-            inst_data = df_calc[df_calc['METRIC_CODE'] == 'INSTITUTION_SHARES_TRADING_VALUE']
-            st.write(f"**INSTITUTION_SHARES_TRADING_VALUE** rows found: {len(inst_data)}")
+            inst_data = df_calc[df_calc['METRIC_CODE'] == 'Institution_shares_trading_value']
+            st.write(f"**Institution_shares_trading_value** rows found: {len(inst_data)}")
             if not inst_data.empty:
                 st.dataframe(inst_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
             else:
@@ -502,8 +502,8 @@ if not df_calc.empty and ('NET_BROKERAGE_FEE' in selected_metrics or 'MARGIN_LEN
                     st.dataframe(inst_data_alt[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'KEYCODE', 'VALUE', 'QUARTER_LABEL']].head(10))
 
             # Check for INVESTOR_SHARES_TRADING_VALUE
-            inv_data = df_calc[df_calc['METRIC_CODE'] == 'INVESTOR_SHARES_TRADING_VALUE']
-            st.write(f"**INVESTOR_SHARES_TRADING_VALUE** rows found: {len(inv_data)}")
+            inv_data = df_calc[df_calc['METRIC_CODE'] == 'Investor_shares_trading_value']
+            st.write(f"**Investor_shares_trading_value** rows found: {len(inv_data)}")
             if not inv_data.empty:
                 st.dataframe(inv_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
             else:
