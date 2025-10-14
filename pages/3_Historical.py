@@ -112,6 +112,7 @@ def display_income_statement(df, ticker, periods, display_mode):
         ('ROE', 'Return on Equity (%)'),
         ('ROA', 'Return on Assets (%)'),
         ('INTEREST_RATE', 'Interest Rate (%)'),
+        ('MARGIN_LENDING_RATE', 'Margin Lending Rate (%)'),
     ]
     
     if display_mode == "Absolute Values":
@@ -133,8 +134,8 @@ def display_income_statement(df, ticker, periods, display_mode):
                 if metric_code in ['ROE', 'ROA']:
                     # These are already percentages (e.g., 15.5 = 15.5%)
                     row[label] = f"{value:.2f}%" if value != 0 else "-"
-                elif metric_code == 'INTEREST_RATE':
-                    # Interest rate is stored as decimal, convert to percentage
+                elif metric_code in ['INTEREST_RATE', 'MARGIN_LENDING_RATE']:
+                    # Rates are stored as decimal, convert to percentage
                     row[label] = f"{value * 100:.2f}%" if value != 0 else "-"
                 else:
                     # Financial values in VND
@@ -443,13 +444,31 @@ def main():
     # Get available brokers (lightweight query)
     all_tickers = get_available_tickers()
     individual_brokers = sorted([t for t in all_tickers if t != 'Sector'])
-    available_brokers = ['Sector'] + individual_brokers
+
+    # Broker groups for organized display
+    broker_groups = {
+        'Top Tier': ['SSI', 'VCI', 'VND', 'HCM', 'TCBS', 'VPBS', 'VPS'],
+        'Mid Tier': ['MBS', 'VIX', 'SHS', 'BSI', 'FTS'],
+        'Regional': ['DSE', 'VDS', 'LPBS', 'Kafi', 'ACBS', 'OCBS', 'HDBS'],
+    }
+
+    # Create grouped broker list maintaining order within groups
+    grouped_brokers = []
+    for group_name, group_brokers in broker_groups.items():
+        # Add brokers from this group that exist in individual_brokers
+        for broker in group_brokers:
+            if broker in individual_brokers:
+                grouped_brokers.append(broker)
+
+    # Add remaining brokers not in any group (sorted)
+    remaining_brokers = sorted([b for b in individual_brokers if b not in grouped_brokers])
+    all_brokers_ordered = ['Sector'] + grouped_brokers + remaining_brokers
 
     selected_broker = st.sidebar.selectbox(
         "Select Broker:",
-        options=available_brokers,
+        options=all_brokers_ordered,
         index=0,
-        help="Choose which broker's financial statements to display (Sector = sum of all brokers)"
+        help="Brokers organized by tier: Top (SSI, VCI, VND, HCM, TCBS, VPBS, VPS) | Mid (MBS, VIX, SHS, BSI, FTS) | Regional (DSE, VDS, LPBS, Kafi, ACBS, OCBS, HDBS)"
     )
 
     # Report type selection

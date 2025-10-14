@@ -126,7 +126,8 @@ def get_metric_display_name(metric_code):
         'MARGIN_LENDING_INCOME': 'Margin Lending Income',
         'ROE': 'ROE',
         'ROA': 'ROA',
-        'INTEREST_RATE': 'Interest Rate'
+        'INTEREST_RATE': 'Interest Rate',
+        'MARGIN_LENDING_RATE': 'Margin Lending Rate'
     }
     return metric_names.get(metric_code, metric_code)
 
@@ -352,15 +353,36 @@ allowed_metrics = [
     'MARGIN_LENDING_INCOME',
     'ROE',
     'ROA',
-    'INTEREST_RATE'
+    'INTEREST_RATE',
+    'MARGIN_LENDING_RATE'
 ]
+
+# Broker groups for organized display
+broker_groups = {
+    'Top Tier': ['SSI', 'VCI', 'VND', 'HCM', 'TCBS', 'VPBS', 'VPS'],
+    'Mid Tier': ['MBS', 'VIX', 'SHS', 'BSI', 'FTS'],
+    'Regional': ['DSE', 'VDS', 'LPBS', 'Kafi', 'ACBS', 'OCBS', 'HDBS'],
+}
+
+# Create grouped broker list maintaining order within groups
+grouped_brokers = []
+for group_name, group_brokers in broker_groups.items():
+    # Add brokers from this group that exist in available_brokers
+    for broker in group_brokers:
+        if broker in available_brokers:
+            grouped_brokers.append(broker)
+
+# Add remaining brokers not in any group (sorted)
+remaining_brokers = sorted([b for b in available_brokers if b not in grouped_brokers])
+all_brokers_ordered = grouped_brokers + remaining_brokers
 
 # Broker selection - NO DEFAULT
 selected_brokers = st.sidebar.multiselect(
     "Select Brokers:",
-    options=available_brokers,
+    options=all_brokers_ordered,
     default=[],  # No default brokers
-    key="chart_brokers"
+    key="chart_brokers",
+    help="Brokers organized by tier: Top (SSI, VCI, VND, HCM, TCBS, VPBS, VPS) | Mid (MBS, VIX, SHS, BSI, FTS) | Regional (DSE, VDS, LPBS, Kafi, ACBS, OCBS, HDBS)"
 )
 
 # Fixed default charts (always displayed)
@@ -479,7 +501,7 @@ with tab1:
                                 broker_data_with_ma4 = calculate_ma4(filtered_df, metric, broker)
 
                                 # Check if this is ROE, ROA, or rate metrics (percentage metrics)
-                                if metric in ['ROE', 'ROA', 'INTEREST_RATE']:
+                                if metric in ['ROE', 'ROA', 'INTEREST_RATE', 'MARGIN_LENDING_RATE']:
                                     broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce') * 100  # Convert to percentage
                                     y_values = broker_data['DISPLAY_VALUE']
                                     hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}}%<br><extra></extra>"
@@ -525,7 +547,7 @@ with tab1:
                                     )
 
                         # Set y-axis title and format based on metric type
-                        if metric in ['ROE', 'ROA', 'INTEREST_RATE']:
+                        if metric in ['ROE', 'ROA', 'INTEREST_RATE', 'MARGIN_LENDING_RATE']:
                             yaxis_title = "Percentage (%)"
                             tick_format = ".2f"
                         else:
