@@ -1,7 +1,7 @@
 BROKERAGE_CODE_MAP = {
     "VPS": "VPS",
     "SSI": "SSI",
-    "TCBS": "TCX",
+    "TCX": "TCBS",
     "VCI": "VIETCAP",
     "HCM": "HSC",
     "MBS": "MBS",
@@ -10,7 +10,7 @@ BROKERAGE_CODE_MAP = {
     "KIS": "KIS",
     "FTS": "FPTS",
     "VCBS": "VCBS",
-    "VPBS": "VPBS",
+    "VPX": "VPBS",
 }
 
 
