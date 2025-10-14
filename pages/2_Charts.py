@@ -17,6 +17,133 @@ font_family = theme["font"]
 
 st.set_page_config(page_title="Financial Charts - CALC Metrics", layout="wide")
 
+def calculate_net_brokerage_fee(df):
+    """Calculate Net Brokerage Fee (bps) = NET_BROKERAGE_INCOME / (NOS101 + NOS109) * 10000"""
+    calculated_rows = []
+
+    for ticker in df['TICKER'].unique():
+        ticker_data = df[df['TICKER'] == ticker]
+
+        for (year, quarter) in ticker_data[['YEARREPORT', 'LENGTHREPORT']].drop_duplicates().values:
+            period_data = ticker_data[
+                (ticker_data['YEARREPORT'] == year) &
+                (ticker_data['LENGTHREPORT'] == quarter)
+            ]
+
+            # Get required metrics - try both METRIC_CODE and KEYCODE
+            net_brok = period_data[
+                (period_data['METRIC_CODE'] == 'NET_BROKERAGE_INCOME') |
+                (period_data['KEYCODE'] == 'NET_BROKERAGE_INCOME')
+            ]
+            nos101 = period_data[period_data['KEYCODE'] == 'NOS101']
+            nos109 = period_data[period_data['KEYCODE'] == 'NOS109']
+
+            if not net_brok.empty and not nos101.empty and not nos109.empty:
+                net_brokerage_income = net_brok['VALUE'].values[0]
+                institution_trading = nos101['VALUE'].values[0]
+                investor_trading = nos109['VALUE'].values[0]
+                total_trading = institution_trading + investor_trading
+
+                if total_trading > 0:
+                    fee_bps = (net_brokerage_income / total_trading) * 10000
+
+                    # Create a row matching the BrokerageMetrics structure
+                    calculated_rows.append({
+                        'TICKER': ticker,
+                        'YEARREPORT': year,
+                        'LENGTHREPORT': quarter,
+                        'KEYCODE': 'NET_BROKERAGE_FEE_BPS',
+                        'METRIC_CODE': 'NET_BROKERAGE_FEE_BPS',
+                        'QUARTER_LABEL': period_data.iloc[0]['QUARTER_LABEL'] if 'QUARTER_LABEL' in period_data.columns else f"{quarter}Q{year%100:02d}",
+                        'KEYCODE_NAME': 'Net Brokerage Fee (bps)',
+                        'VALUE': fee_bps,
+                        'STARTDATE': period_data.iloc[0].get('STARTDATE', None),
+                        'ENDDATE': period_data.iloc[0].get('ENDDATE', None)
+                    })
+
+    if calculated_rows:
+        calc_df = pd.DataFrame(calculated_rows)
+        df = pd.concat([df, calc_df], ignore_index=True)
+
+    return df
+
+def calculate_margin_lending_rate(df):
+    """Calculate Margin Lending Rate (%) = MARGIN_LENDING_INCOME / Avg(MARGIN_BALANCE, 4Q) * 4 * 100"""
+    calculated_rows = []
+
+    for ticker in df['TICKER'].unique():
+        ticker_data = df[df['TICKER'] == ticker]
+
+        # Get all periods and sort them
+        periods = ticker_data[['YEARREPORT', 'LENGTHREPORT']].drop_duplicates().sort_values(['YEARREPORT', 'LENGTHREPORT'])
+
+        for _, (year, quarter) in periods.iterrows():
+            # Get margin income for current period - try both METRIC_CODE and KEYCODE
+            margin_income_row = ticker_data[
+                (ticker_data['YEARREPORT'] == year) &
+                (ticker_data['LENGTHREPORT'] == quarter) &
+                ((ticker_data['METRIC_CODE'] == 'MARGIN_LENDING_INCOME') |
+                 (ticker_data['KEYCODE'] == 'MARGIN_LENDING_INCOME'))
+            ]
+
+            if margin_income_row.empty:
+                continue
+
+            margin_income = margin_income_row['VALUE'].values[0]
+
+            # Get trailing 4 quarters of margin balance using METRIC_CODE
+            margin_books = []
+            for q_offset in range(4):
+                q_num = quarter - q_offset
+                y = year
+
+                # Handle year rollover
+                while q_num <= 0:
+                    q_num += 4
+                    y -= 1
+
+                margin_book_row = ticker_data[
+                    (ticker_data['YEARREPORT'] == y) &
+                    (ticker_data['LENGTHREPORT'] == q_num) &
+                    ((ticker_data['METRIC_CODE'] == 'MARGIN_BALANCE') |
+                     (ticker_data['KEYCODE'] == 'MARGIN_BALANCE'))
+                ]
+
+                if not margin_book_row.empty:
+                    book_value = margin_book_row['VALUE'].values[0]
+                    if book_value > 0:
+                        margin_books.append(book_value)
+
+            # Calculate rate if we have sufficient data
+            if len(margin_books) >= 2 and margin_income:
+                avg_margin_book = sum(margin_books) / len(margin_books)
+                margin_rate = (margin_income / avg_margin_book) * 4 * 100
+
+                # Get period info from the margin income row
+                period_data = ticker_data[
+                    (ticker_data['YEARREPORT'] == year) &
+                    (ticker_data['LENGTHREPORT'] == quarter)
+                ]
+
+                calculated_rows.append({
+                    'TICKER': ticker,
+                    'YEARREPORT': year,
+                    'LENGTHREPORT': quarter,
+                    'KEYCODE': 'MARGIN_LENDING_RATE',
+                    'METRIC_CODE': 'MARGIN_LENDING_RATE',
+                    'QUARTER_LABEL': period_data.iloc[0]['QUARTER_LABEL'] if 'QUARTER_LABEL' in period_data.columns else f"{quarter}Q{year%100:02d}",
+                    'KEYCODE_NAME': 'Margin Lending Rate (%)',
+                    'VALUE': margin_rate / 100,  # Store as decimal for consistency with other rates
+                    'STARTDATE': period_data.iloc[0].get('STARTDATE', None),
+                    'ENDDATE': period_data.iloc[0].get('ENDDATE', None)
+                })
+
+    if calculated_rows:
+        calc_df = pd.DataFrame(calculated_rows)
+        df = pd.concat([df, calc_df], ignore_index=True)
+
+    return df
+
 # OPTIMIZED: Load only selected data from database
 @st.cache_data(ttl=3600, show_spinner="Loading data...")
 def load_filtered_data(tickers, metrics, years, quarters):
@@ -26,13 +153,24 @@ def load_filtered_data(tickers, metrics, years, quarters):
     if not tickers or not metrics or not years or not quarters:
         return pd.DataFrame()
 
-    # If TOTAL_OPERATING_INCOME is requested, also load its components
+    # If calculated metrics are requested, load their base components
     metrics_to_load = list(metrics)
+
     if 'TOTAL_OPERATING_INCOME' in metrics:
         # TOI = Fee Income + Capital Income (6 components total)
         toi_components = ['NET_BROKERAGE_INCOME', 'NET_IB_INCOME', 'NET_OTHER_OP_INCOME',
                          'NET_TRADING_INCOME', 'INTEREST_INCOME', 'MARGIN_LENDING_INCOME']
         metrics_to_load.extend([m for m in toi_components if m not in metrics_to_load])
+
+    if 'NET_BROKERAGE_FEE_BPS' in metrics:
+        # Net Brokerage Fee requires: NET_BROKERAGE_INCOME, NOS101, NOS109
+        fee_components = ['NET_BROKERAGE_INCOME', 'NOS101', 'NOS109']
+        metrics_to_load.extend([m for m in fee_components if m not in metrics_to_load])
+
+    if 'MARGIN_LENDING_RATE' in metrics:
+        # Margin Lending Rate requires: MARGIN_LENDING_INCOME, MARGIN_BALANCE
+        margin_components = ['MARGIN_LENDING_INCOME', 'MARGIN_BALANCE']
+        metrics_to_load.extend([m for m in margin_components if m not in metrics_to_load])
 
     df = load_filtered_brokerage_data(
         tickers=tickers,
@@ -47,6 +185,14 @@ def load_filtered_data(tickers, metrics, years, quarters):
     # Ensure correct data types
     df['YEARREPORT'] = df['YEARREPORT'].astype(int)
     df['LENGTHREPORT'] = df['LENGTHREPORT'].astype(int)
+
+    # Calculate derived metrics on-the-fly
+    if 'NET_BROKERAGE_FEE_BPS' in metrics:
+        df = calculate_net_brokerage_fee(df)
+
+    if 'MARGIN_LENDING_RATE' in metrics:
+        df = calculate_margin_lending_rate(df)
+
     return df
 
 # Get metadata for filters (lightweight, cached 24 hours)
