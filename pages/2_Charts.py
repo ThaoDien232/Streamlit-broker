@@ -597,28 +597,24 @@ with tab2:
 
     # Multi-select for quarter-year combinations
     # Default to last 4 quarters of 2024
-    default_quarters = ["Q1 2024", "Q2 2024", "Q3 2024", "Q4 2024"]
-    selected_quarter_labels = st.multiselect(
-        "Select Quarters (across multiple years):",
-        options=quarter_options,
-        default=[q for q in default_quarters if q in quarter_options],
-        key="market_share_quarters_multiselect"
+    recent_count = st.number_input(
+        "Number of most recent quarters",
+        min_value=1,
+        max_value=len(quarter_options),
+        value=6,
+        step=1,
+        key="market_share_recent_count"
     )
 
-    if selected_quarter_labels:
-        # Parse selected quarters into year-quarter pairs
+    if recent_count > 0:
+        latest_quarters = quarter_options[-recent_count:]
         quarters_by_year = {}
-        for label in selected_quarter_labels:
-            # Parse "Q1 2024" -> quarter=1, year=2024
+        for label in latest_quarters:
             parts = label.split()
             quarter = int(parts[0].replace('Q', ''))
             year = int(parts[1])
+            quarters_by_year.setdefault(year, []).append(quarter)
 
-            if year not in quarters_by_year:
-                quarters_by_year[year] = []
-            quarters_by_year[year].append(quarter)
-
-        # Fetch data for all selected year-quarter combinations
         with st.spinner("Fetching market share data..."):
             all_market_share_data = []
             for year, quarters in quarters_by_year.items():
@@ -633,8 +629,6 @@ with tab2:
                 market_share_df = pd.DataFrame()
 
         if not market_share_df.empty:
-            # Create dynamic title based on selected quarters
-            time_period_label = ", ".join(selected_quarter_labels)
             st.subheader(f"Market Share Data")
             
             # Display summary statistics
@@ -649,7 +643,7 @@ with tab2:
             with col2:
                 st.metric(
                     label="Quarters Retrieved",
-                    value=len(selected_quarter_labels)
+                    value=len(market_share_df['Quarter'].unique())
                 )
             
             with col3:
@@ -704,9 +698,14 @@ with tab2:
                         st.metric(label="Top Broker", value="No data")
             
             # Create pivot table for better display
+            market_share_df['Quarter_Display'] = market_share_df.apply(
+                lambda row: f"{row['Year']} Q{row['Quarter']}" if 'Quarter' in row else row.get('Period_Label', ''),
+                axis=1
+            )
+
             pivot_df = market_share_df.pivot_table(
                 index=['Brokerage_Code', 'Brokerage_Name'],
-                columns='Quarter',
+                columns='Quarter_Display',
                 values='Market_Share_Percent',
                 aggfunc='first'
             ).reset_index()
@@ -738,8 +737,8 @@ with tab2:
             
             # Format percentage columns
             for col in pivot_df.columns:
-                if col.startswith('Q'):
-                    pivot_df[col] = pivot_df[col].apply(lambda x: f"{x:.2f}%" if x > 0 else "-")
+                if col not in ('Brokerage_Code', 'Brokerage_Name'):
+                    pivot_df[col] = pivot_df[col].apply(lambda x: f"{x:.2f}%" if x and x > 0 else "-")
             
             # Display the table
             st.subheader("Market Share by Quarter")
