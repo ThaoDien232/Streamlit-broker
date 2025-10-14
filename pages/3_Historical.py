@@ -111,6 +111,7 @@ def display_income_statement(df, ticker, periods, display_mode):
         ('NPAT', 'Net Profit After Tax'),
         ('ROE', 'Return on Equity (%)'),
         ('ROA', 'Return on Assets (%)'),
+        ('INTEREST_RATE', 'Interest Rate (%)'),
     ]
     
     if display_mode == "Absolute Values":
@@ -132,6 +133,9 @@ def display_income_statement(df, ticker, periods, display_mode):
                 if metric_code in ['ROE', 'ROA']:
                     # These are already percentages (e.g., 15.5 = 15.5%)
                     row[label] = f"{value:.2f}%" if value != 0 else "-"
+                elif metric_code == 'INTEREST_RATE':
+                    # Interest rate is stored as decimal, convert to percentage
+                    row[label] = f"{value * 100:.2f}%" if value != 0 else "-"
                 else:
                     # Financial values in VND
                     row[label] = format_vnd_billions(value)
@@ -298,7 +302,7 @@ def display_balance_sheet(df, ticker, periods, display_mode):
             st.info("No growth data available for Balance Sheet metrics.")
 
 def display_investment_book(df, broker, periods):
-    """Display Investment Book (Notes 7.x and 8.x) with FVTPL, AFS, HTM categories"""
+    """Display Investment Book (Notes 7.x and 8.x) showing Market Value across quarters"""
     st.subheader("📊 Investment Book")
 
     # Only show for quarterly data (investment book not meaningful for annual aggregates)
@@ -308,75 +312,99 @@ def display_investment_book(df, broker, periods):
         st.info("Investment book requires quarterly data. Please select a year range with quarterly periods.")
         return
 
-    # Select which quarter to display (default to latest)
-    period_labels = [p['QUARTER_LABEL'] for p in quarterly_periods]
+    # Get last 6 quarters (or all available if less than 6)
+    display_periods = quarterly_periods[:6]
 
-    selected_period_label = st.selectbox(
-        "Select Quarter for Investment Book:",
-        period_labels,
-        index=0,  # Latest quarter
-        help="Investment holdings breakdown for the selected quarter"
-    )
+    # Build investment book table with MV across quarters
+    investment_rows = []
 
-    # Find the selected period
-    selected_period = next((p for p in quarterly_periods if p['QUARTER_LABEL'] == selected_period_label), None)
+    # Get all unique investment items across all periods
+    all_items = set()
+    for period in display_periods:
+        year = period['YEARREPORT']
+        quarter = period['LENGTHREPORT']
+        period_data = get_investment_data(df, broker, year, quarter)
 
-    if not selected_period:
-        st.warning(f"Could not find data for {selected_period_label}")
+        for category in ['FVTPL', 'AFS', 'HTM']:
+            if category in period_data:
+                mv_items = period_data[category].get('Market Value', {})
+                for item in mv_items.keys():
+                    all_items.add((category, item))
+
+    if not all_items:
+        st.info(f"No investment holdings data available for {broker}")
         return
 
-    year = selected_period['YEARREPORT']
-    quarter = selected_period['LENGTHREPORT']
-
-    # Get current investment data
-    current_data = get_investment_data(df, broker, year, quarter)
-
-    # Get prior quarter data (if exists)
-    # quarterly_periods is sorted oldest to newest, so prior = index - 1
-    prior_data = None
-    prior_quarter_label = None
-    current_index = quarterly_periods.index(selected_period)
-    if current_index > 0:  # Not the oldest quarter
-        prior_period = quarterly_periods[current_index - 1]
-        prior_year = prior_period['YEARREPORT']
-        prior_quarter = prior_period['LENGTHREPORT']
-        prior_quarter_label = prior_period['QUARTER_LABEL']
-        prior_data = get_investment_data(df, broker, prior_year, prior_quarter)
-
-    # Check if there's any investment data
-    has_data = False
+    # Group items by category
     for category in ['FVTPL', 'AFS', 'HTM']:
-        if current_data.get(category):
-            if current_data[category].get('Cost') or current_data[category].get('Market Value'):
-                has_data = True
-                break
+        category_items = sorted([item for cat, item in all_items if cat == category])
 
-    if not has_data:
-        st.info(f"No investment holdings data available for {broker} in {selected_period_label}")
-        return
+        if category_items:
+            # Add category header
+            header_row = {'Item': category}
+            for period in display_periods:
+                label = period['QUARTER_LABEL']
+                header_row[label] = ''
+            investment_rows.append(header_row)
 
-    # Format and display investment book with prior quarter comparison
-    if prior_data and prior_quarter_label:
-        investment_df = format_investment_book(
-            current_data,
-            prior_data,
-            current_label=selected_period_label,
-            prior_label=prior_quarter_label
-        )
-    else:
-        investment_df = format_investment_book(current_data)
+            # Add items
+            for item in category_items:
+                row = {'Item': f'  {item}'}
+                has_data = False
 
-    if not investment_df.empty:
-        st.dataframe(investment_df, use_container_width=True, hide_index=True, height=500)
+                for period in display_periods:
+                    year = period['YEARREPORT']
+                    quarter = period['LENGTHREPORT']
+                    label = period['QUARTER_LABEL']
+
+                    period_data = get_investment_data(df, broker, year, quarter)
+                    mv = period_data.get(category, {}).get('Market Value', {}).get(item, 0)
+
+                    if mv != 0:
+                        mv_b = mv / 1_000_000_000
+                        row[label] = format_vnd_billions(mv)
+                        has_data = True
+                    else:
+                        row[label] = '-'
+
+                if has_data:
+                    investment_rows.append(row)
+
+            # Add category total
+            total_row = {'Item': f'Total {category}'}
+            for period in display_periods:
+                year = period['YEARREPORT']
+                quarter = period['LENGTHREPORT']
+                label = period['QUARTER_LABEL']
+
+                period_data = get_investment_data(df, broker, year, quarter)
+                total_mv = sum(period_data.get(category, {}).get('Market Value', {}).values())
+
+                if total_mv != 0:
+                    total_row[label] = format_vnd_billions(total_mv)
+                else:
+                    total_row[label] = '-'
+
+            investment_rows.append(total_row)
+
+            # Add blank row
+            blank_row = {'Item': ''}
+            for period in display_periods:
+                blank_row[period['QUARTER_LABEL']] = ''
+            investment_rows.append(blank_row)
+
+    if investment_rows:
+        investment_df = pd.DataFrame(investment_rows)
+        st.dataframe(investment_df, use_container_width=True, hide_index=True)
 
         # Add download button
         csv = investment_df.to_csv(index=False)
         st.download_button(
             label="📥 Download Investment Book",
             data=csv,
-            file_name=f"investment_book_{broker}_{selected_period_label}.csv",
+            file_name=f"investment_book_{broker}.csv",
             mime="text/csv",
-            key=f"download_inv_{broker}_{selected_period_label}"
+            key=f"download_inv_{broker}"
         )
 
     # Add explanatory note
@@ -388,10 +416,7 @@ def display_investment_book(df, broker, periods):
 
         **HTM** (Held-to-Maturity): Fixed maturity investments measured at amortized cost
 
-        **Columns:**
-        - **Cost**: Original purchase price / carrying amount
-        - **Market Value**: Current fair market value
-        - **Unrealized G/L**: Difference between market value and cost
+        **Values shown**: Market Value (MV) in VND Billions for the most recent 6 quarters
         """)
 
 

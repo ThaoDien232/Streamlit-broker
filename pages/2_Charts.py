@@ -125,7 +125,8 @@ def get_metric_display_name(metric_code):
         'SGA': 'SG&A',
         'MARGIN_LENDING_INCOME': 'Margin Lending Income',
         'ROE': 'ROE',
-        'ROA': 'ROA'
+        'ROA': 'ROA',
+        'INTEREST_RATE': 'Interest Rate'
     }
     return metric_names.get(metric_code, metric_code)
 
@@ -350,7 +351,8 @@ allowed_metrics = [
     'SGA',
     'MARGIN_LENDING_INCOME',
     'ROE',
-    'ROA'
+    'ROA',
+    'INTEREST_RATE'
 ]
 
 # Broker selection - NO DEFAULT
@@ -476,14 +478,14 @@ with tab1:
                                 # Calculate MA4 for this broker
                                 broker_data_with_ma4 = calculate_ma4(filtered_df, metric, broker)
 
-                                # Check if this is ROE or ROA (percentage metrics)
-                                if metric in ['ROE', 'ROA']:
-                                    broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce')
+                                # Check if this is ROE, ROA, or rate metrics (percentage metrics)
+                                if metric in ['ROE', 'ROA', 'INTEREST_RATE']:
+                                    broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce') * 100  # Convert to percentage
                                     y_values = broker_data['DISPLAY_VALUE']
                                     hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}}%<br><extra></extra>"
 
                                     if not broker_data_with_ma4.empty:
-                                        broker_data_with_ma4['MA4_DISPLAY'] = broker_data_with_ma4['MA4']
+                                        broker_data_with_ma4['MA4_DISPLAY'] = broker_data_with_ma4['MA4'] * 100
                                 else:
                                     # Convert other values to billions for display
                                     broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce') / 1_000_000_000
@@ -523,7 +525,7 @@ with tab1:
                                     )
 
                         # Set y-axis title and format based on metric type
-                        if metric in ['ROE', 'ROA']:
+                        if metric in ['ROE', 'ROA', 'INTEREST_RATE']:
                             yaxis_title = "Percentage (%)"
                             tick_format = ".2f"
                         else:
@@ -611,7 +613,7 @@ with tab2:
         if not market_share_df.empty:
             # Create dynamic title based on selected quarters
             time_period_label = ", ".join(selected_quarter_labels)
-            st.subheader(f"Market Share Data for {time_period_label}")
+            st.subheader(f"Market Share Data")
             
             # Display summary statistics
             col1, col2, col3 = st.columns(3)
