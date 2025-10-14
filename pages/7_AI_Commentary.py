@@ -201,7 +201,6 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
         'Margin Income',
         'Margin Balance',
         'Margin/Equity %',
-        'Margin Lending Rate',
         'Investment Income',
         'Other Incomes',
         'Total Operating Income',
@@ -318,9 +317,9 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 continue
 
             if metric_name == 'Trading Value':
-                # Calculate Trading Value = NOS101 (Institution) + NOS109 (Investor) in billions VND
-                institution_shares = get_note_value(ticker_data, ticker, year, quarter_num, 'NOS101')
-                investor_shares = get_note_value(ticker_data, ticker, year, quarter_num, 'NOS109')
+                # Calculate Trading Value = Institution shares + Investor shares trading value (in billions VND)
+                institution_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
+                investor_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Investor_shares_trading_value')
                 total_trading_value = (institution_shares + investor_shares) / 1_000_000_000  # Convert to billions
                 quarter_values.append(total_trading_value)
                 continue
@@ -338,8 +337,8 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 else:
                     # Calculate Market Share for brokers not in Top 10
                     # Formula: Trading Value / (Market Liquidity * Trading Days in Quarter) / 2
-                    institution_shares = get_note_value(ticker_data, ticker, year, quarter_num, 'NOS101')
-                    investor_shares = get_note_value(ticker_data, ticker, year, quarter_num, 'NOS109')
+                    institution_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
+                    investor_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Investor_shares_trading_value')
                     total_trading_value = institution_shares + investor_shares
 
                     # Get market liquidity and trading days
@@ -367,45 +366,16 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 continue
 
             if metric_name == 'Net Brokerage Fee':
-                # Calculate Net Brokerage Fee (bps) = NET_BROKERAGE_INCOME / (NOS101 + NOS109) * 10000
+                # Calculate Net Brokerage Fee = Net Brokerage Income / Trading Value (in basis points)
                 net_brokerage_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'NET_BROKERAGE_INCOME')
-                institution_shares = get_note_value(ticker_data, ticker, year, quarter_num, 'NOS101')
-                investor_shares = get_note_value(ticker_data, ticker, year, quarter_num, 'NOS109')
+                institution_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
+                investor_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Investor_shares_trading_value')
                 total_trading_value = institution_shares + investor_shares
 
-                if total_trading_value and total_trading_value != 0 and net_brokerage_income:
+                if total_trading_value and total_trading_value != 0:
                     # Calculate as basis points (bps): (income / trading value) * 10000
                     net_brokerage_fee_bps = (net_brokerage_income / total_trading_value) * 10000
                     quarter_values.append(net_brokerage_fee_bps)
-                else:
-                    quarter_values.append(0)
-                continue
-
-            if metric_name == 'Margin Lending Rate':
-                # Calculate Margin Lending Rate (%) = MARGIN_LENDING_INCOME / Avg(MARGIN_BALANCE) * 4 * 100
-                # Annualized rate based on quarterly income and trailing 4Q average margin balance
-                margin_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'MARGIN_LENDING_INCOME')
-
-                # Get trailing 4 quarters of margin balance for average
-                margin_books = []
-                for q_offset in range(4):
-                    q_num = quarter_num - q_offset
-                    y = year
-                    # Handle year rollover
-                    while q_num <= 0:
-                        q_num += 4
-                        y -= 1
-
-                    margin_book = get_calc_metric_value(ticker_data, ticker, y, q_num, 'MARGIN_BALANCE')
-                    if margin_book and margin_book > 0:
-                        margin_books.append(margin_book)
-
-                # Calculate rate if we have sufficient data
-                if margin_books and len(margin_books) >= 2 and margin_income:
-                    avg_margin_book = sum(margin_books) / len(margin_books)
-                    # Annualize: * 4 (quarters per year) * 100 (to percentage)
-                    margin_rate_pct = (margin_income / avg_margin_book) * 4 * 100
-                    quarter_values.append(margin_rate_pct)
                 else:
                     quarter_values.append(0)
                 continue
@@ -497,19 +467,6 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
             df_analysis['YoY Growth %'] = yoy_growth
 
     return df_analysis
-
-def get_note_value(df, ticker, year, quarter, keycode):
-    """Get a specific Note value by KEYCODE (e.g., NOS101, NOS109)"""
-    result = df[
-        (df['TICKER'] == ticker) &
-        (df['YEARREPORT'] == year) &
-        (df['LENGTHREPORT'] == quarter) &
-        (df['KEYCODE'] == keycode)
-    ]
-
-    if len(result) > 0:
-        return result.iloc[0]['VALUE']
-    return 0
 
 def get_calc_metric_value(df, ticker, year, quarter, metric_code):
     """Get a specific calculated metric value from CALC statement type"""
@@ -1013,7 +970,7 @@ if selected_ticker and selected_quarter:
                 try:
                     value = float(value)
                     # Percentages - already calculated as percentages (e.g., 15.5 means 15.5%)
-                    if metric_name in ['ROE', 'ROA', 'Margin/Equity %', 'CIR', 'Interest Rate', 'Brokerage Market Share', 'Margin Lending Rate']:
+                    if metric_name in ['ROE', 'ROA', 'Margin/Equity %', 'CIR', 'Interest Rate', 'Brokerage Market Share']:
                         return f"{value:.2f}%"
                     # Basis points
                     elif metric_name == 'Net Brokerage Fee':
