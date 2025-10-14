@@ -8,6 +8,7 @@ import streamlit as st
 import toml
 
 from utils.keycode_matcher import load_keycode_map, match_keycodes
+from utils.brokerage_codes import get_brokerage_code
 
 
 st.set_page_config(page_title="Forecast", layout="wide")
@@ -375,6 +376,7 @@ def get_share_for_year(year: int) -> float | None:
 
 @st.cache_data(ttl=3600)
 def fetch_market_share_api(broker: str, year: int, quarter: int):
+    broker_code = get_brokerage_code(broker)
     try:
         url = "https://api.hsx.vn/s/api/v1/1/brokeragemarketshare/top/ten"
         params = {
@@ -389,7 +391,7 @@ def fetch_market_share_api(broker: str, year: int, quarter: int):
         data = resp.json()
         if data.get('success') and 'data' in data:
             for item in data['data'].get('brokerageStock', []):
-                if item.get('shortenName', '').upper() == broker.upper():
+                if item.get('shortenName', '').upper() == broker_code:
                     return float(item.get('percentage', 0))
     except Exception:
         return None
@@ -469,8 +471,6 @@ if share_default is None:
     share_year = get_share_for_year(target_year)
     if share_year is not None:
         share_default = share_year / 2
-if share_default is None:
-    share_default = 0.05
 
 avg_daily_default = history_avg_daily[-1] if history_avg_daily else 0.0
 if fee_decimal_default:
@@ -482,7 +482,7 @@ else:
 
 trading_days_forecast = estimate_trading_days(quarter_stats_lookup, target_year, target_quarter)
 
-share_default_pct = share_default * 100
+share_default_pct = share_default * 100 if share_default is not None else None
 
 target_stats = quarter_stats_lookup.get((target_year, target_quarter))
 if target_stats and target_stats.get('avg_daily_bn') is not None:
@@ -523,7 +523,7 @@ net_brokerage_forecast_bn = net_brokerage_forecast / 1e9
 forecast_metrics = {
     'label': target_label,
     'avg_daily_bn': avg_daily_input,
-    'share_pct': market_share_input,
+    'share_pct': market_share_input if (share_default_pct is not None or market_share_input > 0) else None,
     'fee_bps': net_fee_input,
     'net_brokerage_bn': net_brokerage_forecast_bn,
 }
