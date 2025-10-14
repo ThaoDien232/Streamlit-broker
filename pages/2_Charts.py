@@ -701,10 +701,13 @@ with tab2:
             def format_quarter_display(row):
                 q = row.get('Quarter')
                 yr = row.get('Year')
-                if pd.notnull(q) and pd.notnull(yr):
-                    return f"{int(yr)} Q{int(q)}"
+                try:
+                    if pd.notnull(q) and pd.notnull(yr):
+                        return f"{int(yr)} Q{int(q)}"
+                except Exception:
+                    pass
                 period_label = row.get('Period_Label')
-                if isinstance(period_label, str):
+                if isinstance(period_label, str) and period_label:
                     return period_label
                 return ''
 
