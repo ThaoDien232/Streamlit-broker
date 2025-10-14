@@ -25,6 +25,7 @@ def load_data():
 
     keycode_map = load_keycode_map('sql/IRIS_KEYCODE.csv')
     df_is_quarterly = match_keycodes('sql/IS_security_quarterly.csv', keycode_map)
+    df_bs_quarterly = match_keycodes('sql/BS_security.csv', keycode_map)
 
     df_forecast = pd.read_csv('sql/FORECAST.csv', low_memory=False)
     df_forecast['DATE'] = pd.to_numeric(df_forecast['DATE'], errors='coerce')
@@ -35,7 +36,7 @@ def load_data():
     df_index = pd.read_csv('sql/INDEX.csv', parse_dates=['TRADINGDATE'])
     df_turnover = pd.read_excel('sql/turnover.xlsx')
 
-    return theme_config, df_is_quarterly, df_forecast, df_index, df_turnover
+    return theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_index, df_turnover
 
 
 SEGMENTS = [
@@ -185,7 +186,7 @@ def format_pct(value: float | None) -> str:
     return f"{value * 100:,.1f}%"
 
 
-theme_config, df_is_quarterly, df_forecast, df_index_raw, df_turnover = load_data()
+theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_index_raw, df_turnover = load_data()
 
 theme = theme_config.get("theme", {}) if isinstance(theme_config, dict) else {}
 background_color = theme.get("backgroundColor", "#FFFFFF")
@@ -611,10 +612,185 @@ if show_share_debug:
     st.dataframe(debug_df, use_container_width=True)
 st.caption(f"Assuming {trading_days_forecast} trading days for {target_label} and applying net brokerage formula.")
 
-# Update summary with forecast brokerage
+def extract_is_value(year: int, quarter: int, codes: list[str]) -> float | None:
+    subset = df_is_quarterly[
+        (df_is_quarterly['TICKER'] == selected_broker)
+        & (df_is_quarterly['YEARREPORT'] == year)
+        & (df_is_quarterly['LENGTHREPORT'] == quarter)
+    ]
+    if subset.empty:
+        return None
+
+    row = subset.iloc[0]
+    total = 0.0
+    found = False
+    for code in codes:
+        if code in row:
+            value = pd.to_numeric(row[code], errors='coerce')
+            if pd.notnull(value):
+                total += float(value)
+                found = True
+
+    return total if found else None
+
+
+def extract_bs_value(year: int, quarter: int, codes: list[str]) -> float | None:
+    subset = df_bs_quarterly[
+        (df_bs_quarterly['TICKER'] == selected_broker)
+        & (df_bs_quarterly['YEARREPORT'] == year)
+        & (df_bs_quarterly['LENGTHREPORT'] == quarter)
+    ]
+    if subset.empty:
+        return None
+
+    row = subset.iloc[0]
+    total = 0.0
+    found = False
+    for code in codes:
+        if code in row:
+            value = pd.to_numeric(row[code], errors='coerce')
+            if pd.notnull(value):
+                total += float(value)
+                found = True
+
+    return total if found else None
+
+
+MARGIN_INCOME_CODES = ['IS.7', 'IS.30']
+INTEREST_EXPENSE_CODES = ['IS.51']
+MARGIN_BALANCE_CODES = ['BS.8']
+BORROWING_BALANCE_CODES = ['BS.95', 'BS.100', 'BS.122', 'BS.127']
+
+margin_history_metrics: list[dict[str, float | None]] = []
+
+for y, q in brokerage_history_quarters:
+    margin_balance_val = extract_bs_value(y, q, MARGIN_BALANCE_CODES)
+    borrowing_balance_val = extract_bs_value(y, q, BORROWING_BALANCE_CODES)
+    margin_income_val = extract_is_value(y, q, MARGIN_INCOME_CODES)
+    interest_expense_val = extract_is_value(y, q, INTEREST_EXPENSE_CODES)
+
+    margin_balance_bn = margin_balance_val / 1e9 if margin_balance_val is not None else None
+    borrowing_balance_bn = borrowing_balance_val / 1e9 if borrowing_balance_val is not None else None
+
+    margin_income_bn = abs(margin_income_val) / 1e9 if margin_income_val is not None else None
+    interest_expense_bn = abs(interest_expense_val) / 1e9 if interest_expense_val is not None else None
+
+    margin_rate_pct = None
+    if margin_balance_val not in (None, 0) and margin_income_val is not None:
+        margin_rate_pct = (margin_income_val * 4 / margin_balance_val) * 100
+
+    interest_rate_pct = None
+    if borrowing_balance_val not in (None, 0) and interest_expense_val is not None:
+        interest_rate_pct = (abs(interest_expense_val) * 4 / borrowing_balance_val) * 100
+
+    margin_history_metrics.append({
+        'label': quarter_label(y, q),
+        'margin_balance_bn': margin_balance_bn,
+        'margin_rate_pct': margin_rate_pct,
+        'margin_income_bn': margin_income_bn,
+        'borrowing_balance_bn': borrowing_balance_bn,
+        'interest_rate_pct': interest_rate_pct,
+        'interest_expense_bn': interest_expense_bn,
+    })
+
+
+def last_history_value(key: str, default: float = 0.0) -> float:
+    for entry in reversed(margin_history_metrics):
+        value = entry.get(key)
+        if value is not None:
+            return float(value)
+    return default
+
+
+margin_balance_default = last_history_value('margin_balance_bn')
+margin_rate_default = last_history_value('margin_rate_pct')
+borrowing_balance_default = last_history_value('borrowing_balance_bn')
+interest_rate_default = last_history_value('interest_rate_pct')
+
+st.markdown("#### Margin Lending Forecast")
+margin_cols = st.columns(2)
+margin_balance_input = margin_cols[0].number_input(
+    f"{target_label} Margin Balance (bn VND)",
+    value=float(round(margin_balance_default, 0)),
+    min_value=0.0,
+    step=100.0,
+    format="%.0f",
+    key="margin_balance_input",
+)
+
+margin_rate_input = margin_cols[1].number_input(
+    f"{target_label} Margin Lending Rate (%)",
+    value=float(round(margin_rate_default, 2)),
+    min_value=0.0,
+    step=0.1,
+    format="%.2f",
+    key="margin_rate_input",
+)
+
+margin_balance_base = margin_balance_default
+borrowing_balance_base = borrowing_balance_default
+interest_rate_assumed = interest_rate_default
+
+delta_margin_balance = margin_balance_input - margin_balance_base
+borrowing_balance_adjusted = max(borrowing_balance_base + delta_margin_balance, 0.0)
+
+margin_income_forecast_bn = margin_balance_input * (margin_rate_input / 100) / 4 if margin_rate_input else 0.0
+interest_expense_forecast_bn = (
+    borrowing_balance_adjusted * (interest_rate_assumed / 100) / 4 if interest_rate_assumed else 0.0
+)
+
+margin_forecast_metrics = {
+    'label': target_label,
+    'margin_balance_bn': margin_balance_input,
+    'margin_rate_pct': margin_rate_input,
+    'margin_income_bn': margin_income_forecast_bn,
+    'borrowing_balance_bn': borrowing_balance_adjusted,
+    'interest_rate_pct': interest_rate_assumed,
+    'interest_expense_bn': interest_expense_forecast_bn,
+}
+
+margin_table_rows = {
+    'Metric': [
+        'Margin Balance (bn)',
+        'Margin Lending Rate (%)',
+        'Margin Lending Income (bn)',
+        'Borrowing Balance (bn)',
+        'Interest Rate (%)',
+        'Interest Expense (bn)',
+    ]
+}
+
+for metrics in margin_history_metrics:
+    margin_table_rows[metrics['label']] = [
+        fmt_value(metrics['margin_balance_bn']),
+        fmt_value(metrics['margin_rate_pct'], 2),
+        fmt_value(metrics['margin_income_bn']),
+        fmt_value(metrics['borrowing_balance_bn']),
+        fmt_value(metrics['interest_rate_pct'], 2),
+        fmt_value(metrics['interest_expense_bn']),
+    ]
+
+margin_table_rows[margin_forecast_metrics['label']] = [
+    fmt_value(margin_forecast_metrics['margin_balance_bn']),
+    fmt_value(margin_forecast_metrics['margin_rate_pct'], 2),
+    fmt_value(margin_forecast_metrics['margin_income_bn']),
+    fmt_value(margin_forecast_metrics['borrowing_balance_bn']),
+    fmt_value(margin_forecast_metrics['interest_rate_pct'], 2),
+    fmt_value(margin_forecast_metrics['interest_expense_bn']),
+]
+
+margin_table_df = pd.DataFrame(margin_table_rows)
+margin_table_df = margin_table_df.set_index('Metric')
+st.dataframe(margin_table_df, use_container_width=True)
+
+st.caption("Margin lending income and interest expense calculated as balance × rate ÷ 4 for the forecast quarter.")
+
+# Update summary with forecast brokerage and margin inputs
 target_column_label = f"{target_label} Base (bn VND)"
 if target_column_label in summary_df.columns:
     summary_df.loc[summary_df['Segment'] == 'Brokerage Fee', target_column_label] = format_bn_str(net_brokerage_forecast)
+    summary_df.loc[summary_df['Segment'] == 'Margin Income', target_column_label] = format_bn_str(margin_income_forecast_bn * 1e9)
+    summary_df.loc[summary_df['Segment'] == 'Interest Expense', target_column_label] = format_bn_str(-interest_expense_forecast_bn * 1e9)
 
 st.subheader("Baseline Breakdown")
 st.caption(f"Base assumptions derived from {target_year} full-year forecast minus actual results up to {latest_label}.")
@@ -626,7 +802,7 @@ segment_inputs = {}
 input_columns = st.columns(3)
 
 for idx, segment in enumerate(SEGMENTS):
-    if segment['key'] == 'brokerage_fee':
+    if segment['key'] in ('brokerage_fee', 'margin_income', 'interest_expense'):
         continue
     col = input_columns[idx % len(input_columns)]
     with col:
@@ -642,6 +818,8 @@ for idx, segment in enumerate(SEGMENTS):
         segment_inputs[segment['key']] = value * 1e9
 
 segment_inputs['brokerage_fee'] = net_brokerage_forecast
+segment_inputs['margin_income'] = margin_income_forecast_bn * 1e9
+segment_inputs['interest_expense'] = -interest_expense_forecast_bn * 1e9
 
 adjusted_total_segments = sum(segment_inputs.values())
 adjusted_pbt = residual_other + adjusted_total_segments
