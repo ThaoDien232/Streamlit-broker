@@ -49,6 +49,8 @@ def load_filtered_data(tickers, metrics, years, quarters):
     df['YEARREPORT'] = df['YEARREPORT'].astype(int)
     df['LENGTHREPORT'] = df['LENGTHREPORT'].astype(int)
 
+    return df
+
 # Get metadata for filters (lightweight, cached 24 hours)
 @st.cache_data(ttl=86400)
 def get_available_options():
