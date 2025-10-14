@@ -347,11 +347,12 @@ def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None]
     if df_book.empty or 'FVTPL value' not in df_book.columns:
         return None, None
 
-    broker_df = df_book[
+    mask = (
         (df_book['Broker'] == broker)
         & df_book['FVTPL value'].notnull()
         & (df_book['FVTPL value'] != 0)
-    ].copy()
+    )
+    broker_df = df_book[mask].copy()
 
     if broker_df.empty:
         return None, None
@@ -360,84 +361,49 @@ def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None]
     if not quarters:
         return None, None
 
-    pivot_table = broker_df.pivot_table(
-        index='Ticker',
-        columns='Quarter',
-        values='FVTPL value',
-        aggfunc='sum',
-        fill_value=0,
-    )
+    selected_quarter = None
+    quarter_holdings: pd.DataFrame | None = None
+    exclude_set = {'PBT', 'OTHERS'}
 
-    valid_tickers = [
-        ticker
-        for ticker in pivot_table.index
-        if ticker and ticker.upper() not in ('OTHERS', 'PBT')
-    ]
-
-    if not valid_tickers:
-        return None, None
-
-    pivot_table = pivot_table.reindex(index=valid_tickers, columns=quarters, fill_value=0)
-
-    latest_quarter = quarters[-1]
-    all_latest_zero = all(pivot_table.at[t, latest_quarter] == 0 for t in valid_tickers)
-
-    ticker_quarter_map: dict[str, str] = {}
-    for ticker in valid_tickers:
-        values = pivot_table.loc[ticker]
-        nonzero_quarters = [q for q in quarters if values[q] != 0]
-        if not nonzero_quarters:
+    for quarter_key in reversed(quarters):
+        subset = broker_df[broker_df['Quarter'] == quarter_key].copy()
+        subset['Ticker'] = subset['Ticker'].fillna('').astype(str)
+        subset = subset[~subset['Ticker'].str.upper().isin(exclude_set)]
+        if subset.empty:
             continue
-        if all_latest_zero:
-            q = nonzero_quarters[-1]
-        else:
-            if values[latest_quarter] == 0:
-                continue
-            q = latest_quarter
-        ticker_quarter_map[ticker] = q
+        grouped = subset.groupby('Ticker', as_index=False)['FVTPL value'].sum()
+        if grouped['FVTPL value'].abs().sum() == 0:
+            continue
+        selected_quarter = quarter_key
+        quarter_holdings = grouped
+        break
 
-    if not ticker_quarter_map:
+    if selected_quarter is None or quarter_holdings is None or quarter_holdings.empty:
         return None, None
 
-    quarter_price_cache: dict[tuple[str, str], float | None] = {}
-    quarter_groups: dict[str, list[str]] = {}
-    for ticker, quarter_key in ticker_quarter_map.items():
-        quarter_groups.setdefault(quarter_key, []).append(ticker)
-
-    for quarter_key, tickers in quarter_groups.items():
-        prices = get_quarter_end_prices(tickers, quarter_key)
-        for ticker in tickers:
-            quarter_price_cache[(ticker, quarter_key)] = prices.get(ticker)
-
-    current_prices = get_current_prices(list(ticker_quarter_map.keys()))
+    tickers = quarter_holdings['Ticker'].tolist()
+    quarter_prices = get_quarter_end_prices(tickers, selected_quarter)
+    current_prices = get_current_prices(tickers)
 
     profit_total = 0.0
-    quarters_used: set[str] = set()
 
-    for ticker, quarter_key in ticker_quarter_map.items():
-        fvtpl_value = float(pivot_table.at[ticker, quarter_key])
-        if fvtpl_value == 0:
-            continue
-
-        quarter_price = quarter_price_cache.get((ticker, quarter_key))
+    for _, row in quarter_holdings.iterrows():
+        ticker = row['Ticker']
+        value = float(row['FVTPL value'])
+        quarter_price = quarter_prices.get(ticker)
         current_price = current_prices.get(ticker)
 
-        if quarter_price in (None, 0) or current_price in (None, 0):
+        if quarter_price in (None, 0) or current_price in (None, 0) or value == 0:
             continue
 
-        volume = fvtpl_value / quarter_price
-        current_market_value = volume * current_price
-
-        profit = current_market_value - fvtpl_value
+        volume = value / quarter_price
+        profit = volume * (current_price - quarter_price)
         profit_total += profit
-        quarters_used.add(quarter_key)
 
-    if not quarters_used:
+    if profit_total == 0.0:
         return None, None
 
-    reference_quarter = sort_quarters_by_date(list(quarters_used))[-1]
-
-    return profit_total, reference_quarter
+    return profit_total / 1e9, selected_quarter
 
 
 
@@ -1166,8 +1132,7 @@ else:
 
 st.markdown(f"#### {target_label} Investment Income Override")
 
-fvtpl_profit_vnd, fvtpl_reference_quarter = calculate_fvtpl_profit_total(selected_broker)
-fvtpl_profit_bn = (fvtpl_profit_vnd / 1e9) if fvtpl_profit_vnd is not None else None
+fvtpl_profit_value, fvtpl_reference_quarter = calculate_fvtpl_profit_total(selected_broker)
 
 investment_history = (
     df_actual[['YEARREPORT', 'LENGTHREPORT', 'investment_income']]
@@ -1188,12 +1153,12 @@ if not recent_investment_history.empty:
     )[['Quarter', 'Investment Income (bn)']]
     investment_display_df = pd.concat([investment_display_df, recent_investment_history], ignore_index=True)
 
-if fvtpl_profit_bn is not None:
+if fvtpl_profit_value is not None:
     reference_label = fvtpl_reference_quarter or "latest quarter"
     fvtpl_row = pd.DataFrame([
         {
             'Quarter': f"FVTPL P/L since {reference_label}",
-            'Investment Income (bn)': fvtpl_profit_bn,
+            'Investment Income (bn)': fvtpl_profit_value,
         }
     ])
     investment_display_df = pd.concat([investment_display_df, fvtpl_row], ignore_index=True)
