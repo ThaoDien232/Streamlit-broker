@@ -708,7 +708,7 @@ borrowing_balance_default = last_history_value('borrowing_balance_bn')
 interest_rate_default = last_history_value('interest_rate_pct')
 
 st.markdown("#### Margin Lending Forecast")
-margin_cols = st.columns(2)
+margin_cols = st.columns(3)
 margin_balance_input = margin_cols[0].number_input(
     f"{target_label} Margin Balance (bn VND)",
     value=float(round(margin_balance_default, 0)),
@@ -727,9 +727,18 @@ margin_rate_input = margin_cols[1].number_input(
     key="margin_rate_input",
 )
 
+interest_rate_input = margin_cols[2].number_input(
+    f"{target_label} Borrowing Rate (%)",
+    value=float(round(interest_rate_default, 2)),
+    min_value=0.0,
+    step=0.1,
+    format="%.2f",
+    key="borrowing_rate_input",
+)
+
 margin_balance_base = margin_balance_default
 borrowing_balance_base = borrowing_balance_default
-interest_rate_assumed = interest_rate_default
+interest_rate_assumed = interest_rate_input
 
 delta_margin_balance = margin_balance_input - margin_balance_base
 borrowing_balance_adjusted = max(borrowing_balance_base + delta_margin_balance, 0.0)
