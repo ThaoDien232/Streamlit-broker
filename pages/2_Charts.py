@@ -474,6 +474,75 @@ df_calc = load_filtered_data(
 if not df_calc.empty:
     df_calc['Quarter_Label'] = df_calc.apply(create_quarter_label, axis=1)
 
+# DEBUG: Show component data for calculated metrics
+if 'NET_BROKERAGE_FEE' in selected_metrics or 'MARGIN_LENDING_RATE' in selected_metrics:
+    with st.expander("🔍 Debug: Component Data for Calculated Metrics"):
+        if 'NET_BROKERAGE_FEE' in selected_metrics:
+            st.subheader("Net Brokerage Fee Components")
+
+            # Check for NET_BROKERAGE_INCOME
+            net_brok_data = df_calc[df_calc['METRIC_CODE'] == 'NET_BROKERAGE_INCOME']
+            st.write(f"**NET_BROKERAGE_INCOME** rows found: {len(net_brok_data)}")
+            if not net_brok_data.empty:
+                st.dataframe(net_brok_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
+
+            # Check for INSTITUTION_SHARES_TRADING_VALUE
+            inst_data = df_calc[df_calc['METRIC_CODE'] == 'INSTITUTION_SHARES_TRADING_VALUE']
+            st.write(f"**INSTITUTION_SHARES_TRADING_VALUE** rows found: {len(inst_data)}")
+            if not inst_data.empty:
+                st.dataframe(inst_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
+            else:
+                # Try with KEYCODE
+                inst_data_alt = df_calc[df_calc['KEYCODE'] == 'Institution_shares_trading_value']
+                st.write(f"**Institution_shares_trading_value (KEYCODE)** rows found: {len(inst_data_alt)}")
+                if not inst_data_alt.empty:
+                    st.dataframe(inst_data_alt[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'KEYCODE', 'VALUE', 'QUARTER_LABEL']].head(10))
+
+            # Check for INVESTOR_SHARES_TRADING_VALUE
+            inv_data = df_calc[df_calc['METRIC_CODE'] == 'INVESTOR_SHARES_TRADING_VALUE']
+            st.write(f"**INVESTOR_SHARES_TRADING_VALUE** rows found: {len(inv_data)}")
+            if not inv_data.empty:
+                st.dataframe(inv_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
+            else:
+                # Try with KEYCODE
+                inv_data_alt = df_calc[df_calc['KEYCODE'] == 'Investor_shares_trading_value']
+                st.write(f"**Investor_shares_trading_value (KEYCODE)** rows found: {len(inv_data_alt)}")
+                if not inv_data_alt.empty:
+                    st.dataframe(inv_data_alt[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'KEYCODE', 'VALUE', 'QUARTER_LABEL']].head(10))
+
+        if 'MARGIN_LENDING_RATE' in selected_metrics:
+            st.subheader("Margin Lending Rate Components")
+
+            # Check for MARGIN_LENDING_INCOME
+            margin_income_data = df_calc[df_calc['METRIC_CODE'] == 'MARGIN_LENDING_INCOME']
+            st.write(f"**MARGIN_LENDING_INCOME** rows found: {len(margin_income_data)}")
+            if not margin_income_data.empty:
+                st.dataframe(margin_income_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
+            else:
+                # Try with KEYCODE
+                margin_income_alt = df_calc[df_calc['KEYCODE'] == 'Net_Margin_lending_Income']
+                st.write(f"**Net_Margin_lending_Income (KEYCODE)** rows found: {len(margin_income_alt)}")
+                if not margin_income_alt.empty:
+                    st.dataframe(margin_income_alt[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'KEYCODE', 'VALUE', 'QUARTER_LABEL']].head(10))
+
+            # Check for MARGIN_BALANCE
+            margin_balance_data = df_calc[df_calc['METRIC_CODE'] == 'MARGIN_BALANCE']
+            st.write(f"**MARGIN_BALANCE** rows found: {len(margin_balance_data)}")
+            if not margin_balance_data.empty:
+                st.dataframe(margin_balance_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
+            else:
+                # Try with KEYCODE
+                margin_balance_alt = df_calc[df_calc['KEYCODE'] == 'Margin_Lending_book']
+                st.write(f"**Margin_Lending_book (KEYCODE)** rows found: {len(margin_balance_alt)}")
+                if not margin_balance_alt.empty:
+                    st.dataframe(margin_balance_alt[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'KEYCODE', 'VALUE', 'QUARTER_LABEL']].head(10))
+
+        # Show all unique METRIC_CODEs in loaded data
+        st.subheader("All Loaded METRIC_CODEs")
+        unique_metrics = sorted(df_calc['METRIC_CODE'].unique())
+        st.write(f"Total unique metrics: {len(unique_metrics)}")
+        st.write(unique_metrics)
+
 # Create tabs for different sections
 tab1, tab2 = st.tabs(["📊 Financial Charts", "📈 Market Share Data"])
 
