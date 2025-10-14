@@ -127,7 +127,8 @@ def get_metric_display_name(metric_code):
         'ROE': 'ROE',
         'ROA': 'ROA',
         'INTEREST_RATE': 'Interest Rate',
-        'MARGIN_LENDING_RATE': 'Margin Lending Rate'
+        'MARGIN_LENDING_RATE': 'Margin Lending Rate',
+        'NET_BROKERAGE_FEE_BPS': 'Net Brokerage Fee (bps)'
     }
     return metric_names.get(metric_code, metric_code)
 
@@ -354,7 +355,8 @@ allowed_metrics = [
     'ROE',
     'ROA',
     'INTEREST_RATE',
-    'MARGIN_LENDING_RATE'
+    'MARGIN_LENDING_RATE',
+    'NET_BROKERAGE_FEE_BPS'
 ]
 
 # Broker groups for organized display
@@ -386,7 +388,7 @@ selected_brokers = st.sidebar.multiselect(
 )
 
 # Fixed default charts (always displayed)
-fixed_charts = ['PBT', 'ROE', 'TOTAL_OPERATING_INCOME']
+fixed_charts = ['PBT', 'ROE', 'TOTAL_OPERATING_INCOME', 'MARGIN_LENDING_RATE', 'INTEREST_RATE', 'NET_BROKERAGE_FEE_BPS']
 
 # Additional metrics selection - NOW ALWAYS AVAILABLE
 additional_metrics = st.sidebar.multiselect(
@@ -508,6 +510,14 @@ with tab1:
 
                                     if not broker_data_with_ma4.empty:
                                         broker_data_with_ma4['MA4_DISPLAY'] = broker_data_with_ma4['MA4'] * 100
+                                elif metric == 'NET_BROKERAGE_FEE_BPS':
+                                    # Net Brokerage Fee is already in basis points
+                                    broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce')
+                                    y_values = broker_data['DISPLAY_VALUE']
+                                    hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}} bps<br><extra></extra>"
+
+                                    if not broker_data_with_ma4.empty:
+                                        broker_data_with_ma4['MA4_DISPLAY'] = broker_data_with_ma4['MA4']
                                 else:
                                     # Convert other values to billions for display
                                     broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce') / 1_000_000_000
@@ -549,6 +559,9 @@ with tab1:
                         # Set y-axis title and format based on metric type
                         if metric in ['ROE', 'ROA', 'INTEREST_RATE', 'MARGIN_LENDING_RATE']:
                             yaxis_title = "Percentage (%)"
+                            tick_format = ".2f"
+                        elif metric == 'NET_BROKERAGE_FEE_BPS':
+                            yaxis_title = "Basis Points (bps)"
                             tick_format = ".2f"
                         else:
                             yaxis_title = "Value (Billions VND)"
@@ -610,30 +623,30 @@ with tab2:
             key="market_share_quarters"
         )
 
-    # Broker selection for market share
-    st.markdown("**Broker Selection:**")
-    col3, col4 = st.columns([1, 4])
+    # First, we need to get top 10 brokers - fetch a sample to determine top 10
+    # We'll get the top 10 based on latest available data
+    if selected_ms_years and selected_ms_quarters:
+        # Quick fetch to get top 10 brokers
+        latest_year = max(selected_ms_years)
+        latest_quarter = max(selected_ms_quarters)
+        sample_data = fetch_market_share_data(latest_year, [latest_quarter])
 
-    with col3:
-        show_all_brokers = st.checkbox(
-            "Show All (Top 10)",
-            value=True,
-            key="show_all_market_share",
-            help="Show all top 10 brokers by market share"
-        )
-
-    with col4:
-        if not show_all_brokers:
-            # Show broker multiselect only if "Show All" is unchecked
-            selected_ms_brokers = st.multiselect(
-                "Select Specific Brokers:",
-                options=all_brokers_ordered,
-                default=[],
-                key="market_share_brokers",
-                help="Select one or more brokers to display"
-            )
+        if not sample_data.empty:
+            top_10_broker_codes = sample_data.nlargest(10, 'Market_Share_Percent')['Brokerage_Code'].tolist()
+            top_10_options = top_10_broker_codes + ['All']
         else:
-            selected_ms_brokers = []  # Will be determined by top 10 in the data
+            top_10_options = ['All']
+    else:
+        top_10_options = ['All']
+
+    # Broker selection for market share
+    selected_ms_brokers = st.multiselect(
+        "Select Brokers (from Top 10):",
+        options=top_10_options,
+        default=['All'],
+        key="market_share_brokers",
+        help="Select one or more brokers from top 10, or 'All' to show all top 10"
+    )
 
     if selected_ms_years and selected_ms_quarters:
         # Fetch data for all selected year-quarter combinations
@@ -778,7 +791,7 @@ with tab2:
                 st.subheader("Market Share Trends")
 
                 # Determine which brokers to display
-                if show_all_brokers:
+                if 'All' in selected_ms_brokers or not selected_ms_brokers:
                     # Get top 10 brokers by market share using the latest available quarter across all years
                     # Sort dataframe to get the most recent period
                     market_share_df_sorted = market_share_df.sort_values(['Year', 'Quarter'], ascending=[True, True])
@@ -801,12 +814,8 @@ with tab2:
                         avg_share = market_share_df.groupby('Brokerage_Code')['Market_Share_Percent'].mean().sort_values(ascending=False)
                         brokers_to_display = avg_share.head(10).index.tolist()
                 else:
-                    # Use user-selected brokers
-                    if selected_ms_brokers:
-                        brokers_to_display = selected_ms_brokers
-                    else:
-                        st.warning("Please select at least one broker or check 'Show All (Top 10)'")
-                        brokers_to_display = []
+                    # Use user-selected brokers (filter out 'All' if somehow present)
+                    brokers_to_display = [b for b in selected_ms_brokers if b != 'All']
 
                 # Filter data for selected brokers
                 if brokers_to_display:
@@ -822,7 +831,7 @@ with tab2:
                     top_brokers_data = top_brokers_data.sort_values(['Year', 'Quarter'])
 
                     # Determine chart title
-                    if show_all_brokers:
+                    if 'All' in selected_ms_brokers or not selected_ms_brokers:
                         chart_title = "Top 10 Brokers Market Share Trends"
                     else:
                         chart_title = f"Market Share Trends - {len(brokers_to_display)} Broker(s)"
@@ -847,9 +856,6 @@ with tab2:
                     )
 
                     st.plotly_chart(fig, use_container_width=True)
-                else:
-                    if not show_all_brokers and not selected_ms_brokers:
-                        st.info("Please select at least one broker or check 'Show All (Top 10)' to view the chart.")
             
             # Download option
             csv = market_share_df.to_csv(index=False)

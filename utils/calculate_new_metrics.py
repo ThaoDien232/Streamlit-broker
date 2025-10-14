@@ -234,7 +234,18 @@ def calculate_financial_metrics_vectorized(pivot_df, keycode_map):
 
         if net_margin_income != 0:
             metrics_to_calculate.append(('NET_MARGIN_INCOME', 'Net Margin Income', net_margin_income))
-        
+
+        # 25. Net Brokerage Fee (bps) - Net Brokerage Income / Total Trading Value * 10000
+        # Formula: (NET_BROKERAGE_INCOME / (Institution_shares_trading_value + Investor_shares_trading_value)) * 10000
+        institution_trading = get_col('Institution_shares_trading_value').iloc[idx]
+        investor_trading = get_col('Investor_shares_trading_value').iloc[idx]
+        total_trading_value = institution_trading + investor_trading
+
+        if total_trading_value != 0 and net_brokerage != 0:
+            # Calculate as basis points (bps)
+            net_brokerage_fee_bps = (net_brokerage / total_trading_value) * 10000
+            metrics_to_calculate.append(('NET_BROKERAGE_FEE_BPS', 'Net Brokerage Fee (bps)', net_brokerage_fee_bps))
+
         # Add all calculated metrics for this period
         for metric_code, metric_name, value in metrics_to_calculate:
             calculated_records.append({
@@ -457,6 +468,105 @@ def calculate_ratios(calculated_metrics):
 
     return calculated_metrics
 
+def calculate_net_brokerage_fee(calculated_metrics):
+    """
+    Calculate Net Brokerage Fee (bps) for all periods using trading value data from Note statements.
+    Formula: (NET_BROKERAGE_INCOME / Total Trading Value) * 10000
+    """
+    print("Calculating Net Brokerage Fee (bps)...")
+
+    # Load ALL data including Note data for trading values
+    combined_df = load_combined_data()
+
+    # Check which periods already have Net Brokerage Fee
+    existing_fees = set()
+    calc_df = combined_df[combined_df['STATEMENT_TYPE'] == 'CALC'].copy()
+    for _, row in calc_df[calc_df['METRIC_CODE'] == 'NET_BROKERAGE_FEE_BPS'].iterrows():
+        key = (row['TICKER'], row['YEARREPORT'], row['LENGTHREPORT'])
+        existing_fees.add(key)
+
+    print(f"Found {len(existing_fees)} existing net brokerage fee records")
+
+    fee_records = []
+
+    # Get unique tickers (excluding Sector for now)
+    tickers = [t for t in calc_df['TICKER'].unique() if t != 'Sector']
+
+    for ticker in tickers:
+        # Get all periods for this ticker
+        ticker_data = combined_df[combined_df['TICKER'] == ticker]
+
+        # Get unique periods
+        periods = ticker_data[['YEARREPORT', 'LENGTHREPORT']].drop_duplicates()
+
+        for _, period_row in periods.iterrows():
+            year = period_row['YEARREPORT']
+            quarter = period_row['LENGTHREPORT']
+            period_key = (ticker, year, quarter)
+
+            # Skip if already calculated
+            if period_key in existing_fees:
+                continue
+
+            # Get Net Brokerage Income from CALC
+            net_brok_data = calc_df[
+                (calc_df['TICKER'] == ticker) &
+                (calc_df['YEARREPORT'] == year) &
+                (calc_df['LENGTHREPORT'] == quarter) &
+                (calc_df['METRIC_CODE'] == 'NET_BROKERAGE_INCOME')
+            ]
+
+            if net_brok_data.empty:
+                continue
+
+            net_brokerage_income = net_brok_data.iloc[0]['VALUE']
+
+            # Get trading values from Note data
+            institution_data = ticker_data[
+                (ticker_data['YEARREPORT'] == year) &
+                (ticker_data['LENGTHREPORT'] == quarter) &
+                (ticker_data['KEYCODE'] == 'Institution_shares_trading_value')
+            ]
+
+            investor_data = ticker_data[
+                (ticker_data['YEARREPORT'] == year) &
+                (ticker_data['LENGTHREPORT'] == quarter) &
+                (ticker_data['KEYCODE'] == 'Investor_shares_trading_value')
+            ]
+
+            if institution_data.empty or investor_data.empty:
+                continue
+
+            institution_trading = institution_data.iloc[0]['VALUE']
+            investor_trading = investor_data.iloc[0]['VALUE']
+            total_trading_value = institution_trading + investor_trading
+
+            if total_trading_value > 0 and net_brokerage_income != 0:
+                # Calculate as basis points (bps)
+                net_brokerage_fee_bps = (net_brokerage_income / total_trading_value) * 10000
+
+                fee_records.append({
+                    'TICKER': ticker,
+                    'YEARREPORT': year,
+                    'LENGTHREPORT': quarter,
+                    'STARTDATE': '',
+                    'ENDDATE': '',
+                    'NOTE': 'Calculated: Net Brokerage Income / Total Trading Value * 10000',
+                    'STATEMENT_TYPE': 'CALC',
+                    'METRIC_CODE': 'NET_BROKERAGE_FEE_BPS',
+                    'VALUE': float(net_brokerage_fee_bps),
+                    'KEYCODE': 'NET_BROKERAGE_FEE_BPS',
+                    'KEYCODE_NAME': 'Net Brokerage Fee (bps)',
+                    'QUARTER_LABEL': f'{quarter}Q{year % 100:02d}' if quarter in [1,2,3,4] else 'Annual'
+                })
+
+    print(f"Calculated {len(fee_records):,} Net Brokerage Fee records")
+
+    # Add to calculated metrics
+    calculated_metrics.extend(fee_records)
+
+    return calculated_metrics
+
 def append_to_combined_file(calculated_metrics):
     """Append calculated metrics to the Combined_Financial_Data.csv file."""
     if not calculated_metrics:
@@ -574,7 +684,10 @@ if __name__ == "__main__":
     
     # Calculate ROE and ROA ratios
     calculated_metrics = calculate_ratios(calculated_metrics)
-    
+
+    # Calculate Net Brokerage Fee (bps)
+    calculated_metrics = calculate_net_brokerage_fee(calculated_metrics)
+
     if calculated_metrics:
         # Append to combined file
         updated_df = append_to_combined_file(calculated_metrics)
