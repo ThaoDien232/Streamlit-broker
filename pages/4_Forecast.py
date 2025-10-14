@@ -377,6 +377,7 @@ def get_share_for_year(year: int) -> float | None:
 @st.cache_data(ttl=3600)
 def fetch_market_share_api(broker: str, year: int, quarter: int):
     broker_code = get_brokerage_code(broker)
+    broker_code_upper = broker_code.upper() if broker_code else None
     try:
         url = "https://api.hsx.vn/s/api/v1/1/brokeragemarketshare/top/ten"
         params = {
@@ -391,8 +392,16 @@ def fetch_market_share_api(broker: str, year: int, quarter: int):
         data = resp.json()
         if data.get('success') and 'data' in data:
             for item in data['data'].get('brokerageStock', []):
-                if item.get('shortenName', '').upper() == broker_code:
-                    return float(item.get('percentage', 0))
+                candidates = [
+                    str(item.get(key, '')).upper()
+                    for key in ('shortenName', 'code', 'organCode', 'brokerCode')
+                    if item.get(key)
+                ]
+                if broker_code_upper and broker_code_upper in candidates:
+                    try:
+                        return float(item.get('percentage', 0))
+                    except (TypeError, ValueError):
+                        return None
     except Exception:
         return None
     return None
