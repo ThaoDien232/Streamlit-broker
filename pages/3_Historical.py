@@ -32,8 +32,8 @@ def calculate_net_brokerage_fee(df):
                     'TICKER': period_data.iloc[0]['TICKER'],
                     'YEARREPORT': year,
                     'LENGTHREPORT': quarter,
-                    'KEYCODE': 'NET_BROKERAGE_FEE_BPS',
-                    'METRIC_CODE': 'NET_BROKERAGE_FEE_BPS',
+                    'KEYCODE': 'NET_BROKERAGE_FEE',
+                    'METRIC_CODE': 'NET_BROKERAGE_FEE',
                     'QUARTER_LABEL': period_data.iloc[0].get('QUARTER_LABEL', f"{quarter}Q{year%100:02d}"),
                     'KEYCODE_NAME': 'Net Brokerage Fee (bps)',
                     'VALUE': fee_bps,
@@ -200,7 +200,7 @@ def display_income_statement(df, ticker, periods, display_mode):
     # Define key calculated IS metrics to display
     is_calc_metrics = [
         ('NET_BROKERAGE_INCOME', 'Net Brokerage Income'),
-        ('NET_BROKERAGE_FEE_BPS', 'Net Brokerage Fee (bps)'),
+        ('NET_BROKERAGE_FEE', 'Net Brokerage Fee (bps)'),
         ('NET_IB_INCOME', 'Net IB Income'),
         ('FEE_INCOME', 'Fee Income'),
         ('NET_TRADING_INCOME', 'Net Trading Income'),
@@ -241,7 +241,7 @@ def display_income_statement(df, ticker, periods, display_mode):
                 elif metric_code in ['INTEREST_RATE', 'MARGIN_LENDING_RATE']:
                     # Rates are stored as decimal, convert to percentage
                     row[label] = f"{value * 100:.2f}%" if value != 0 else "-"
-                elif metric_code == 'NET_BROKERAGE_FEE_BPS':
+                elif metric_code == 'NET_BROKERAGE_FEE':
                     # Basis points
                     row[label] = f"{value:.2f} bps" if value != 0 else "-"
                 else:

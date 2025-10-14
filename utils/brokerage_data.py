@@ -277,6 +277,59 @@ def calculate_metric(
             return 0.0
         return (values['MARGIN_BALANCE'] / values['TOTAL_EQUITY']) * 100
 
+    elif metric_code == 'NET_BROKERAGE_FEE':
+        # Net Brokerage Fee (bps) = NET_BROKERAGE_INCOME / (Institution + Investor shares trading value) * 10000
+        institution_trading = values['INSTITUTION_SHARES_TRADING_VALUE']
+        investor_trading = values['INVESTOR_SHARES_TRADING_VALUE']
+        total_trading_value = institution_trading + investor_trading
+
+        if total_trading_value == 0:
+            return 0.0
+
+        net_brokerage_fee = (values['NET_BROKERAGE_INCOME'] / total_trading_value) * 10000
+        return net_brokerage_fee
+
+    elif metric_code == 'MARGIN_LENDING_RATE':
+        # Margin Lending Rate (%) = MARGIN_LENDING_INCOME / AVG_MARGIN_BALANCE * 100
+        # For quarterly data: average of 4 quarters, then annualize (*4)
+        # For annual data: average of 2 years (current + previous)
+
+        current_margin_balance = values['MARGIN_BALANCE']
+
+        # Calculate average margin balance based on period type
+        if quarter == 5:  # Annual data
+            # Average of 2 years (current year and previous year)
+            prev_year_margin = get_calc_metric_value(df, ticker, year - 1, 5, 'MARGIN_BALANCE')
+            avg_margin_balance = (current_margin_balance + prev_year_margin) / 2
+        else:  # Quarterly data
+            # Average of 4 quarters (current quarter and previous 3 quarters)
+            margin_balances = [current_margin_balance]
+
+            for i in range(1, 4):
+                if quarter - i >= 1:
+                    # Same year, previous quarters
+                    prev_quarter_margin = get_calc_metric_value(df, ticker, year, quarter - i, 'MARGIN_BALANCE')
+                else:
+                    # Previous year
+                    prev_year = year - 1
+                    prev_quarter = 4 + (quarter - i)
+                    prev_quarter_margin = get_calc_metric_value(df, ticker, prev_year, prev_quarter, 'MARGIN_BALANCE')
+
+                margin_balances.append(prev_quarter_margin)
+
+            avg_margin_balance = sum(margin_balances) / 4
+
+        if avg_margin_balance == 0:
+            return 0.0
+
+        margin_lending_rate = (values['MARGIN_LENDING_INCOME'] / avg_margin_balance) * 100
+
+        # Annualize if quarterly
+        if quarter in [1, 2, 3, 4] and formula_info['annualize_quarterly']:
+            margin_lending_rate = margin_lending_rate * 4
+
+        return margin_lending_rate
+
     return 0.0
 
 @st.cache_data(ttl=3600)

@@ -44,10 +44,18 @@ METRIC_TO_DB_KEYCODE = {
     'TOTAL_ASSETS': 'BS.92',  # TOTAL ASSETS
     'TOTAL_EQUITY': 'BS.142',  # OWNER'S EQUITY
 
-    # Ratios - These need to be calculated (not stored in database)
+    # Trading Values (Note items - NOS101-110)
+    'INSTITUTION_SHARES_TRADING_VALUE': 'Institution_shares_trading_value',
+    'INSTITUTION_BOND_TRADING_VALUE': 'Institution_bond_trading_value',
+    'INVESTOR_SHARES_TRADING_VALUE': 'Investor_shares_trading_value',
+    'INVESTOR_BOND_TRADING_VALUE': 'Investor_bond_trading_value',
+
+    # Calculated Ratios - These need to be calculated (not stored in database)
     'ROE': None,  # Calculate: NPAT / TOTAL_EQUITY * 100 * 4 (annualized)
     'ROA': None,  # Calculate: NPAT / TOTAL_ASSETS * 100 * 4 (annualized)
     'INTEREST_RATE': None,  # Calculate: INTEREST_EXPENSE / AVG_BORROWING * 4 (annualized)
+    'NET_BROKERAGE_FEE': None,  # Calculate: NET_BROKERAGE_INCOME / TRADING_VALUES * 10000 (basis points)
+    'MARGIN_LENDING_RATE': None,  # Calculate: MARGIN_LENDING_INCOME / AVG_MARGIN_BALANCE * 100 (annualized)
 }
 
 # ============================================================================
@@ -139,6 +147,16 @@ CALCULATED_METRICS = {
         'formula': 'MARGIN_BALANCE / TOTAL_EQUITY * 100',
         'components': ['MARGIN_BALANCE', 'TOTAL_EQUITY'],
         'annualize_quarterly': False,
+    },
+    'NET_BROKERAGE_FEE': {
+        'formula': 'NET_BROKERAGE_INCOME / (INSTITUTION_SHARES_TRADING_VALUE + INVESTOR_SHARES_TRADING_VALUE) * 10000',
+        'components': ['NET_BROKERAGE_INCOME', 'INSTITUTION_SHARES_TRADING_VALUE', 'INVESTOR_SHARES_TRADING_VALUE'],
+        'annualize_quarterly': False,
+    },
+    'MARGIN_LENDING_RATE': {
+        'formula': 'MARGIN_LENDING_INCOME / AVG_MARGIN_BALANCE * 100',
+        'components': ['MARGIN_LENDING_INCOME', 'MARGIN_BALANCE'],
+        'annualize_quarterly': True,
     }
 }
 

@@ -385,7 +385,7 @@ allowed_metrics = [
     'ROA',
     'INTEREST_RATE',
     'MARGIN_LENDING_RATE',
-    'NET_BROKERAGE_FEE_BPS'
+    'NET_BROKERAGE_FEE'
 ]
 
 # Broker groups for organized display
@@ -417,7 +417,7 @@ selected_brokers = st.sidebar.multiselect(
 )
 
 # Fixed default charts (always displayed)
-fixed_charts = ['PBT', 'ROE', 'TOTAL_OPERATING_INCOME', 'MARGIN_LENDING_RATE', 'INTEREST_RATE', 'NET_BROKERAGE_FEE_BPS']
+fixed_charts = ['PBT', 'ROE', 'TOTAL_OPERATING_INCOME', 'MARGIN_LENDING_RATE', 'INTEREST_RATE', 'NET_BROKERAGE_FEE']
 
 # Additional metrics selection - NOW ALWAYS AVAILABLE
 additional_metrics = st.sidebar.multiselect(
@@ -539,7 +539,7 @@ with tab1:
 
                                     if not broker_data_with_ma4.empty:
                                         broker_data_with_ma4['MA4_DISPLAY'] = broker_data_with_ma4['MA4'] * 100
-                                elif metric == 'NET_BROKERAGE_FEE_BPS':
+                                elif metric == 'NET_BROKERAGE_FEE':
                                     # Net Brokerage Fee is already in basis points
                                     broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce')
                                     y_values = broker_data['DISPLAY_VALUE']
@@ -589,7 +589,7 @@ with tab1:
                         if metric in ['ROE', 'ROA', 'INTEREST_RATE', 'MARGIN_LENDING_RATE']:
                             yaxis_title = "Percentage (%)"
                             tick_format = ".2f"
-                        elif metric == 'NET_BROKERAGE_FEE_BPS':
+                        elif metric == 'NET_BROKERAGE_FEE':
                             yaxis_title = "Basis Points (bps)"
                             tick_format = ".2f"
                         else:
