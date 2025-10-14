@@ -380,7 +380,7 @@ all_brokers_ordered = grouped_brokers + remaining_brokers
 selected_brokers = st.sidebar.multiselect(
     "Select Brokers:",
     options=all_brokers_ordered,
-    default=[],  # No default brokers
+    default="Sector",  # No default brokers
     key="chart_brokers",
     help="Brokers organized by tier: Top (SSI, VCI, VND, HCM, TCBS, VPBS, VPS) | Mid (MBS, VIX, SHS, BSI, FTS) | Regional (DSE, VDS, LPBS, Kafi, ACBS, OCBS, HDBS)"
 )
