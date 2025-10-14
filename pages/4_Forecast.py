@@ -377,7 +377,7 @@ def get_share_for_year(year: int) -> float | None:
 @st.cache_data(ttl=3600)
 def fetch_market_share_api(broker: str, year: int, quarter: int):
     broker_code = get_brokerage_code(broker)
-    broker_code_upper = broker_code.upper() if broker_code else None
+    broker_code_norm = broker_code.strip().upper() if broker_code else None
     try:
         url = "https://api.hsx.vn/s/api/v1/1/brokeragemarketshare/top/ten"
         params = {
@@ -392,12 +392,12 @@ def fetch_market_share_api(broker: str, year: int, quarter: int):
         data = resp.json()
         if data.get('success') and 'data' in data:
             for item in data['data'].get('brokerageStock', []):
-                candidates = [
-                    str(item.get(key, '')).upper()
-                    for key in ('shortenName', 'code', 'organCode', 'brokerCode')
-                    if item.get(key)
-                ]
-                if broker_code_upper and broker_code_upper in candidates:
+                candidates = []
+                for key in ('shortenName', 'code', 'organCode', 'brokerCode', 'name'):
+                    raw = item.get(key)
+                    if raw:
+                        candidates.append(str(raw).strip().upper())
+                if broker_code_norm and broker_code_norm in candidates:
                     try:
                         return float(item.get('percentage', 0))
                     except (TypeError, ValueError):
@@ -427,11 +427,15 @@ for y, q in brokerage_history_quarters:
     if api_share_pct:
         share_decimal = api_share_pct / 100
         share_pct_display = api_share_pct
+        share_source = "HSX"
     else:
         share_year = get_share_for_year(y)
         if share_year:
             share_decimal = share_year / 2
             share_pct_display = share_decimal * 100
+            share_source = "Turnover"
+        else:
+            share_source = "N/A"
 
     fee_decimal = None
     if (
@@ -459,6 +463,7 @@ for y, q in brokerage_history_quarters:
         'trading_days': trading_days,
         'net_brokerage': net_brokerage,
         'share_decimal': share_decimal,
+        'share_source': share_source,
     })
 
 history_avg_daily = [m['avg_daily_bn'] for m in history_metrics if m['avg_daily_bn'] is not None]
@@ -535,6 +540,7 @@ forecast_metrics = {
     'share_pct': market_share_input if (share_default_pct is not None or market_share_input > 0) else None,
     'fee_bps': net_fee_input,
     'net_brokerage_bn': net_brokerage_forecast_bn,
+    'share_source': "Input" if market_share_input > 0 else "N/A",
 }
 
 def fmt_value(value, decimals=0, suffix=""):
@@ -548,6 +554,7 @@ table_rows = {
         'Market Share (%)',
         'Net Brokerage Fee (bps)',
         'Net Brokerage Income (bn)',
+        'Market Share Source',
     ]
 }
 
@@ -557,6 +564,7 @@ for metrics in history_metrics:
         fmt_value(metrics['share_pct'], 2),
         fmt_value(metrics['fee_bps'], 2),
         fmt_value(metrics['net_brokerage_bn']),
+        metrics.get('share_source', '-') or '-',
     ]
 
 table_rows[forecast_metrics['label']] = [
@@ -564,11 +572,21 @@ table_rows[forecast_metrics['label']] = [
     fmt_value(forecast_metrics['share_pct'], 2),
     fmt_value(forecast_metrics['fee_bps'], 2),
     fmt_value(forecast_metrics['net_brokerage_bn']),
+    forecast_metrics.get('share_source', '-') or '-',
 ]
 
 brokerage_table_df = pd.DataFrame(table_rows)
 brokerage_table_df = brokerage_table_df.set_index('Metric')
 st.dataframe(brokerage_table_df, use_container_width=True)
+
+fallback_quarters = [m['label'] for m in history_metrics if m.get('share_source') not in ("HSX", None) and m.get('share_source') != "Input"]
+if forecast_metrics.get('share_source') not in ("HSX", "Input"):
+    fallback_quarters.append(forecast_metrics['label'])
+if fallback_quarters:
+    st.warning(
+        "Market share data unavailable from HSX for: " + ", ".join(sorted(set(fallback_quarters))) + ". "
+        "Using turnover-based estimates."
+    )
 st.caption(f"Assuming {trading_days_forecast} trading days for {target_label} and applying net brokerage formula.")
 
 # Update summary with forecast brokerage
