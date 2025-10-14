@@ -698,14 +698,48 @@ with tab2:
                         st.metric(label="Top Broker", value="No data")
             
             # Create pivot table for better display
-            def format_quarter_display(row):
-                q = row.get('Quarter')
-                yr = row.get('Year')
+            def normalize_quarter_value(value):
+                if pd.isna(value):
+                    return None
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    try:
+                        return int(value)
+                    except Exception:
+                        return None
+                s = str(value).strip()
+                if not s:
+                    return None
+                if s.upper().startswith('Q'):
+                    s = s[1:]
+                s = ''.join(ch for ch in s if ch.isdigit())
+                if not s:
+                    return None
                 try:
-                    if pd.notnull(q) and pd.notnull(yr):
-                        return f"{int(yr)} Q{int(q)}"
+                    return int(s)
                 except Exception:
-                    pass
+                    return None
+
+            def normalize_year_value(value):
+                if pd.isna(value):
+                    return None
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    try:
+                        return int(value)
+                    except Exception:
+                        return None
+                s = ''.join(ch for ch in str(value) if ch.isdigit())
+                if not s:
+                    return None
+                try:
+                    return int(s)
+                except Exception:
+                    return None
+
+            def format_quarter_display(row):
+                q = normalize_quarter_value(row.get('Quarter'))
+                yr = normalize_year_value(row.get('Year'))
+                if q is not None and yr is not None:
+                    return f"{yr} Q{q}"
                 period_label = row.get('Period_Label')
                 if isinstance(period_label, str) and period_label:
                     return period_label
@@ -727,10 +761,12 @@ with tab2:
 
             def parse_period(col_name):
                 try:
-                    year_str, quarter_str = col_name.split()
-                    year_val = int(year_str)
-                    quarter_val = int(quarter_str.replace('Q', '').strip())
-                    return year_val, quarter_val
+                    parts = col_name.split()
+                    year_val = normalize_year_value(parts[0])
+                    quarter_val = normalize_quarter_value(parts[1] if len(parts) > 1 else None)
+                    if year_val is None or quarter_val is None:
+                        return (0, 0)
+                    return (year_val, quarter_val)
                 except Exception:
                     return (0, 0)
 
@@ -783,12 +819,17 @@ with tab2:
                 top_brokers_data = market_share_df[market_share_df['Brokerage_Code'].isin(top_10_brokers)].copy()
 
                 # Create a combined Period label for x-axis (e.g., "Q1 2024")
+                top_brokers_data['Quarter_int'] = top_brokers_data['Quarter'].apply(normalize_quarter_value)
+                top_brokers_data['Year_int'] = top_brokers_data['Year'].apply(normalize_year_value)
                 top_brokers_data['Period_Label'] = top_brokers_data.apply(
-                    lambda r: f"Q{int(r['Quarter'])} {int(r['Year'])}", axis=1
+                    lambda r: f"Q{r['Quarter_int']} {r['Year_int']}"
+                    if r['Quarter_int'] is not None and r['Year_int'] is not None else r.get('Period_Label', ''),
+                    axis=1
                 )
 
                 # Sort by Year and Quarter for proper ordering
-                top_brokers_data = top_brokers_data.sort_values(['Year', 'Quarter'])
+                top_brokers_data = top_brokers_data.sort_values(['Year_int', 'Quarter_int'])
+                top_brokers_data = top_brokers_data.drop(columns=['Quarter_int', 'Year_int'])
 
                 # Create line chart
                 fig = px.line(
