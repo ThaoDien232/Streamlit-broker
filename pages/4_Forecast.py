@@ -334,37 +334,6 @@ def get_current_prices(tickers: list[str]) -> dict[str, float | None]:
     return prices
 
 
-def calculate_fvtpl_profit(broker_df: pd.DataFrame, quarter: str) -> pd.DataFrame:
-    if broker_df.empty:
-        return pd.DataFrame()
-
-    tickers = [t for t in broker_df['Ticker'].unique() if is_valid_ticker(t)]
-    quarter_prices = get_quarter_end_prices(tickers, quarter)
-    current_prices = get_current_prices(tickers)
-
-    df_calc = broker_df.copy()
-    df_calc['Quarter_End_Price'] = df_calc['Ticker'].map(quarter_prices)
-    df_calc['Current_Price'] = df_calc['Ticker'].map(current_prices)
-    df_calc['Volume'] = df_calc.apply(
-        lambda row: 0
-        if row['Ticker'].upper() == 'OTHERS'
-        or pd.isna(row['Quarter_End_Price'])
-        or row['Quarter_End_Price'] == 0
-        else row['FVTPL value'] / row['Quarter_End_Price'],
-        axis=1,
-    )
-    df_calc['Quarter_End_Market_Value'] = df_calc['Volume'] * df_calc['Quarter_End_Price'].fillna(0)
-    df_calc['Current_Market_Value'] = df_calc['Volume'] * df_calc['Current_Price'].fillna(0)
-    df_calc['Profit_Loss'] = df_calc['Current_Market_Value'] - df_calc['FVTPL value']
-    df_calc['Profit_Loss_Pct'] = df_calc.apply(
-        lambda row: 0
-        if row['Quarter_End_Market_Value'] == 0
-        else (row['Profit_Loss'] / row['Quarter_End_Market_Value'] * 100),
-        axis=1,
-    )
-    return df_calc
-
-
 @st.cache_data(ttl=3600)
 def load_investment_metrics(ticker: str, start_year: int) -> pd.DataFrame:
     try:
@@ -373,10 +342,10 @@ def load_investment_metrics(ticker: str, start_year: int) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def build_fvtpl_table(broker: str) -> tuple[pd.DataFrame, str | None]:
+def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None]:
     df_book = load_prop_book_data()
-    if df_book.empty:
-        return pd.DataFrame(), None
+    if df_book.empty or 'FVTPL value' not in df_book.columns:
+        return None, None
 
     broker_df = df_book[
         (df_book['Broker'] == broker)
@@ -385,11 +354,11 @@ def build_fvtpl_table(broker: str) -> tuple[pd.DataFrame, str | None]:
     ].copy()
 
     if broker_df.empty:
-        return pd.DataFrame(), None
+        return None, None
 
     quarters = sort_quarters_by_date(broker_df['Quarter'].unique().tolist())
     if not quarters:
-        return pd.DataFrame(), None
+        return None, None
 
     pivot_table = broker_df.pivot_table(
         index='Ticker',
@@ -398,47 +367,78 @@ def build_fvtpl_table(broker: str) -> tuple[pd.DataFrame, str | None]:
         aggfunc='sum',
         fill_value=0,
     )
-    pivot_table = pivot_table.reindex(columns=quarters, fill_value=0)
 
-    profit_quarter = None
-    for q in reversed(quarters):
-        if broker_df[broker_df['Quarter'] == q]['FVTPL value'].sum() != 0:
-            profit_quarter = q
-            break
+    valid_tickers = [
+        ticker
+        for ticker in pivot_table.index
+        if ticker and ticker.upper() not in ('OTHERS', 'PBT')
+    ]
 
-    if profit_quarter is None:
-        profit_quarter = quarters[-1]
+    if not valid_tickers:
+        return None, None
 
-    latest_holdings = broker_df[broker_df['Quarter'] == profit_quarter]
-    profit_df = calculate_fvtpl_profit(latest_holdings, profit_quarter)
-    if profit_df.empty:
-        profit_map = pd.Series(dtype=float)
-        pct_map = pd.Series(dtype=float)
-        mv_map = pd.Series(dtype=float)
-    else:
-        profit_map = profit_df.set_index('Ticker')['Profit_Loss']
-        pct_map = profit_df.set_index('Ticker')['Profit_Loss_Pct']
-        mv_map = profit_df.set_index('Ticker')['Quarter_End_Market_Value']
+    pivot_table = pivot_table.reindex(index=valid_tickers, columns=quarters, fill_value=0)
 
-    profit_col = f"Profit/Loss since {profit_quarter}"
-    pct_col = "% Profit/Loss"
+    latest_quarter = quarters[-1]
+    all_latest_zero = all(pivot_table.at[t, latest_quarter] == 0 for t in valid_tickers)
 
-    pivot_table[profit_col] = pivot_table.index.map(lambda t: float(profit_map.get(t, 0)) if not profit_map.empty else 0.0)
-    pivot_table[pct_col] = pivot_table.index.map(lambda t: float(pct_map.get(t, 0)) if not pct_map.empty else 0.0)
+    ticker_quarter_map: dict[str, str] = {}
+    for ticker in valid_tickers:
+        values = pivot_table.loc[ticker]
+        nonzero_quarters = [q for q in quarters if values[q] != 0]
+        if not nonzero_quarters:
+            continue
+        if all_latest_zero:
+            q = nonzero_quarters[-1]
+        else:
+            if values[latest_quarter] == 0:
+                continue
+            q = latest_quarter
+        ticker_quarter_map[ticker] = q
 
-    numeric_columns = pivot_table.select_dtypes(include=[np.number]).columns.tolist()
+    if not ticker_quarter_map:
+        return None, None
 
-    totals = pivot_table[numeric_columns].sum()
-    total_quarter_mv = float(mv_map.sum()) if not mv_map.empty else 0.0
-    total_profit = totals.get(profit_col, 0)
-    total_pct = (total_profit / total_quarter_mv * 100) if total_quarter_mv else 0
+    quarter_price_cache: dict[tuple[str, str], float | None] = {}
+    quarter_groups: dict[str, list[str]] = {}
+    for ticker, quarter_key in ticker_quarter_map.items():
+        quarter_groups.setdefault(quarter_key, []).append(ticker)
 
-    total_row = pd.Series({col: totals.get(col, 0) for col in numeric_columns}, name='Total')
-    total_row[pct_col] = total_pct
-    pivot_table = pd.concat([pivot_table, total_row.to_frame().T])
+    for quarter_key, tickers in quarter_groups.items():
+        prices = get_quarter_end_prices(tickers, quarter_key)
+        for ticker in tickers:
+            quarter_price_cache[(ticker, quarter_key)] = prices.get(ticker)
 
-    pivot_table = pivot_table.round(2)
-    return pivot_table.reset_index().rename(columns={'index': 'Ticker'}), profit_quarter
+    current_prices = get_current_prices(list(ticker_quarter_map.keys()))
+
+    profit_total = 0.0
+    quarters_used: set[str] = set()
+
+    for ticker, quarter_key in ticker_quarter_map.items():
+        fvtpl_value = float(pivot_table.at[ticker, quarter_key])
+        if fvtpl_value == 0:
+            continue
+
+        quarter_price = quarter_price_cache.get((ticker, quarter_key))
+        current_price = current_prices.get(ticker)
+
+        if quarter_price in (None, 0) or current_price in (None, 0):
+            continue
+
+        volume = fvtpl_value / quarter_price
+        current_market_value = volume * current_price
+
+        profit = current_market_value - fvtpl_value
+        profit_total += profit
+        quarters_used.add(quarter_key)
+
+    if not quarters_used:
+        return None, None
+
+    reference_quarter = sort_quarters_by_date(list(quarters_used))[-1]
+
+    return profit_total, reference_quarter
+
 
 
 theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_index_raw, df_turnover = load_data()
@@ -1164,23 +1164,19 @@ else:
                 **Values shown**: Market Value (bn VND) across the most recent quarters
                 """)
 
-st.markdown("#### FVTPL Equity Profit Estimate")
-fvtpl_table, profit_reference_quarter = build_fvtpl_table(selected_broker)
-
-if fvtpl_table.empty:
-    st.info("No FVTPL holdings data available to estimate profit for this broker.")
-else:
-    st.dataframe(fvtpl_table, use_container_width=True, hide_index=True)
-    if profit_reference_quarter:
-        st.caption(f"Profit estimates benchmarked to {profit_reference_quarter} holdings and current market prices.")
-
 st.markdown(f"#### {target_label} Investment Income Override")
+
+fvtpl_profit_vnd, fvtpl_reference_quarter = calculate_fvtpl_profit_total(selected_broker)
+fvtpl_profit_bn = (fvtpl_profit_vnd / 1e9) if fvtpl_profit_vnd is not None else None
 
 investment_history = (
     df_actual[['YEARREPORT', 'LENGTHREPORT', 'investment_income']]
     .dropna(subset=['investment_income'])
     .sort_values(['YEARREPORT', 'LENGTHREPORT'])
 )
+
+display_columns = ['Quarter', 'Investment Income (bn)']
+investment_display_df = pd.DataFrame(columns=display_columns)
 
 recent_investment_history = investment_history.tail(4)
 if not recent_investment_history.empty:
@@ -1190,7 +1186,20 @@ if not recent_investment_history.empty:
         ),
         **{"Investment Income (bn)": recent_investment_history['investment_income'].apply(lambda v: v / 1e9)}
     )[['Quarter', 'Investment Income (bn)']]
-    st.dataframe(recent_investment_history.reset_index(drop=True), use_container_width=True, hide_index=True)
+    investment_display_df = pd.concat([investment_display_df, recent_investment_history], ignore_index=True)
+
+if fvtpl_profit_bn is not None:
+    reference_label = fvtpl_reference_quarter or "latest quarter"
+    fvtpl_row = pd.DataFrame([
+        {
+            'Quarter': f"FVTPL P/L since {reference_label}",
+            'Investment Income (bn)': fvtpl_profit_bn,
+        }
+    ])
+    investment_display_df = pd.concat([investment_display_df, fvtpl_row], ignore_index=True)
+
+if not investment_display_df.empty:
+    st.dataframe(investment_display_df, use_container_width=True, hide_index=True)
 else:
     st.info("No historical investment income data available for the last quarters.")
 
