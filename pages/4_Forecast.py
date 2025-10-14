@@ -1,4 +1,5 @@
 import math
+import re
 from datetime import datetime
 
 import numpy as np
@@ -7,14 +8,21 @@ import requests
 import streamlit as st
 import toml
 
-from utils.keycode_matcher import load_keycode_map, match_keycodes
 from utils.brokerage_codes import get_brokerage_code
+from utils.brokerage_data import load_brokerage_metrics
+from utils.investment_book import get_investment_data
+from utils.keycode_matcher import load_keycode_map, match_keycodes
 
 
 st.set_page_config(page_title="Forecast", layout="wide")
 
 if st.sidebar.button("Reload Data"):
     st.cache_data.clear()
+
+if 'price_cache' not in st.session_state:
+    st.session_state.price_cache = {}
+if 'price_last_updated' not in st.session_state:
+    st.session_state.price_last_updated = None
 
 
 @st.cache_data
@@ -184,6 +192,253 @@ def format_pct(value: float | None) -> str:
     if value is None:
         return "n/a"
     return f"{value * 100:,.1f}%"
+
+
+@st.cache_data(ttl=3600)
+def load_prop_book_data() -> pd.DataFrame:
+    try:
+        return pd.read_excel('sql/Prop book.xlsx')
+    except Exception:
+        return pd.DataFrame()
+
+
+def sort_quarters_by_date(quarters: list[str]) -> list[str]:
+    def key(q: str):
+        try:
+            q = q.strip()
+            quarter_part = int(q[0])
+            year_part = int(q[2:])
+            full_year = 2000 + year_part if year_part < 50 else 1900 + year_part
+            return full_year * 10 + quarter_part
+        except Exception:
+            return q
+
+    return sorted(quarters, key=key)
+
+
+def is_valid_ticker(ticker: str) -> bool:
+    if not ticker:
+        return False
+
+    ticker_upper = ticker.upper().strip()
+    invalid_patterns = [
+        'OTHER', 'OTHERS', 'UNLISTED', 'PBT', 'TOTAL', 'CASH', 'BOND',
+        'DEPOSIT', 'RECEIVABLE', 'PAYABLE', 'EQUITY', 'LIABILITY'
+    ]
+
+    if any(pattern in ticker_upper for pattern in invalid_patterns):
+        return False
+
+    if ' ' in ticker_upper:
+        return False
+
+    return bool(re.match(r'^[A-Z]{2,5}$', ticker_upper))
+
+
+def fetch_historical_price(ticker: str) -> pd.DataFrame:
+    if not is_valid_ticker(ticker):
+        return pd.DataFrame()
+
+    url = "https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term"
+    params = {
+        "ticker": ticker.strip().upper(),
+        "type": "stock",
+        "resolution": "D",
+        "from": "0",
+        "to": str(int(datetime.now().timestamp()))
+    }
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json"
+    }
+
+    try:
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if 'data' not in data or not data['data']:
+            return pd.DataFrame()
+        df = pd.DataFrame(data['data'])
+        if 'tradingDate' in df.columns:
+            if df['tradingDate'].dtype == 'object' and df['tradingDate'].astype(str).str.contains('T').any():
+                df['tradingDate'] = pd.to_datetime(df['tradingDate'])
+            else:
+                df['tradingDate'] = pd.to_datetime(df['tradingDate'], unit='ms')
+        return df
+    except requests.exceptions.RequestException:
+        return pd.DataFrame()
+
+
+def get_close_price(df: pd.DataFrame, target_date: str | None = None):
+    if df.empty:
+        return None
+
+    if target_date:
+        target = pd.to_datetime(target_date)
+        if target.tzinfo is None:
+            target = target.tz_localize('UTC')
+        subset = df[df['tradingDate'] <= target]
+        if subset.empty:
+            return None
+        return subset.iloc[-1]['close']
+
+    return df.iloc[-1]['close']
+
+
+def get_quarter_end_prices(tickers: list[str], quarter: str) -> dict[str, float | None]:
+    quarter_map = {"1Q": "-03-31", "2Q": "-06-30", "3Q": "-09-30", "4Q": "-12-31"}
+    q_part, y_part = quarter[:2], quarter[2:]
+    date_suffix = quarter_map.get(q_part)
+    if not date_suffix:
+        return {ticker: None for ticker in tickers}
+
+    full_year = 2000 + int(y_part) if int(y_part) < 50 else 1900 + int(y_part)
+    date_str = f"{full_year}{date_suffix}"
+
+    prices: dict[str, float | None] = {}
+    for ticker in tickers:
+        if not is_valid_ticker(ticker):
+            prices[ticker] = None
+            continue
+
+        cache_key = f"{ticker}_{quarter}_quarter_end"
+        if cache_key in st.session_state.price_cache:
+            prices[ticker] = st.session_state.price_cache[cache_key]
+            continue
+
+        price_df = fetch_historical_price(ticker)
+        price = get_close_price(price_df, date_str)
+        st.session_state.price_cache[cache_key] = price
+        prices[ticker] = price
+
+    return prices
+
+
+def get_current_prices(tickers: list[str]) -> dict[str, float | None]:
+    prices: dict[str, float | None] = {}
+    for ticker in tickers:
+        if not is_valid_ticker(ticker):
+            prices[ticker] = None
+            continue
+
+        cache_key = f"{ticker}_current"
+        if cache_key in st.session_state.price_cache:
+            prices[ticker] = st.session_state.price_cache[cache_key]
+            continue
+
+        price_df = fetch_historical_price(ticker)
+        price = get_close_price(price_df)
+        st.session_state.price_cache[cache_key] = price
+        prices[ticker] = price
+
+    return prices
+
+
+def calculate_fvtpl_profit(broker_df: pd.DataFrame, quarter: str) -> pd.DataFrame:
+    if broker_df.empty:
+        return pd.DataFrame()
+
+    tickers = [t for t in broker_df['Ticker'].unique() if is_valid_ticker(t)]
+    quarter_prices = get_quarter_end_prices(tickers, quarter)
+    current_prices = get_current_prices(tickers)
+
+    df_calc = broker_df.copy()
+    df_calc['Quarter_End_Price'] = df_calc['Ticker'].map(quarter_prices)
+    df_calc['Current_Price'] = df_calc['Ticker'].map(current_prices)
+    df_calc['Volume'] = df_calc.apply(
+        lambda row: 0
+        if row['Ticker'].upper() == 'OTHERS'
+        or pd.isna(row['Quarter_End_Price'])
+        or row['Quarter_End_Price'] == 0
+        else row['FVTPL value'] / row['Quarter_End_Price'],
+        axis=1,
+    )
+    df_calc['Quarter_End_Market_Value'] = df_calc['Volume'] * df_calc['Quarter_End_Price'].fillna(0)
+    df_calc['Current_Market_Value'] = df_calc['Volume'] * df_calc['Current_Price'].fillna(0)
+    df_calc['Profit_Loss'] = df_calc['Current_Market_Value'] - df_calc['FVTPL value']
+    df_calc['Profit_Loss_Pct'] = df_calc.apply(
+        lambda row: 0
+        if row['Quarter_End_Market_Value'] == 0
+        else (row['Profit_Loss'] / row['Quarter_End_Market_Value'] * 100),
+        axis=1,
+    )
+    return df_calc
+
+
+@st.cache_data(ttl=3600)
+def load_investment_metrics(ticker: str, start_year: int) -> pd.DataFrame:
+    try:
+        return load_brokerage_metrics(ticker=ticker, start_year=start_year, include_annual=True)
+    except Exception:
+        return pd.DataFrame()
+
+
+def build_fvtpl_table(broker: str) -> tuple[pd.DataFrame, str | None]:
+    df_book = load_prop_book_data()
+    if df_book.empty:
+        return pd.DataFrame(), None
+
+    broker_df = df_book[
+        (df_book['Broker'] == broker)
+        & df_book['FVTPL value'].notnull()
+        & (df_book['FVTPL value'] != 0)
+    ].copy()
+
+    if broker_df.empty:
+        return pd.DataFrame(), None
+
+    quarters = sort_quarters_by_date(broker_df['Quarter'].unique().tolist())
+    if not quarters:
+        return pd.DataFrame(), None
+
+    pivot_table = broker_df.pivot_table(
+        index='Ticker',
+        columns='Quarter',
+        values='FVTPL value',
+        aggfunc='sum',
+        fill_value=0,
+    )
+    pivot_table = pivot_table.reindex(columns=quarters, fill_value=0)
+
+    profit_quarter = None
+    for q in reversed(quarters):
+        if broker_df[broker_df['Quarter'] == q]['FVTPL value'].sum() != 0:
+            profit_quarter = q
+            break
+
+    if profit_quarter is None:
+        profit_quarter = quarters[-1]
+
+    latest_holdings = broker_df[broker_df['Quarter'] == profit_quarter]
+    profit_df = calculate_fvtpl_profit(latest_holdings, profit_quarter)
+    if profit_df.empty:
+        profit_map = pd.Series(dtype=float)
+        pct_map = pd.Series(dtype=float)
+        mv_map = pd.Series(dtype=float)
+    else:
+        profit_map = profit_df.set_index('Ticker')['Profit_Loss']
+        pct_map = profit_df.set_index('Ticker')['Profit_Loss_Pct']
+        mv_map = profit_df.set_index('Ticker')['Quarter_End_Market_Value']
+
+    profit_col = f"Profit/Loss since {profit_quarter}"
+    pct_col = "% Profit/Loss"
+
+    pivot_table[profit_col] = pivot_table.index.map(lambda t: float(profit_map.get(t, 0)) if not profit_map.empty else 0.0)
+    pivot_table[pct_col] = pivot_table.index.map(lambda t: float(pct_map.get(t, 0)) if not pct_map.empty else 0.0)
+
+    numeric_columns = pivot_table.select_dtypes(include=[np.number]).columns.tolist()
+
+    totals = pivot_table[numeric_columns].sum()
+    total_quarter_mv = float(mv_map.sum()) if not mv_map.empty else 0.0
+    total_profit = totals.get(profit_col, 0)
+    total_pct = (total_profit / total_quarter_mv * 100) if total_quarter_mv else 0
+
+    total_row = pd.Series({col: totals.get(col, 0) for col in numeric_columns}, name='Total')
+    total_row[pct_col] = total_pct
+    pivot_table = pd.concat([pivot_table, total_row.to_frame().T])
+
+    pivot_table = pivot_table.round(2)
+    return pivot_table.reset_index().rename(columns={'index': 'Ticker'}), profit_quarter
 
 
 theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_index_raw, df_turnover = load_data()
@@ -794,11 +1049,172 @@ st.dataframe(margin_table_df, use_container_width=True)
 
 st.caption("Margin lending income and interest expense calculated as balance × rate ÷ 4 for the forecast quarter.")
 
+st.markdown("#### Investment Book Snapshot")
+
+investment_start_year = max(target_year - 3, 2017)
+investment_metrics_df = load_investment_metrics(selected_broker, investment_start_year)
+
+def format_investment_cell(value: float | None) -> str:
+    if value is None or value == 0:
+        return '-'
+    return f"{value / 1e9:,.1f}"
+
+if investment_metrics_df.empty:
+    st.info("No investment holdings data available for the selected broker.")
+else:
+    quarterly_metrics = investment_metrics_df[investment_metrics_df['LENGTHREPORT'].between(1, 4)]
+
+    if quarterly_metrics.empty:
+        st.info("Investment book requires quarterly data. No quarterly records found.")
+    else:
+        period_records = (
+            quarterly_metrics[['YEARREPORT', 'LENGTHREPORT']]
+            .drop_duplicates()
+            .sort_values(['YEARREPORT', 'LENGTHREPORT'], ascending=[False, False])
+        )
+
+        display_periods = period_records.head(6).sort_values(['YEARREPORT', 'LENGTHREPORT'])
+
+        investment_rows: list[dict[str, str]] = []
+        column_labels: list[tuple[int, int, str]] = []
+
+        for _, record in display_periods.iterrows():
+            year = int(record['YEARREPORT'])
+            quarter = int(record['LENGTHREPORT'])
+            column_labels.append((year, quarter, quarter_label(year, quarter)))
+
+        all_items: set[tuple[str, str]] = set()
+        period_data_cache: dict[tuple[int, int], dict] = {}
+
+        for year, quarter, _ in column_labels:
+            data = get_investment_data(investment_metrics_df, selected_broker, year, quarter)
+            period_data_cache[(year, quarter)] = data
+            for category in ['FVTPL', 'AFS', 'HTM']:
+                market_values = data.get(category, {}).get('Market Value', {})
+                for item in market_values.keys():
+                    all_items.add((category, item))
+
+        if not all_items:
+            st.info("No investment holdings found for the selected broker in the recent quarters.")
+        else:
+            for category in ['FVTPL', 'AFS', 'HTM']:
+                category_items = sorted([item for cat, item in all_items if cat == category])
+                if not category_items:
+                    continue
+
+                header_row = {'Item': category}
+                for _, _, label in column_labels:
+                    header_row[label] = ''
+                investment_rows.append(header_row)
+
+                for item in category_items:
+                    row = {'Item': f'  {item}'}
+                    has_data = False
+                    for year, quarter, label in column_labels:
+                        mv = (
+                            period_data_cache[(year, quarter)]
+                            .get(category, {})
+                            .get('Market Value', {})
+                            .get(item)
+                        )
+                        if mv not in (None, 0):
+                            row[label] = format_investment_cell(mv)
+                            has_data = True
+                        else:
+                            row[label] = '-'
+                    if has_data:
+                        investment_rows.append(row)
+
+                total_row = {'Item': f'Total {category}'}
+                for year, quarter, label in column_labels:
+                    total_mv = sum(
+                        period_data_cache[(year, quarter)]
+                        .get(category, {})
+                        .get('Market Value', {})
+                        .values()
+                    )
+                    total_row[label] = format_investment_cell(total_mv)
+                investment_rows.append(total_row)
+
+                spacer_row = {'Item': ''}
+                for _, _, label in column_labels:
+                    spacer_row[label] = ''
+                investment_rows.append(spacer_row)
+
+            investment_table = pd.DataFrame(investment_rows)
+            st.dataframe(investment_table, use_container_width=True, hide_index=True)
+
+            csv_data = investment_table.to_csv(index=False)
+            st.download_button(
+                label="Download Investment Book",
+                data=csv_data,
+                file_name=f"investment_book_{selected_broker}.csv",
+                mime="text/csv",
+                key=f"download_investment_book_{selected_broker}"
+            )
+
+            with st.expander("Understanding Investment Categories"):
+                st.markdown("""
+                **FVTPL** (Fair Value Through Profit or Loss): Trading securities held for short-term profit
+
+                **AFS** (Available-for-Sale): Long-term financial assets measured at fair value through OCI
+
+                **HTM** (Held-to-Maturity): Fixed maturity investments measured at amortized cost
+
+                **Values shown**: Market Value (bn VND) across the most recent quarters
+                """)
+
+st.markdown("#### FVTPL Equity Profit Estimate")
+fvtpl_table, profit_reference_quarter = build_fvtpl_table(selected_broker)
+
+if fvtpl_table.empty:
+    st.info("No FVTPL holdings data available to estimate profit for this broker.")
+else:
+    st.dataframe(fvtpl_table, use_container_width=True, hide_index=True)
+    if profit_reference_quarter:
+        st.caption(f"Profit estimates benchmarked to {profit_reference_quarter} holdings and current market prices.")
+
+st.markdown(f"#### {target_label} Investment Income Override")
+
+investment_history = (
+    df_actual[['YEARREPORT', 'LENGTHREPORT', 'investment_income']]
+    .dropna(subset=['investment_income'])
+    .sort_values(['YEARREPORT', 'LENGTHREPORT'])
+)
+
+recent_investment_history = investment_history.tail(4)
+if not recent_investment_history.empty:
+    recent_investment_history = recent_investment_history.assign(
+        Quarter=recent_investment_history.apply(
+            lambda row: quarter_label(int(row['YEARREPORT']), int(row['LENGTHREPORT'])), axis=1
+        ),
+        **{"Investment Income (bn)": recent_investment_history['investment_income'].apply(lambda v: v / 1e9)}
+    )[['Quarter', 'Investment Income (bn)']]
+    st.dataframe(recent_investment_history.reset_index(drop=True), use_container_width=True, hide_index=True)
+else:
+    st.info("No historical investment income data available for the last quarters.")
+
+investment_base_value = base_segments.get('investment_income', 0.0)
+investment_base_bn = format_bn(investment_base_value)
+if not math.isfinite(investment_base_bn):
+    investment_base_bn = 0.0
+
+investment_income_input = st.number_input(
+    f"{target_label} Investment Income (bn VND)",
+    value=float(round(investment_base_bn)),
+    step=10.0,
+    format="%.0f",
+    key="investment_income_input",
+)
+
+investment_income_forecast_bn = float(investment_income_input)
+
 # Update summary with forecast brokerage and margin inputs
 target_column_label = f"{target_label} Base (bn VND)"
 if target_column_label in summary_df.columns:
     summary_df.loc[summary_df['Segment'] == 'Brokerage Fee', target_column_label] = format_bn_str(net_brokerage_forecast)
     summary_df.loc[summary_df['Segment'] == 'Margin Income', target_column_label] = format_bn_str(margin_income_forecast_bn * 1e9)
+    summary_df.loc[summary_df['Segment'] == 'Investment Income', target_column_label] = format_bn_str(investment_income_forecast_bn * 1e9)
     summary_df.loc[summary_df['Segment'] == 'Interest Expense', target_column_label] = format_bn_str(-interest_expense_forecast_bn * 1e9)
 
 st.subheader("Baseline Breakdown")
@@ -811,7 +1227,7 @@ segment_inputs = {}
 input_columns = st.columns(3)
 
 for idx, segment in enumerate(SEGMENTS):
-    if segment['key'] in ('brokerage_fee', 'margin_income', 'interest_expense'):
+    if segment['key'] in ('brokerage_fee', 'margin_income', 'investment_income', 'interest_expense'):
         continue
     col = input_columns[idx % len(input_columns)]
     with col:
@@ -828,6 +1244,7 @@ for idx, segment in enumerate(SEGMENTS):
 
 segment_inputs['brokerage_fee'] = net_brokerage_forecast
 segment_inputs['margin_income'] = margin_income_forecast_bn * 1e9
+segment_inputs['investment_income'] = investment_income_forecast_bn * 1e9
 segment_inputs['interest_expense'] = -interest_expense_forecast_bn * 1e9
 
 adjusted_total_segments = sum(segment_inputs.values())
