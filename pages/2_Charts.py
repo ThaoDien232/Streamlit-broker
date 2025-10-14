@@ -475,16 +475,19 @@ if not df_calc.empty:
     df_calc['Quarter_Label'] = df_calc.apply(create_quarter_label, axis=1)
 
 # DEBUG: Show component data for calculated metrics
-if 'NET_BROKERAGE_FEE' in selected_metrics or 'MARGIN_LENDING_RATE' in selected_metrics:
+if not df_calc.empty and ('NET_BROKERAGE_FEE' in selected_metrics or 'MARGIN_LENDING_RATE' in selected_metrics):
     with st.expander("🔍 Debug: Component Data for Calculated Metrics"):
+        st.write(f"**Total rows loaded:** {len(df_calc)}")
+        st.write(f"**Columns:** {list(df_calc.columns)}")
+
         if 'NET_BROKERAGE_FEE' in selected_metrics:
             st.subheader("Net Brokerage Fee Components")
 
             # Check for NET_BROKERAGE_INCOME
-            net_brok_data = df_calc[df_calc['METRIC_CODE'] == 'NET_BROKERAGE_INCOME']
-            st.write(f"**NET_BROKERAGE_INCOME** rows found: {len(net_brok_data)}")
-            if not net_brok_data.empty:
-                st.dataframe(net_brok_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
+            if 'METRIC_CODE' in df_calc.columns:
+                net_brok_data = df_calc[df_calc['METRIC_CODE'] == 'NET_BROKERAGE_INCOME']
+            else:
+                net_brok_data = pd.DataFrame()
 
             # Check for INSTITUTION_SHARES_TRADING_VALUE
             inst_data = df_calc[df_calc['METRIC_CODE'] == 'INSTITUTION_SHARES_TRADING_VALUE']
