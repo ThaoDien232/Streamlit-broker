@@ -367,8 +367,8 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 continue
 
             if metric_name == 'Net Brokerage Fee':
-                # Calculate Net Brokerage Fee (bps) = Net_Brokerage_Income / (NOS101 + NOS109) * 10000
-                net_brokerage_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Net_Brokerage_Income')
+                # Calculate Net Brokerage Fee (bps) = NET_BROKERAGE_INCOME / (NOS101 + NOS109) * 10000
+                net_brokerage_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'NET_BROKERAGE_INCOME')
                 institution_shares = get_note_value(ticker_data, ticker, year, quarter_num, 'NOS101')
                 investor_shares = get_note_value(ticker_data, ticker, year, quarter_num, 'NOS109')
                 total_trading_value = institution_shares + investor_shares
@@ -382,9 +382,9 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 continue
 
             if metric_name == 'Margin Lending Rate':
-                # Calculate Margin Lending Rate (%) = Net_Margin_lending_Income / Avg(Margin_Lending_book) * 4 * 100
-                # Annualized rate based on quarterly income and trailing 4Q average margin book
-                margin_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Net_Margin_lending_Income')
+                # Calculate Margin Lending Rate (%) = MARGIN_LENDING_INCOME / Avg(MARGIN_BALANCE) * 4 * 100
+                # Annualized rate based on quarterly income and trailing 4Q average margin balance
+                margin_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'MARGIN_LENDING_INCOME')
 
                 # Get trailing 4 quarters of margin balance for average
                 margin_books = []
@@ -396,7 +396,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                         q_num += 4
                         y -= 1
 
-                    margin_book = get_calc_metric_value(ticker_data, ticker, y, q_num, 'Margin_Lending_book')
+                    margin_book = get_calc_metric_value(ticker_data, ticker, y, q_num, 'MARGIN_BALANCE')
                     if margin_book and margin_book > 0:
                         margin_books.append(margin_book)
 

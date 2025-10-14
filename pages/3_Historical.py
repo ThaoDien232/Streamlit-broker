@@ -10,13 +10,17 @@ from utils.investment_book import get_investment_data, format_investment_book, g
 st.set_page_config(page_title="Historical Financial Statements", layout="wide")
 
 def calculate_net_brokerage_fee(df):
-    """Calculate Net Brokerage Fee (bps) = Net_Brokerage_Income / (NOS101 + NOS109) * 10000"""
+    """Calculate Net Brokerage Fee (bps) = NET_BROKERAGE_INCOME / (NOS101 + NOS109) * 10000"""
     calculated_rows = []
 
     for (year, quarter) in df[['YEARREPORT', 'LENGTHREPORT']].drop_duplicates().values:
         period_data = df[(df['YEARREPORT'] == year) & (df['LENGTHREPORT'] == quarter)]
 
-        net_brok = period_data[period_data['KEYCODE'] == 'Net_Brokerage_Income']
+        # Try both METRIC_CODE and KEYCODE for calculated metrics
+        net_brok = period_data[
+            (period_data['METRIC_CODE'] == 'NET_BROKERAGE_INCOME') |
+            (period_data['KEYCODE'] == 'NET_BROKERAGE_INCOME')
+        ]
         nos101 = period_data[period_data['KEYCODE'] == 'NOS101']
         nos109 = period_data[period_data['KEYCODE'] == 'NOS109']
 
@@ -42,15 +46,17 @@ def calculate_net_brokerage_fee(df):
     return df
 
 def calculate_margin_lending_rate(df):
-    """Calculate Margin Lending Rate (%) = Net_Margin_lending_Income / Avg(Margin_Lending_book, 4Q) * 4 * 100"""
+    """Calculate Margin Lending Rate (%) = MARGIN_LENDING_INCOME / Avg(MARGIN_BALANCE, 4Q) * 4 * 100"""
     calculated_rows = []
     periods = df[['YEARREPORT', 'LENGTHREPORT']].drop_duplicates().sort_values(['YEARREPORT', 'LENGTHREPORT'])
 
     for _, (year, quarter) in periods.iterrows():
+        # Try both METRIC_CODE and KEYCODE for calculated metrics
         margin_income_row = df[
             (df['YEARREPORT'] == year) &
             (df['LENGTHREPORT'] == quarter) &
-            (df['KEYCODE'] == 'Net_Margin_lending_Income')
+            ((df['METRIC_CODE'] == 'MARGIN_LENDING_INCOME') |
+             (df['KEYCODE'] == 'MARGIN_LENDING_INCOME'))
         ]
 
         if margin_income_row.empty:
@@ -58,7 +64,7 @@ def calculate_margin_lending_rate(df):
 
         margin_income = margin_income_row['VALUE'].values[0]
 
-        # Get trailing 4 quarters of margin book
+        # Get trailing 4 quarters of margin balance using METRIC_CODE
         margin_books = []
         for q_offset in range(4):
             q_num = quarter - q_offset
@@ -70,7 +76,8 @@ def calculate_margin_lending_rate(df):
             margin_book_row = df[
                 (df['YEARREPORT'] == y) &
                 (df['LENGTHREPORT'] == q_num) &
-                (df['KEYCODE'] == 'Margin_Lending_book')
+                ((df['METRIC_CODE'] == 'MARGIN_BALANCE') |
+                 (df['KEYCODE'] == 'MARGIN_BALANCE'))
             ]
 
             if not margin_book_row.empty:

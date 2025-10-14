@@ -18,7 +18,7 @@ font_family = theme["font"]
 st.set_page_config(page_title="Financial Charts - CALC Metrics", layout="wide")
 
 def calculate_net_brokerage_fee(df):
-    """Calculate Net Brokerage Fee (bps) = Net_Brokerage_Income / (NOS101 + NOS109) * 10000"""
+    """Calculate Net Brokerage Fee (bps) = NET_BROKERAGE_INCOME / (NOS101 + NOS109) * 10000"""
     calculated_rows = []
 
     for ticker in df['TICKER'].unique():
@@ -30,8 +30,11 @@ def calculate_net_brokerage_fee(df):
                 (ticker_data['LENGTHREPORT'] == quarter)
             ]
 
-            # Get required metrics
-            net_brok = period_data[period_data['KEYCODE'] == 'Net_Brokerage_Income']
+            # Get required metrics - try both METRIC_CODE and KEYCODE
+            net_brok = period_data[
+                (period_data['METRIC_CODE'] == 'NET_BROKERAGE_INCOME') |
+                (period_data['KEYCODE'] == 'NET_BROKERAGE_INCOME')
+            ]
             nos101 = period_data[period_data['KEYCODE'] == 'NOS101']
             nos109 = period_data[period_data['KEYCODE'] == 'NOS109']
 
@@ -50,6 +53,7 @@ def calculate_net_brokerage_fee(df):
                         'YEARREPORT': year,
                         'LENGTHREPORT': quarter,
                         'KEYCODE': 'NET_BROKERAGE_FEE_BPS',
+                        'METRIC_CODE': 'NET_BROKERAGE_FEE_BPS',
                         'QUARTER_LABEL': period_data.iloc[0]['QUARTER_LABEL'] if 'QUARTER_LABEL' in period_data.columns else f"{quarter}Q{year%100:02d}",
                         'KEYCODE_NAME': 'Net Brokerage Fee (bps)',
                         'VALUE': fee_bps,
@@ -64,7 +68,7 @@ def calculate_net_brokerage_fee(df):
     return df
 
 def calculate_margin_lending_rate(df):
-    """Calculate Margin Lending Rate (%) = Net_Margin_lending_Income / Avg(Margin_Lending_book, 4Q) * 4 * 100"""
+    """Calculate Margin Lending Rate (%) = MARGIN_LENDING_INCOME / Avg(MARGIN_BALANCE, 4Q) * 4 * 100"""
     calculated_rows = []
 
     for ticker in df['TICKER'].unique():
@@ -74,11 +78,12 @@ def calculate_margin_lending_rate(df):
         periods = ticker_data[['YEARREPORT', 'LENGTHREPORT']].drop_duplicates().sort_values(['YEARREPORT', 'LENGTHREPORT'])
 
         for _, (year, quarter) in periods.iterrows():
-            # Get margin income for current period
+            # Get margin income for current period - try both METRIC_CODE and KEYCODE
             margin_income_row = ticker_data[
                 (ticker_data['YEARREPORT'] == year) &
                 (ticker_data['LENGTHREPORT'] == quarter) &
-                (ticker_data['KEYCODE'] == 'Net_Margin_lending_Income')
+                ((ticker_data['METRIC_CODE'] == 'MARGIN_LENDING_INCOME') |
+                 (ticker_data['KEYCODE'] == 'MARGIN_LENDING_INCOME'))
             ]
 
             if margin_income_row.empty:
@@ -86,7 +91,7 @@ def calculate_margin_lending_rate(df):
 
             margin_income = margin_income_row['VALUE'].values[0]
 
-            # Get trailing 4 quarters of margin book
+            # Get trailing 4 quarters of margin balance using METRIC_CODE
             margin_books = []
             for q_offset in range(4):
                 q_num = quarter - q_offset
@@ -100,7 +105,8 @@ def calculate_margin_lending_rate(df):
                 margin_book_row = ticker_data[
                     (ticker_data['YEARREPORT'] == y) &
                     (ticker_data['LENGTHREPORT'] == q_num) &
-                    (ticker_data['KEYCODE'] == 'Margin_Lending_book')
+                    ((ticker_data['METRIC_CODE'] == 'MARGIN_BALANCE') |
+                     (ticker_data['KEYCODE'] == 'MARGIN_BALANCE'))
                 ]
 
                 if not margin_book_row.empty:
@@ -124,6 +130,7 @@ def calculate_margin_lending_rate(df):
                     'YEARREPORT': year,
                     'LENGTHREPORT': quarter,
                     'KEYCODE': 'MARGIN_LENDING_RATE',
+                    'METRIC_CODE': 'MARGIN_LENDING_RATE',
                     'QUARTER_LABEL': period_data.iloc[0]['QUARTER_LABEL'] if 'QUARTER_LABEL' in period_data.columns else f"{quarter}Q{year%100:02d}",
                     'KEYCODE_NAME': 'Margin Lending Rate (%)',
                     'VALUE': margin_rate / 100,  # Store as decimal for consistency with other rates
@@ -156,13 +163,13 @@ def load_filtered_data(tickers, metrics, years, quarters):
         metrics_to_load.extend([m for m in toi_components if m not in metrics_to_load])
 
     if 'NET_BROKERAGE_FEE_BPS' in metrics:
-        # Net Brokerage Fee requires: Net_Brokerage_Income, NOS101, NOS109
-        fee_components = ['Net_Brokerage_Income', 'NOS101', 'NOS109']
+        # Net Brokerage Fee requires: NET_BROKERAGE_INCOME, NOS101, NOS109
+        fee_components = ['NET_BROKERAGE_INCOME', 'NOS101', 'NOS109']
         metrics_to_load.extend([m for m in fee_components if m not in metrics_to_load])
 
     if 'MARGIN_LENDING_RATE' in metrics:
-        # Margin Lending Rate requires: Net_Margin_lending_Income, Margin_Lending_book
-        margin_components = ['Net_Margin_lending_Income', 'Margin_Lending_book']
+        # Margin Lending Rate requires: MARGIN_LENDING_INCOME, MARGIN_BALANCE
+        margin_components = ['MARGIN_LENDING_INCOME', 'MARGIN_BALANCE']
         metrics_to_load.extend([m for m in margin_components if m not in metrics_to_load])
 
     df = load_filtered_brokerage_data(
