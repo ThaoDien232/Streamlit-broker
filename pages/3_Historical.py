@@ -9,12 +9,108 @@ from utils.investment_book import get_investment_data, format_investment_book, g
 # Page config
 st.set_page_config(page_title="Historical Financial Statements", layout="wide")
 
+def calculate_net_brokerage_fee(df):
+    """Calculate Net Brokerage Fee (bps) = Net_Brokerage_Income / (NOS101 + NOS109) * 10000"""
+    calculated_rows = []
+
+    for (year, quarter) in df[['YEARREPORT', 'LENGTHREPORT']].drop_duplicates().values:
+        period_data = df[(df['YEARREPORT'] == year) & (df['LENGTHREPORT'] == quarter)]
+
+        net_brok = period_data[period_data['KEYCODE'] == 'Net_Brokerage_Income']
+        nos101 = period_data[period_data['KEYCODE'] == 'NOS101']
+        nos109 = period_data[period_data['KEYCODE'] == 'NOS109']
+
+        if not net_brok.empty and not nos101.empty and not nos109.empty:
+            total_trading = nos101['VALUE'].values[0] + nos109['VALUE'].values[0]
+            if total_trading > 0:
+                fee_bps = (net_brok['VALUE'].values[0] / total_trading) * 10000
+                calculated_rows.append({
+                    'TICKER': period_data.iloc[0]['TICKER'],
+                    'YEARREPORT': year,
+                    'LENGTHREPORT': quarter,
+                    'KEYCODE': 'NET_BROKERAGE_FEE_BPS',
+                    'METRIC_CODE': 'NET_BROKERAGE_FEE_BPS',
+                    'QUARTER_LABEL': period_data.iloc[0].get('QUARTER_LABEL', f"{quarter}Q{year%100:02d}"),
+                    'KEYCODE_NAME': 'Net Brokerage Fee (bps)',
+                    'VALUE': fee_bps,
+                    'STATEMENT_TYPE': 'CALC'
+                })
+
+    if calculated_rows:
+        calc_df = pd.DataFrame(calculated_rows)
+        df = pd.concat([df, calc_df], ignore_index=True)
+    return df
+
+def calculate_margin_lending_rate(df):
+    """Calculate Margin Lending Rate (%) = Net_Margin_lending_Income / Avg(Margin_Lending_book, 4Q) * 4 * 100"""
+    calculated_rows = []
+    periods = df[['YEARREPORT', 'LENGTHREPORT']].drop_duplicates().sort_values(['YEARREPORT', 'LENGTHREPORT'])
+
+    for _, (year, quarter) in periods.iterrows():
+        margin_income_row = df[
+            (df['YEARREPORT'] == year) &
+            (df['LENGTHREPORT'] == quarter) &
+            (df['KEYCODE'] == 'Net_Margin_lending_Income')
+        ]
+
+        if margin_income_row.empty:
+            continue
+
+        margin_income = margin_income_row['VALUE'].values[0]
+
+        # Get trailing 4 quarters of margin book
+        margin_books = []
+        for q_offset in range(4):
+            q_num = quarter - q_offset
+            y = year
+            while q_num <= 0:
+                q_num += 4
+                y -= 1
+
+            margin_book_row = df[
+                (df['YEARREPORT'] == y) &
+                (df['LENGTHREPORT'] == q_num) &
+                (df['KEYCODE'] == 'Margin_Lending_book')
+            ]
+
+            if not margin_book_row.empty:
+                book_value = margin_book_row['VALUE'].values[0]
+                if book_value > 0:
+                    margin_books.append(book_value)
+
+        if len(margin_books) >= 2 and margin_income:
+            avg_margin_book = sum(margin_books) / len(margin_books)
+            margin_rate = (margin_income / avg_margin_book) * 4 * 100
+
+            calculated_rows.append({
+                'TICKER': margin_income_row.iloc[0]['TICKER'],
+                'YEARREPORT': year,
+                'LENGTHREPORT': quarter,
+                'KEYCODE': 'MARGIN_LENDING_RATE',
+                'METRIC_CODE': 'MARGIN_LENDING_RATE',
+                'QUARTER_LABEL': margin_income_row.iloc[0].get('QUARTER_LABEL', f"{quarter}Q{year%100:02d}"),
+                'KEYCODE_NAME': 'Margin Lending Rate (%)',
+                'VALUE': margin_rate / 100,  # Store as decimal
+                'STATEMENT_TYPE': 'CALC'
+            })
+
+    if calculated_rows:
+        calc_df = pd.DataFrame(calculated_rows)
+        df = pd.concat([df, calc_df], ignore_index=True)
+    return df
+
 @st.cache_data(ttl=3600)
 def load_broker_financial_data(ticker: str, start_year: int, end_year: int, include_annual: bool = True):
     """Load financial data for specific broker and year range (optimized query)"""
     try:
         # Load ONLY the selected broker and year range
         df = load_brokerage_metrics(ticker=ticker, start_year=start_year, end_year=end_year, include_annual=include_annual)
+
+        if df is not None and not df.empty:
+            # Calculate derived metrics
+            df = calculate_net_brokerage_fee(df)
+            df = calculate_margin_lending_rate(df)
+
         return df
     except Exception as e:
         st.error(f"Failed to load financial data from database: {e}")
@@ -97,12 +193,14 @@ def display_income_statement(df, ticker, periods, display_mode):
     # Define key calculated IS metrics to display
     is_calc_metrics = [
         ('NET_BROKERAGE_INCOME', 'Net Brokerage Income'),
+        ('NET_BROKERAGE_FEE_BPS', 'Net Brokerage Fee (bps)'),
         ('NET_IB_INCOME', 'Net IB Income'),
         ('FEE_INCOME', 'Fee Income'),
         ('NET_TRADING_INCOME', 'Net Trading Income'),
         ('INTEREST_INCOME', 'Interest Income'),
         ('NET_INVESTMENT_INCOME', 'Net Investment Income'),
         ('MARGIN_LENDING_INCOME', 'Margin Lending Income'),
+        ('MARGIN_LENDING_RATE', 'Margin Lending Rate (%)'),
         ('CAPITAL_INCOME', 'Capital Income'),
         ('TOTAL_OPERATING_INCOME', 'Total Operating Income'),
         ('SGA', 'SG&A'),
@@ -112,7 +210,6 @@ def display_income_statement(df, ticker, periods, display_mode):
         ('ROE', 'Return on Equity (%)'),
         ('ROA', 'Return on Assets (%)'),
         ('INTEREST_RATE', 'Interest Rate (%)'),
-        ('MARGIN_LENDING_RATE', 'Margin Lending Rate (%)'),
     ]
     
     if display_mode == "Absolute Values":
@@ -137,6 +234,9 @@ def display_income_statement(df, ticker, periods, display_mode):
                 elif metric_code in ['INTEREST_RATE', 'MARGIN_LENDING_RATE']:
                     # Rates are stored as decimal, convert to percentage
                     row[label] = f"{value * 100:.2f}%" if value != 0 else "-"
+                elif metric_code == 'NET_BROKERAGE_FEE_BPS':
+                    # Basis points
+                    row[label] = f"{value:.2f} bps" if value != 0 else "-"
                 else:
                     # Financial values in VND
                     row[label] = format_vnd_billions(value)
