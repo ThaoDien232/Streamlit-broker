@@ -698,10 +698,17 @@ with tab2:
                         st.metric(label="Top Broker", value="No data")
             
             # Create pivot table for better display
-            market_share_df['Quarter_Display'] = market_share_df.apply(
-                lambda row: f"{row['Year']} Q{row['Quarter']}" if 'Quarter' in row else row.get('Period_Label', ''),
-                axis=1
-            )
+            def format_quarter_display(row):
+                q = row.get('Quarter')
+                yr = row.get('Year')
+                if pd.notnull(q) and pd.notnull(yr):
+                    return f"{int(yr)} Q{int(q)}"
+                period_label = row.get('Period_Label')
+                if isinstance(period_label, str):
+                    return period_label
+                return ''
+
+            market_share_df['Quarter_Display'] = market_share_df.apply(format_quarter_display, axis=1)
 
             pivot_df = market_share_df.pivot_table(
                 index=['Brokerage_Code', 'Brokerage_Name'],
@@ -712,28 +719,23 @@ with tab2:
             
             # Fill NaN values with 0
             pivot_df = pivot_df.fillna(0)
-            
-            # Sort by largest to smallest using the latest available quarter in the data
-            available_quarters = [col for col in pivot_df.columns if col.startswith('Q')]
-            if available_quarters:
-                # Get the latest quarter available in the data
-                quarter_nums = [int(q.replace('Q', '')) for q in available_quarters]
-                latest_quarter_num = max(quarter_nums)
-                latest_quarter_col = f"Q{latest_quarter_num}"
-                
-                if latest_quarter_col in pivot_df.columns:
-                    # Create a copy to avoid modifying the original
-                    sort_df = pivot_df.copy()
-                    
-                    # Convert percentage strings back to numbers for sorting
-                    sort_col = sort_df[latest_quarter_col].astype(str)
-                    sort_col = sort_col.str.replace('%', '', regex=False)
-                    sort_col = sort_col.str.replace('-', '0', regex=False)
-                    sort_col = pd.to_numeric(sort_col, errors='coerce').fillna(0)
-                    
-                    # Sort by the numeric values (descending)
-                    sort_idx = sort_col.argsort()[::-1]
-                    pivot_df = pivot_df.iloc[sort_idx]
+
+            period_cols = [col for col in pivot_df.columns if col not in ('Brokerage_Code', 'Brokerage_Name')]
+
+            def parse_period(col_name):
+                try:
+                    year_str, quarter_str = col_name.split()
+                    year_val = int(year_str)
+                    quarter_val = int(quarter_str.replace('Q', '').strip())
+                    return year_val, quarter_val
+                except Exception:
+                    return (0, 0)
+
+            if period_cols:
+                latest_col = max(period_cols, key=parse_period)
+                sort_col = pivot_df[latest_col].astype(float)
+                sort_idx = sort_col.argsort()[::-1]
+                pivot_df = pivot_df.iloc[sort_idx]
             
             # Format percentage columns
             for col in pivot_df.columns:
@@ -749,7 +751,7 @@ with tab2:
             )
             
             # Create visualization
-            if len(selected_quarter_labels) > 1:
+            if len(latest_quarters) > 1:
                 st.subheader("Market Share Trends")
                 
                 # Get top 10 brokers by market share using the latest available quarter across all years
@@ -778,7 +780,9 @@ with tab2:
                 top_brokers_data = market_share_df[market_share_df['Brokerage_Code'].isin(top_10_brokers)].copy()
 
                 # Create a combined Period label for x-axis (e.g., "Q1 2024")
-                top_brokers_data['Period_Label'] = top_brokers_data['Quarter'] + ' ' + top_brokers_data['Year'].astype(str)
+                top_brokers_data['Period_Label'] = top_brokers_data.apply(
+                    lambda r: f"Q{int(r['Quarter'])} {int(r['Year'])}", axis=1
+                )
 
                 # Sort by Year and Quarter for proper ordering
                 top_brokers_data = top_brokers_data.sort_values(['Year', 'Quarter'])
@@ -806,10 +810,9 @@ with tab2:
             
             # Download option
             csv = market_share_df.to_csv(index=False)
-            # Create a filename based on selected quarters
-            filename_periods = "_".join([label.replace(' ', '') for label in selected_quarter_labels[:3]])
-            if len(selected_quarter_labels) > 3:
-                filename_periods += f"_and_{len(selected_quarter_labels)-3}_more"
+            filename_periods = "_".join([label.replace(' ', '') for label in latest_quarters[:3]])
+            if len(latest_quarters) > 3:
+                filename_periods += f"_and_{len(latest_quarters)-3}_more"
             st.download_button(
                 label="Download Market Share Data as CSV",
                 data=csv,
