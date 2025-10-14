@@ -8,6 +8,7 @@ import streamlit as st
 import toml
 
 from utils.keycode_matcher import load_keycode_map, match_keycodes
+from utils.brokerage_codes import get_brokerage_code
 
 
 st.set_page_config(page_title="Forecast", layout="wide")
@@ -198,6 +199,7 @@ if not available_brokers:
 
 default_broker = 'SSI' if 'SSI' in available_brokers else available_brokers[0]
 selected_broker = st.sidebar.selectbox("Select Broker", options=available_brokers, index=available_brokers.index(default_broker))
+show_share_debug = st.sidebar.checkbox("Show market share debug", value=False)
 
 df_quarters = prepare_quarter_metrics(df_is_quarterly, selected_broker)
 if df_quarters.empty:
@@ -374,7 +376,7 @@ def get_share_for_year(year: int) -> float | None:
     return None
 
 @st.cache_data(ttl=3600)
-def fetch_market_share_api(broker: str, year: int, quarter: int):
+def fetch_market_share_quarter(year: int, quarter: int):
     try:
         url = "https://api.hsx.vn/s/api/v1/1/brokeragemarketshare/top/ten"
         params = {
@@ -387,16 +389,29 @@ def fetch_market_share_api(broker: str, year: int, quarter: int):
         resp = requests.get(url, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
+        records = []
         if data.get('success') and 'data' in data:
             for item in data['data'].get('brokerageStock', []):
-                if item.get('shortenName', '').upper() == broker.upper():
-                    return float(item.get('percentage', 0))
+                try:
+                    percent = float(item.get('percentage', 0))
+                except (TypeError, ValueError):
+                    percent = None
+                records.append({
+                    'Brokerage_Code': item.get('shortenName', '').strip().upper(),
+                    'Brokerage_Name': item.get('name', ''),
+                    'Market_Share_Percent': percent,
+                    'Year': year,
+                    'Quarter': quarter,
+                })
+        return pd.DataFrame(records)
     except Exception:
-        return None
-    return None
+        return pd.DataFrame()
 
 history_metrics = []
 year_fee_observations = {}
+broker_code_norm = get_brokerage_code(selected_broker)
+broker_code_norm = broker_code_norm.strip().upper() if broker_code_norm else None
+market_share_debug = []
 
 for y, q in brokerage_history_quarters:
     stats = quarter_stats_lookup.get((y, q), {})
@@ -409,7 +424,14 @@ for y, q in brokerage_history_quarters:
     ]
     net_brokerage = float(quarter_row['brokerage_fee'].iloc[0]) if not quarter_row.empty else None
 
-    api_share_pct = fetch_market_share_api(selected_broker, y, q)
+    api_share_pct = None
+    share_df = pd.DataFrame()
+    if broker_code_norm:
+        share_df = fetch_market_share_quarter(y, q)
+        if not share_df.empty:
+            match = share_df[share_df['Brokerage_Code'] == broker_code_norm]
+            if not match.empty:
+                api_share_pct = match.iloc[0]['Market_Share_Percent']
 
     share_decimal = None
     share_pct_display = None
@@ -450,6 +472,15 @@ for y, q in brokerage_history_quarters:
         'share_decimal': share_decimal,
     })
 
+    market_share_debug.append({
+        'Period': quarter_label(y, q),
+        'Broker Code': broker_code_norm or '-',
+        'API Rows': int(len(share_df)) if not share_df.empty else 0,
+        'API Share %': api_share_pct if api_share_pct is not None else None,
+        'Turnover Share %': share_decimal * 100 if (share_decimal and api_share_pct is None) else None,
+        'Final Share %': share_pct_display,
+    })
+
 history_avg_daily = [m['avg_daily_bn'] for m in history_metrics if m['avg_daily_bn'] is not None]
 history_fee_bps = [m['fee_bps'] for m in history_metrics if m['fee_bps'] is not None]
 history_trading_days = [m['trading_days'] for m in history_metrics if m['trading_days']]
@@ -469,8 +500,6 @@ if share_default is None:
     share_year = get_share_for_year(target_year)
     if share_year is not None:
         share_default = share_year / 2
-if share_default is None:
-    share_default = 0.05
 
 avg_daily_default = history_avg_daily[-1] if history_avg_daily else 0.0
 if fee_decimal_default:
@@ -482,7 +511,7 @@ else:
 
 trading_days_forecast = estimate_trading_days(quarter_stats_lookup, target_year, target_quarter)
 
-share_default_pct = share_default * 100
+share_default_pct = share_default * 100 if share_default is not None else None
 
 target_stats = quarter_stats_lookup.get((target_year, target_quarter))
 if target_stats and target_stats.get('avg_daily_bn') is not None:
@@ -523,10 +552,25 @@ net_brokerage_forecast_bn = net_brokerage_forecast / 1e9
 forecast_metrics = {
     'label': target_label,
     'avg_daily_bn': avg_daily_input,
-    'share_pct': market_share_input,
+    'share_pct': market_share_input if (share_default_pct is not None or market_share_input > 0) else None,
     'fee_bps': net_fee_input,
     'net_brokerage_bn': net_brokerage_forecast_bn,
 }
+
+target_share_df = fetch_market_share_quarter(target_year, target_quarter) if broker_code_norm else pd.DataFrame()
+target_api_share = None
+if broker_code_norm and not target_share_df.empty:
+    match = target_share_df[target_share_df['Brokerage_Code'] == broker_code_norm]
+    if not match.empty:
+        target_api_share = match.iloc[0]['Market_Share_Percent']
+market_share_debug.append({
+    'Period': target_label,
+    'Broker Code': broker_code_norm or '-',
+    'API Rows': int(len(target_share_df)) if not target_share_df.empty else 0,
+    'API Share %': target_api_share,
+    'Turnover Share %': share_default_pct if (share_default_pct is not None and target_api_share is None) else None,
+    'Final Share %': forecast_metrics['share_pct'],
+})
 
 def fmt_value(value, decimals=0, suffix=""):
     if value is None or (isinstance(value, float) and math.isnan(value)):
@@ -560,6 +604,11 @@ table_rows[forecast_metrics['label']] = [
 brokerage_table_df = pd.DataFrame(table_rows)
 brokerage_table_df = brokerage_table_df.set_index('Metric')
 st.dataframe(brokerage_table_df, use_container_width=True)
+
+if show_share_debug:
+    debug_df = pd.DataFrame(market_share_debug)
+    st.markdown("#### Market Share Debug")
+    st.dataframe(debug_df, use_container_width=True)
 st.caption(f"Assuming {trading_days_forecast} trading days for {target_label} and applying net brokerage formula.")
 
 # Update summary with forecast brokerage
