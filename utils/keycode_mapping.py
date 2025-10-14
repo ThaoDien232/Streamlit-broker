@@ -10,11 +10,11 @@ Based on DATABASE_SCHEMA.md documentation.
 
 METRIC_TO_DB_KEYCODE = {
     # Income Statement - Revenue Streams
-    'NET_BROKERAGE_INCOME': 'NET_BROKERAGE_INCOME',
+    'NET_BROKERAGE_INCOME': 'Net_Brokerage_Income',  # Fixed: was uppercase
     'NET_IB_INCOME': 'Net_IB_Income',
     'NET_TRADING_INCOME': 'Net_Trading_Income',
     'NET_INVESTMENT_INCOME': 'Net_investment_income',
-    'MARGIN_LENDING_INCOME': 'MARGIN_LENDING_INCOME',
+    'MARGIN_LENDING_INCOME': 'Net_Margin_lending_Income',  # Fixed: correct DB keycode
     'NET_OTHER_OP_INCOME': 'Net_other_operating_income',
     'NET_OTHER_INCOME': 'Net_Other_Income',
     'FEE_INCOME': 'Net_Fee_Income',
@@ -38,7 +38,7 @@ METRIC_TO_DB_KEYCODE = {
 
     # Balance Sheet - Balances
     'BORROWING_BALANCE': 'Borrowing_Balance',
-    'MARGIN_BALANCE': 'MARGIN_BALANCE',
+    'MARGIN_BALANCE': 'Margin_Lending_book',  # Fixed: correct DB keycode is Margin_Lending_book (BS.8)
 
     # Balance Sheet - Totals (verified from CSV: BSA53→BS.92, BSA78→BS.142)
     'TOTAL_ASSETS': 'BS.92',  # TOTAL ASSETS
