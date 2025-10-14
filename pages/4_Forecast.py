@@ -199,6 +199,7 @@ if not available_brokers:
 
 default_broker = 'SSI' if 'SSI' in available_brokers else available_brokers[0]
 selected_broker = st.sidebar.selectbox("Select Broker", options=available_brokers, index=available_brokers.index(default_broker))
+show_share_debug = st.sidebar.checkbox("Show market share debug", value=False)
 
 df_quarters = prepare_quarter_metrics(df_is_quarterly, selected_broker)
 if df_quarters.empty:
@@ -411,6 +412,7 @@ history_metrics = []
 year_fee_observations = {}
 broker_code_norm = get_brokerage_code(selected_broker)
 broker_code_norm = broker_code_norm.strip().upper() if broker_code_norm else None
+market_share_debug = []
 
 for y, q in brokerage_history_quarters:
     stats = quarter_stats_lookup.get((y, q), {})
@@ -424,6 +426,7 @@ for y, q in brokerage_history_quarters:
     net_brokerage = float(quarter_row['brokerage_fee'].iloc[0]) if not quarter_row.empty else None
 
     api_share_pct = None
+    share_map = {}
     if broker_code_norm:
         share_map = fetch_market_share_quarter(y, q)
         api_share_pct = share_map.get(broker_code_norm)
@@ -465,6 +468,15 @@ for y, q in brokerage_history_quarters:
         'trading_days': trading_days,
         'net_brokerage': net_brokerage,
         'share_decimal': share_decimal,
+    })
+
+    market_share_debug.append({
+        'Period': quarter_label(y, q),
+        'Broker Code': broker_code_norm or '-',
+        'API Keys': ", ".join(sorted(share_map.keys())) if share_map else '-',
+        'API Share %': api_share_pct if api_share_pct is not None else None,
+        'Turnover Share %': share_decimal * 100 if (share_decimal and api_share_pct is None) else None,
+        'Final Share %': share_pct_display,
     })
 
 history_avg_daily = [m['avg_daily_bn'] for m in history_metrics if m['avg_daily_bn'] is not None]
@@ -543,6 +555,17 @@ forecast_metrics = {
     'net_brokerage_bn': net_brokerage_forecast_bn,
 }
 
+target_share_map = fetch_market_share_quarter(target_year, target_quarter) if broker_code_norm else {}
+target_api_share = target_share_map.get(broker_code_norm) if broker_code_norm else None
+market_share_debug.append({
+    'Period': target_label,
+    'Broker Code': broker_code_norm or '-',
+    'API Keys': ", ".join(sorted(target_share_map.keys())) if target_share_map else '-',
+    'API Share %': target_api_share,
+    'Turnover Share %': share_default_pct if (share_default_pct is not None and target_api_share is None) else None,
+    'Final Share %': forecast_metrics['share_pct'],
+})
+
 def fmt_value(value, decimals=0, suffix=""):
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return "-"
@@ -575,6 +598,11 @@ table_rows[forecast_metrics['label']] = [
 brokerage_table_df = pd.DataFrame(table_rows)
 brokerage_table_df = brokerage_table_df.set_index('Metric')
 st.dataframe(brokerage_table_df, use_container_width=True)
+
+if show_share_debug:
+    debug_df = pd.DataFrame(market_share_debug)
+    st.markdown("#### Market Share Debug")
+    st.dataframe(debug_df, use_container_width=True)
 st.caption(f"Assuming {trading_days_forecast} trading days for {target_label} and applying net brokerage formula.")
 
 # Update summary with forecast brokerage
