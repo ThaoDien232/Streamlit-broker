@@ -235,16 +235,8 @@ def calculate_financial_metrics_vectorized(pivot_df, keycode_map):
         if net_margin_income != 0:
             metrics_to_calculate.append(('NET_MARGIN_INCOME', 'Net Margin Income', net_margin_income))
 
-        # 25. Net Brokerage Fee (bps) - Net Brokerage Income / Total Trading Value * 10000
-        # Formula: (NET_BROKERAGE_INCOME / (Institution_shares_trading_value + Investor_shares_trading_value)) * 10000
-        institution_trading = get_col('Institution_shares_trading_value').iloc[idx]
-        investor_trading = get_col('Investor_shares_trading_value').iloc[idx]
-        total_trading_value = institution_trading + investor_trading
-
-        if total_trading_value != 0 and net_brokerage != 0:
-            # Calculate as basis points (bps)
-            net_brokerage_fee_bps = (net_brokerage / total_trading_value) * 10000
-            metrics_to_calculate.append(('NET_BROKERAGE_FEE_BPS', 'Net Brokerage Fee (bps)', net_brokerage_fee_bps))
+        # Note: Net Brokerage Fee (bps) calculation moved to separate function calculate_net_brokerage_fee()
+        # because it requires Note data which is not in the pivot table
 
         # Add all calculated metrics for this period
         for metric_code, metric_name, value in metrics_to_calculate:
@@ -521,17 +513,17 @@ def calculate_net_brokerage_fee(calculated_metrics):
 
             net_brokerage_income = net_brok_data.iloc[0]['VALUE']
 
-            # Get trading values from Note data
+            # Get trading values from Note data (search by KEYCODE_NAME, not KEYCODE)
             institution_data = ticker_data[
                 (ticker_data['YEARREPORT'] == year) &
                 (ticker_data['LENGTHREPORT'] == quarter) &
-                (ticker_data['KEYCODE'] == 'Institution_shares_trading_value')
+                (ticker_data['KEYCODE_NAME'] == 'Institution_shares_trading_value')
             ]
 
             investor_data = ticker_data[
                 (ticker_data['YEARREPORT'] == year) &
                 (ticker_data['LENGTHREPORT'] == quarter) &
-                (ticker_data['KEYCODE'] == 'Investor_shares_trading_value')
+                (ticker_data['KEYCODE_NAME'] == 'Investor_shares_trading_value')
             ]
 
             if institution_data.empty or investor_data.empty:

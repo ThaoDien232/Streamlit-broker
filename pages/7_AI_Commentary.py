@@ -201,6 +201,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
         'Margin Income',
         'Margin Balance',
         'Margin/Equity %',
+        'Margin Lending Rate',
         'Investment Income',
         'Other Incomes',
         'Total Operating Income',
@@ -366,18 +367,30 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 continue
 
             if metric_name == 'Net Brokerage Fee':
-                # Calculate Net Brokerage Fee = Net Brokerage Income / Trading Value (in basis points)
-                net_brokerage_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'NET_BROKERAGE_INCOME')
-                institution_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
-                investor_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Investor_shares_trading_value')
-                total_trading_value = institution_shares + investor_shares
+                # Try to get pre-calculated Net Brokerage Fee from CALC metrics first
+                net_brokerage_fee_bps = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'NET_BROKERAGE_FEE_BPS')
 
-                if total_trading_value and total_trading_value != 0:
-                    # Calculate as basis points (bps): (income / trading value) * 10000
-                    net_brokerage_fee_bps = (net_brokerage_income / total_trading_value) * 10000
-                    quarter_values.append(net_brokerage_fee_bps)
-                else:
-                    quarter_values.append(0)
+                # If not available, calculate on-the-fly
+                if not net_brokerage_fee_bps:
+                    net_brokerage_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'NET_BROKERAGE_INCOME')
+                    institution_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
+                    investor_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Investor_shares_trading_value')
+                    total_trading_value = institution_shares + investor_shares
+
+                    if total_trading_value and total_trading_value != 0:
+                        # Calculate as basis points (bps): (income / trading value) * 10000
+                        net_brokerage_fee_bps = (net_brokerage_income / total_trading_value) * 10000
+
+                quarter_values.append(net_brokerage_fee_bps if net_brokerage_fee_bps else 0)
+                continue
+
+            if metric_name == 'Margin Lending Rate':
+                # Get pre-calculated Margin Lending Rate from CALC metrics
+                # This is already calculated in utils/calculate_new_metrics.py
+                margin_rate = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'MARGIN_LENDING_RATE')
+                # Convert from decimal to percentage (e.g., 0.15 -> 15%)
+                margin_rate_pct = margin_rate * 100 if margin_rate else 0
+                quarter_values.append(margin_rate_pct)
                 continue
 
             metric_code = {
@@ -970,7 +983,7 @@ if selected_ticker and selected_quarter:
                 try:
                     value = float(value)
                     # Percentages - already calculated as percentages (e.g., 15.5 means 15.5%)
-                    if metric_name in ['ROE', 'ROA', 'Margin/Equity %', 'CIR', 'Interest Rate', 'Brokerage Market Share']:
+                    if metric_name in ['ROE', 'ROA', 'Margin/Equity %', 'CIR', 'Interest Rate', 'Brokerage Market Share', 'Margin Lending Rate']:
                         return f"{value:.2f}%"
                     # Basis points
                     elif metric_name == 'Net Brokerage Fee':
