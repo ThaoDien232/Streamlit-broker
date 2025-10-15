@@ -12,6 +12,7 @@ import toml
 from utils.brokerage_codes import get_brokerage_code
 from utils.brokerage_data import load_brokerage_metrics
 from utils.investment_book import get_investment_data
+from utils.market_index_data import load_market_liquidity_data
 from utils.db import run_query
 
 
@@ -24,14 +25,6 @@ if 'price_cache' not in st.session_state:
     st.session_state.price_cache = {}
 if 'price_last_updated' not in st.session_state:
     st.session_state.price_last_updated = None
-
-
-def _safe_read_csv(path: str, **kwargs) -> pd.DataFrame:
-    try:
-        return pd.read_csv(path, **kwargs)
-    except FileNotFoundError:
-        st.warning(f"Required file '{path}' not found. Proceeding with empty data.")
-        return pd.DataFrame()
 
 
 def _safe_read_excel(path: str, **kwargs) -> pd.DataFrame:
@@ -113,16 +106,15 @@ def load_data():
         df_forecast['DATE'] = df_forecast['DATE'].astype(int)
         df_forecast['VALUE'] = pd.to_numeric(df_forecast['VALUE'], errors='coerce')
 
-    df_index = _safe_read_csv('sql/INDEX.csv', parse_dates=['TRADINGDATE'])
-    if 'TRADINGDATE' in df_index.columns:
-        df_index['TRADINGDATE'] = pd.to_datetime(df_index['TRADINGDATE'], errors='coerce')
-        df_index = df_index.dropna(subset=['TRADINGDATE'])
-    else:
-        df_index = pd.DataFrame(columns=['TRADINGDATE'])
+    try:
+        df_liquidity = load_market_liquidity_data(start_year=2017)
+    except Exception as exc:
+        st.warning(f"Unable to load market liquidity data from database: {exc}")
+        df_liquidity = pd.DataFrame(columns=['Year', 'Quarter', 'Avg Daily Turnover (B VND)', 'Trading Days'])
 
     df_turnover = _safe_read_excel('sql/turnover.xlsx')
 
-    return theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_index, df_turnover
+    return theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_liquidity, df_turnover
 
 
 SEGMENTS = [
@@ -488,7 +480,7 @@ def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None]
 
 
 
-theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_index_raw, df_turnover = load_data()
+theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_liquidity_raw, df_turnover = load_data()
 
 theme = theme_config.get("theme", {}) if isinstance(theme_config, dict) else {}
 background_color = theme.get("backgroundColor", "#FFFFFF")
@@ -535,36 +527,33 @@ ytd_mask = (df_quarters['YEARREPORT'] == target_year) & (df_quarters['LENGTHREPO
 ytd_totals = collect_totals(df_quarters, ytd_mask)
 
 # Prepare market turnover metrics by quarter
-df_index = df_index_raw.copy()
-if 'COMGROUPCODE' in df_index.columns:
-    df_index = df_index[df_index['COMGROUPCODE'] == 'VNINDEX']
-df_index['TRADINGDATE'] = pd.to_datetime(df_index['TRADINGDATE'], errors='coerce')
-df_index = df_index.dropna(subset=['TRADINGDATE'])
+df_liquidity = df_liquidity_raw.copy()
 
-if not df_index.empty and 'TOTALVALUE' in df_index.columns:
-    df_index['QuarterPeriod'] = df_index['TRADINGDATE'].dt.to_period('Q')
-    quarter_stats_df = df_index.groupby('QuarterPeriod').agg(
-        total_turnover=('TOTALVALUE', 'sum'),
-        trading_days=('TRADINGDATE', 'nunique')
-    ).reset_index()
-    quarter_stats_df['Year'] = quarter_stats_df['QuarterPeriod'].dt.year
-    quarter_stats_df['Quarter'] = quarter_stats_df['QuarterPeriod'].dt.quarter
-    quarter_stats_df['avg_daily_bn'] = quarter_stats_df.apply(
-        lambda row: (row['total_turnover'] / row['trading_days'] / 1e9)
-        if row['trading_days'] else np.nan,
-        axis=1
-    )
+if not df_liquidity.empty:
+    required_cols = {'Year', 'Quarter', 'Avg Daily Turnover (B VND)', 'Trading Days'}
+    if not required_cols.issubset(df_liquidity.columns):
+        df_liquidity = pd.DataFrame(columns=['Year', 'Quarter', 'Avg Daily Turnover (B VND)', 'Trading Days'])
 else:
-    quarter_stats_df = pd.DataFrame(columns=['Year', 'Quarter', 'total_turnover', 'trading_days', 'avg_daily_bn'])
+    df_liquidity = pd.DataFrame(columns=['Year', 'Quarter', 'Avg Daily Turnover (B VND)', 'Trading Days'])
 
-quarter_stats_lookup = {
-    (int(row['Year']), int(row['Quarter'])): {
-        'total_turnover': float(row['total_turnover']) if not pd.isna(row['total_turnover']) else None,
-        'trading_days': int(row['trading_days']) if not pd.isna(row['trading_days']) else None,
-        'avg_daily_bn': float(row['avg_daily_bn']) if not pd.isna(row['avg_daily_bn']) else None,
+def _compute_total_turnover(row: pd.Series) -> float | None:
+    if pd.isna(row.get('Avg Daily Turnover (B VND)')) or pd.isna(row.get('Trading Days')):
+        return None
+    return float(row['Avg Daily Turnover (B VND)']) * float(row['Trading Days']) * 1e9
+
+quarter_stats_lookup = {}
+for _, liquidity_row in df_liquidity.iterrows():
+    year = int(liquidity_row['Year'])
+    quarter = int(liquidity_row['Quarter'])
+    avg_daily_bn = float(liquidity_row['Avg Daily Turnover (B VND)']) if pd.notna(liquidity_row['Avg Daily Turnover (B VND)']) else None
+    trading_days = int(liquidity_row['Trading Days']) if pd.notna(liquidity_row['Trading Days']) else None
+    total_turnover = _compute_total_turnover(liquidity_row)
+
+    quarter_stats_lookup[(year, quarter)] = {
+        'total_turnover': total_turnover,
+        'trading_days': trading_days,
+        'avg_daily_bn': avg_daily_bn,
     }
-    for _, row in quarter_stats_df.iterrows()
-}
 
 turnover_share_lookup = {}
 if not df_turnover.empty:
