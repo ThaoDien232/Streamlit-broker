@@ -172,13 +172,23 @@ SEGMENTS = [
 ]
 
 
+def _normalize_name(name: str) -> str:
+    return str(name).replace('_', '').replace('-', '').lower().strip()
+
+
 def sum_columns(df: pd.DataFrame, columns):
     values = pd.Series(0.0, index=df.index, dtype=float)
     if isinstance(columns, str):
         columns = [columns]
+
+    available_columns = {col: _normalize_name(col) for col in df.columns}
+
     for col in columns:
-        if col in df.columns:
-            values = values.add(pd.to_numeric(df[col], errors='coerce').fillna(0.0), fill_value=0.0)
+        target = _normalize_name(col)
+        matches = [name for name, norm in available_columns.items() if norm == target]
+        for match in matches:
+            values = values.add(pd.to_numeric(df[match], errors='coerce').fillna(0.0), fill_value=0.0)
+
     return values
 
 
