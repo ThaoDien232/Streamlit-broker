@@ -1166,7 +1166,7 @@ sga_forecast_bn, sga_forecast_vnd = render_segment_override(
 
 st.markdown("#### Investment Book Snapshot")
 
-investment_start_year = max(target_year - 3, 2017)
+investment_start_year = max(target_year - 1, 2017)
 investment_metrics_df = load_investment_metrics(selected_broker, investment_start_year)
 
 def format_investment_cell(value: float | None) -> str:
@@ -1188,7 +1188,7 @@ else:
             .sort_values(['YEARREPORT', 'LENGTHREPORT'], ascending=[False, False])
         )
 
-        display_periods = period_records.head(6).sort_values(['YEARREPORT', 'LENGTHREPORT'])
+        display_periods = period_records.head(2).sort_values(['YEARREPORT', 'LENGTHREPORT'])
 
         investment_rows: list[dict[str, str]] = []
         column_labels: list[tuple[int, int, str]] = []
@@ -1279,67 +1279,82 @@ else:
                 **Values shown**: Market Value (bn VND) across the most recent quarters
                 """)
 
-st.markdown(f"#### {target_label} Investment Income Override")
-
-fvtpl_profit_value, fvtpl_reference_quarter = calculate_fvtpl_profit_total(selected_broker)
-
 investment_history = (
     df_actual[['YEARREPORT', 'LENGTHREPORT', 'investment_income']]
     .dropna(subset=['investment_income'])
     .sort_values(['YEARREPORT', 'LENGTHREPORT'])
 )
 
-display_columns = ['Quarter', 'Investment Income (bn)']
-investment_display_df = pd.DataFrame(columns=display_columns)
-
 recent_investment_history = investment_history.tail(4)
-if not recent_investment_history.empty:
-    recent_investment_history = recent_investment_history.assign(
-        Quarter=recent_investment_history.apply(
-            lambda row: quarter_label(int(row['YEARREPORT']), int(row['LENGTHREPORT'])), axis=1
-        ),
-        **{"Investment Income (bn)": recent_investment_history['investment_income'].apply(lambda v: v / 1e9)}
-    )[['Quarter', 'Investment Income (bn)']]
-    investment_display_df = pd.concat([investment_display_df, recent_investment_history], ignore_index=True)
+investment_income_rows = []
+
+for _, row in recent_investment_history.iterrows():
+    quarter_label_str = quarter_label(int(row['YEARREPORT']), int(row['LENGTHREPORT']))
+    investment_income_rows.append({
+        'Quarter': quarter_label_str,
+        'Investment Income (bn)': row['investment_income'] / 1e9,
+    })
+
+fvtpl_profit_value, fvtpl_reference_quarter = calculate_fvtpl_profit_total(selected_broker)
 
 if fvtpl_profit_value is not None:
     reference_label = fvtpl_reference_quarter or "latest quarter"
-    fvtpl_row = pd.DataFrame([
-        {
-            'Quarter': f"FVTPL P/L since {reference_label}",
-            'Investment Income (bn)': fvtpl_profit_value,
-        }
-    ])
-    investment_display_df = pd.concat([investment_display_df, fvtpl_row], ignore_index=True)
-
-if not investment_display_df.empty:
-    display_df = investment_display_df.copy()
-    if 'Investment Income (bn)' in display_df.columns:
-        display_df['Investment Income (bn)'] = pd.to_numeric(
-            display_df['Investment Income (bn)'], errors='coerce'
-        )
-        display_df['Investment Income (bn)'] = display_df['Investment Income (bn)'].apply(
-            lambda x: "-" if pd.isna(x) else f"{x:,.0f}"
-        )
-
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
-else:
-    st.info("No historical investment income data available for the last quarters.")
+    investment_income_rows.append({
+        'Quarter': f"FVTPL P/L since {reference_label}",
+        'Investment Income (bn)': fvtpl_profit_value / 1e9,
+    })
 
 investment_base_value = base_segments.get('investment_income', 0.0)
 investment_base_bn = format_bn(investment_base_value)
 if not math.isfinite(investment_base_bn):
     investment_base_bn = 0.0
 
-investment_income_input = st.number_input(
-    f"{target_label} Investment Income (bn VND)",
-    value=float(round(investment_base_bn)),
-    step=10.0,
-    format="%.0f",
-    key="investment_income_input",
-)
+investment_cols = st.columns(2)
+
+with investment_cols[0]:
+    st.markdown("#### Investment Income")
+
+    if investment_income_rows:
+        display_df = pd.DataFrame(investment_income_rows)
+        display_df['Investment Income (bn)'] = display_df['Investment Income (bn)'].apply(
+            lambda x: f"{x:,.0f}"
+        )
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No historical investment income data available for the last quarters.")
+
+    investment_income_input = st.number_input(
+        f"{target_label} Investment Income (bn VND)",
+        value=float(round(investment_base_bn)),
+        step=10.0,
+        format="%.0f",
+        key="investment_income_input",
+    )
 
 investment_income_forecast_bn = float(investment_income_input)
+investment_income_forecast_vnd = investment_income_forecast_bn * 1e9
+
+with investment_cols[1]:
+    st.markdown("#### Investment Book Snapshot")
+
+    investment_start_year = max(target_year - 1, 2017)
+    investment_metrics_df = load_investment_metrics(selected_broker, investment_start_year)
+
+    if investment_metrics_df.empty:
+        st.info("No investment holdings data available for the selected broker.")
+    else:
+        quarterly_metrics = investment_metrics_df[investment_metrics_df['LENGTHREPORT'].between(1, 4)]
+
+        if quarterly_metrics.empty:
+            st.info("Investment book requires quarterly data. No quarterly records found.")
+        else:
+            period_records = (
+                quarterly_metrics[['YEARREPORT', 'LENGTHREPORT']]
+                .drop_duplicates()
+                .sort_values(['YEARREPORT', 'LENGTHREPORT'], ascending=[False, False])
+            )
+
+            display_periods = period_records.head(2).sort_values(['YEARREPORT', 'LENGTHREPORT'])
 
 # Update summary with forecast brokerage and margin inputs
 target_column_label = f"{target_label} Base (bn VND)"
@@ -1348,7 +1363,7 @@ if target_column_label in summary_df.columns:
     summary_df.loc[summary_df['Segment'] == 'Margin Income', target_column_label] = format_bn_str(margin_income_forecast_bn * 1e9)
     summary_df.loc[summary_df['Segment'] == 'IB Income', target_column_label] = format_bn_str(ib_income_forecast_vnd)
     summary_df.loc[summary_df['Segment'] == 'SG&A', target_column_label] = format_bn_str(sga_forecast_vnd)
-    summary_df.loc[summary_df['Segment'] == 'Investment Income', target_column_label] = format_bn_str(investment_income_forecast_bn * 1e9)
+    summary_df.loc[summary_df['Segment'] == 'Investment Income', target_column_label] = format_bn_str(investment_income_forecast_vnd)
     summary_df.loc[summary_df['Segment'] == 'Interest Expense', target_column_label] = format_bn_str(-interest_expense_forecast_bn * 1e9)
 
 st.subheader("Baseline Breakdown")
@@ -1380,7 +1395,7 @@ segment_inputs['brokerage_fee'] = net_brokerage_forecast
 segment_inputs['margin_income'] = margin_income_forecast_bn * 1e9
 segment_inputs['ib_income'] = ib_income_forecast_vnd
 segment_inputs['sga'] = sga_forecast_vnd
-segment_inputs['investment_income'] = investment_income_forecast_bn * 1e9
+segment_inputs['investment_income'] = investment_income_forecast_vnd
 segment_inputs['interest_expense'] = -interest_expense_forecast_bn * 1e9
 
 adjusted_total_segments = sum(segment_inputs.values())
