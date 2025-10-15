@@ -143,7 +143,7 @@ SEGMENTS = [
         "key": "margin_income",
         "label": "Margin Income",
         "forecast_key": "Net_Margin_lending_Income",
-        "columns": ['Net_Margin_lending_Income'],
+        "columns": ['Net_Margin_lending_Income', 'Net_Margin_Lending_Income'],
     },
     {
         "key": "investment_income",
