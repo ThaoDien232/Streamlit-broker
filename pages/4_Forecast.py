@@ -1175,6 +1175,27 @@ if not "investment_income_rows" in locals():
 with investment_cols[0]:
     st.markdown("#### Investment Income")
 
+    investment_income_rows = []
+    investment_history = (
+        df_actual[['YEARREPORT', 'LENGTHREPORT', 'investment_income']]
+        .dropna(subset=['investment_income'])
+        .sort_values(['YEARREPORT', 'LENGTHREPORT'])
+    )
+
+    for _, row in investment_history.tail(4).iterrows():
+        investment_income_rows.append({
+            'Quarter': quarter_label(int(row['YEARREPORT']), int(row['LENGTHREPORT'])),
+            'Investment Income (bn)': row['investment_income'] / 1e9,
+        })
+
+    fvtpl_profit_value, fvtpl_reference_quarter = calculate_fvtpl_profit_total(selected_broker)
+    if fvtpl_profit_value is not None:
+        reference_label = fvtpl_reference_quarter or "latest quarter"
+        investment_income_rows.append({
+            'Quarter': f"FVTPL P/L since {reference_label}",
+            'Investment Income (bn)': fvtpl_profit_value / 1e9,
+        })
+
     if investment_income_rows:
         display_df = pd.DataFrame(investment_income_rows)
         display_df['Investment Income (bn)'] = display_df['Investment Income (bn)'].apply(
@@ -1183,6 +1204,11 @@ with investment_cols[0]:
         st.dataframe(display_df, use_container_width=True, hide_index=True)
     else:
         st.info("No historical investment income data available for the last quarters.")
+
+    investment_base_value = base_segments.get('investment_income', 0.0)
+    investment_base_bn = format_bn(investment_base_value)
+    if not math.isfinite(investment_base_bn):
+        investment_base_bn = 0.0
 
     investment_income_input_value = st.number_input(
         f"{target_label} Investment Income (bn VND)",
