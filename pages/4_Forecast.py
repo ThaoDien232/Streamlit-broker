@@ -975,7 +975,7 @@ def extract_bs_value(year: int, quarter: int, codes: list[str]) -> float | None:
 
 
 MARGIN_INCOME_CODES = ['Net_Margin_lending_Income', 'IS.7', 'IS.30']
-INTEREST_EXPENSE_CODES = ['IS.51']
+INTEREST_EXPENSE_CODES = ['Interest_Expense', 'IS.51']
 MARGIN_BALANCE_CODES = ['BS.8']
 BORROWING_BALANCE_CODES = ['BS.95', 'BS.100', 'BS.122', 'BS.127']
 
@@ -1168,6 +1168,9 @@ investment_start_year = max(target_year - 1, 2017)
 investment_metrics_df = load_investment_metrics(selected_broker, investment_start_year)
 
 investment_cols = st.columns(2)
+
+if not "investment_income_rows" in locals():
+    investment_income_rows = []
 
 with investment_cols[0]:
     st.markdown("#### Investment Income")
