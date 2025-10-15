@@ -536,6 +536,7 @@ with tab1:
                                     broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce')  # Already in percentage
                                     y_values = broker_data['DISPLAY_VALUE']
                                     hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}}%<br><extra></extra>"
+                                    ma4_hover_template = f"<b>{broker} MA4</b><br>Period: %{{x}}<br>MA4: %{{y:,.2f}}%<br><extra></extra>"
 
                                     if not broker_data_with_ma4.empty:
                                         broker_data_with_ma4['MA4_DISPLAY'] = broker_data_with_ma4['MA4']  # Already in percentage
@@ -544,6 +545,7 @@ with tab1:
                                     broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce')  # Already in percentage
                                     y_values = broker_data['DISPLAY_VALUE']
                                     hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}}%<br><extra></extra>"
+                                    ma4_hover_template = f"<b>{broker} MA4</b><br>Period: %{{x}}<br>MA4: %{{y:,.2f}}%<br><extra></extra>"
 
                                     if not broker_data_with_ma4.empty:
                                         broker_data_with_ma4['MA4_DISPLAY'] = broker_data_with_ma4['MA4']  # Already in percentage
@@ -552,6 +554,7 @@ with tab1:
                                     broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce')
                                     y_values = broker_data['DISPLAY_VALUE']
                                     hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}} bps<br><extra></extra>"
+                                    ma4_hover_template = f"<b>{broker} MA4</b><br>Period: %{{x}}<br>MA4: %{{y:,.2f}} bps<br><extra></extra>"
 
                                     if not broker_data_with_ma4.empty:
                                         broker_data_with_ma4['MA4_DISPLAY'] = broker_data_with_ma4['MA4']
@@ -560,6 +563,7 @@ with tab1:
                                     broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce') / 1_000_000_000
                                     y_values = broker_data['DISPLAY_VALUE']
                                     hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.3f}}B VND<br><extra></extra>"
+                                    ma4_hover_template = f"<b>{broker} MA4</b><br>Period: %{{x}}<br>MA4: %{{y:,.3f}}B VND<br><extra></extra>"
 
                                     if not broker_data_with_ma4.empty:
                                         broker_data_with_ma4['MA4_DISPLAY'] = broker_data_with_ma4['MA4'] / 1_000_000_000
@@ -588,7 +592,7 @@ with tab1:
                                             mode='lines+markers',
                                             line=dict(color=ma4_colors[j % len(ma4_colors)], width=3),
                                             marker=dict(size=8, symbol='diamond'),
-                                            hovertemplate=f"<b>{broker} MA4</b><br>Period: %{{x}}<br>MA4: %{{y:,.2f}}<br><extra></extra>",
+                                            hovertemplate=ma4_hover_template,
                                             legendgroup=broker
                                         )
                                     )
