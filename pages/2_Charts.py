@@ -416,8 +416,8 @@ selected_brokers = st.sidebar.multiselect(
     help="Brokers organized by tier: Top (SSI, VCI, VND, HCM, TCBS, VPBS, VPS) | Mid (MBS, VIX, SHS, BSI, FTS) | Regional (DSE, VDS, LPBS, Kafi, ACBS, OCBS, HDBS)"
 )
 
-# Fixed default charts (always displayed)
-fixed_charts = ['PBT', 'ROE', 'TOTAL_OPERATING_INCOME', 'MARGIN_LENDING_RATE', 'INTEREST_RATE', 'NET_BROKERAGE_FEE']
+# Fixed default charts (always displayed) - TOI Structure first
+fixed_charts = ['TOTAL_OPERATING_INCOME', 'PBT', 'ROE', 'MARGIN_LENDING_RATE', 'INTEREST_RATE', 'NET_BROKERAGE_FEE']
 
 # Additional metrics selection - NOW ALWAYS AVAILABLE
 additional_metrics = st.sidebar.multiselect(
