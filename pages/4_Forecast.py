@@ -1164,150 +1164,8 @@ sga_forecast_bn, sga_forecast_vnd = render_segment_override(
     'sga_expense_input_override',
 )
 
-st.markdown("#### Investment Book Snapshot")
-
 investment_start_year = max(target_year - 1, 2017)
 investment_metrics_df = load_investment_metrics(selected_broker, investment_start_year)
-
-def format_investment_cell(value: float | None) -> str:
-    if value is None or value == 0:
-        return '-'
-    return f"{value / 1e9:,.1f}"
-
-if investment_metrics_df.empty:
-    st.info("No investment holdings data available for the selected broker.")
-else:
-    quarterly_metrics = investment_metrics_df[investment_metrics_df['LENGTHREPORT'].between(1, 4)]
-
-    if quarterly_metrics.empty:
-        st.info("Investment book requires quarterly data. No quarterly records found.")
-    else:
-        period_records = (
-            quarterly_metrics[['YEARREPORT', 'LENGTHREPORT']]
-            .drop_duplicates()
-            .sort_values(['YEARREPORT', 'LENGTHREPORT'], ascending=[False, False])
-        )
-
-        display_periods = period_records.head(2).sort_values(['YEARREPORT', 'LENGTHREPORT'])
-
-        investment_rows: list[dict[str, str]] = []
-        column_labels: list[tuple[int, int, str]] = []
-
-        for _, record in display_periods.iterrows():
-            year = int(record['YEARREPORT'])
-            quarter = int(record['LENGTHREPORT'])
-            column_labels.append((year, quarter, quarter_label(year, quarter)))
-
-        all_items: set[tuple[str, str]] = set()
-        period_data_cache: dict[tuple[int, int], dict] = {}
-
-        for year, quarter, _ in column_labels:
-            data = get_investment_data(investment_metrics_df, selected_broker, year, quarter)
-            period_data_cache[(year, quarter)] = data
-            for category in ['FVTPL', 'AFS', 'HTM']:
-                market_values = data.get(category, {}).get('Market Value', {})
-                for item in market_values.keys():
-                    all_items.add((category, item))
-
-        if not all_items:
-            st.info("No investment holdings found for the selected broker in the recent quarters.")
-        else:
-            for category in ['FVTPL', 'AFS', 'HTM']:
-                category_items = sorted([item for cat, item in all_items if cat == category])
-                if not category_items:
-                    continue
-
-                header_row = {'Item': category}
-                for _, _, label in column_labels:
-                    header_row[label] = ''
-                investment_rows.append(header_row)
-
-                for item in category_items:
-                    row = {'Item': f'  {item}'}
-                    has_data = False
-                    for year, quarter, label in column_labels:
-                        mv = (
-                            period_data_cache[(year, quarter)]
-                            .get(category, {})
-                            .get('Market Value', {})
-                            .get(item)
-                        )
-                        if mv not in (None, 0):
-                            row[label] = format_investment_cell(mv)
-                            has_data = True
-                        else:
-                            row[label] = '-'
-                    if has_data:
-                        investment_rows.append(row)
-
-                total_row = {'Item': f'Total {category}'}
-                for year, quarter, label in column_labels:
-                    total_mv = sum(
-                        period_data_cache[(year, quarter)]
-                        .get(category, {})
-                        .get('Market Value', {})
-                        .values()
-                    )
-                    total_row[label] = format_investment_cell(total_mv)
-                investment_rows.append(total_row)
-
-                spacer_row = {'Item': ''}
-                for _, _, label in column_labels:
-                    spacer_row[label] = ''
-                investment_rows.append(spacer_row)
-
-            investment_table = pd.DataFrame(investment_rows)
-            st.dataframe(investment_table, use_container_width=True, hide_index=True)
-
-            csv_data = investment_table.to_csv(index=False)
-            st.download_button(
-                label="Download Investment Book",
-                data=csv_data,
-                file_name=f"investment_book_{selected_broker}.csv",
-                mime="text/csv",
-                key=f"download_investment_book_{selected_broker}"
-            )
-
-            with st.expander("Understanding Investment Categories"):
-                st.markdown("""
-                **FVTPL** (Fair Value Through Profit or Loss): Trading securities held for short-term profit
-
-                **AFS** (Available-for-Sale): Long-term financial assets measured at fair value through OCI
-
-                **HTM** (Held-to-Maturity): Fixed maturity investments measured at amortized cost
-
-                **Values shown**: Market Value (bn VND) across the most recent quarters
-                """)
-
-investment_history = (
-    df_actual[['YEARREPORT', 'LENGTHREPORT', 'investment_income']]
-    .dropna(subset=['investment_income'])
-    .sort_values(['YEARREPORT', 'LENGTHREPORT'])
-)
-
-recent_investment_history = investment_history.tail(4)
-investment_income_rows = []
-
-for _, row in recent_investment_history.iterrows():
-    quarter_label_str = quarter_label(int(row['YEARREPORT']), int(row['LENGTHREPORT']))
-    investment_income_rows.append({
-        'Quarter': quarter_label_str,
-        'Investment Income (bn)': row['investment_income'] / 1e9,
-    })
-
-fvtpl_profit_value, fvtpl_reference_quarter = calculate_fvtpl_profit_total(selected_broker)
-
-if fvtpl_profit_value is not None:
-    reference_label = fvtpl_reference_quarter or "latest quarter"
-    investment_income_rows.append({
-        'Quarter': f"FVTPL P/L since {reference_label}",
-        'Investment Income (bn)': fvtpl_profit_value / 1e9,
-    })
-
-investment_base_value = base_segments.get('investment_income', 0.0)
-investment_base_bn = format_bn(investment_base_value)
-if not math.isfinite(investment_base_bn):
-    investment_base_bn = 0.0
 
 investment_cols = st.columns(2)
 
@@ -1323,7 +1181,7 @@ with investment_cols[0]:
     else:
         st.info("No historical investment income data available for the last quarters.")
 
-    investment_income_input = st.number_input(
+    investment_income_input_value = st.number_input(
         f"{target_label} Investment Income (bn VND)",
         value=float(round(investment_base_bn)),
         step=10.0,
@@ -1331,14 +1189,8 @@ with investment_cols[0]:
         key="investment_income_input",
     )
 
-investment_income_forecast_bn = float(investment_income_input)
-investment_income_forecast_vnd = investment_income_forecast_bn * 1e9
-
 with investment_cols[1]:
     st.markdown("#### Investment Book Snapshot")
-
-    investment_start_year = max(target_year - 1, 2017)
-    investment_metrics_df = load_investment_metrics(selected_broker, investment_start_year)
 
     if investment_metrics_df.empty:
         st.info("No investment holdings data available for the selected broker.")
@@ -1355,6 +1207,71 @@ with investment_cols[1]:
             )
 
             display_periods = period_records.head(2).sort_values(['YEARREPORT', 'LENGTHREPORT'])
+
+            investment_rows: list[dict[str, str]] = []
+            column_labels: list[tuple[int, int, str]] = []
+
+            for _, record in display_periods.iterrows():
+                year = int(record['YEARREPORT'])
+                quarter = int(record['LENGTHREPORT'])
+                column_labels.append((year, quarter, quarter_label(year, quarter)))
+
+            all_items: set[tuple[str, str]] = set()
+            period_data_cache: dict[tuple[int, int], dict] = {}
+
+            for year, quarter, _ in column_labels:
+                data = get_investment_data(investment_metrics_df, selected_broker, year, quarter)
+                period_data_cache[(year, quarter)] = data
+                for category in ['FVTPL', 'AFS', 'HTM']:
+                    market_values = data.get(category, {}).get('Market Value', {})
+                    for item in market_values.keys():
+                        all_items.add((category, item))
+
+            if all_items:
+                for category in ['FVTPL', 'AFS', 'HTM']:
+                    category_items = sorted([item for cat, item in all_items if cat == category])
+                    if not category_items:
+                        continue
+
+                    header_row = {'Item': category}
+                    for _, _, label in column_labels:
+                        header_row[label] = ''
+                    investment_rows.append(header_row)
+
+                    for item in category_items:
+                        row = {'Item': f'  {item}'}
+                        has_data = False
+                        for year, quarter, label in column_labels:
+                            mv = (
+                                period_data_cache[(year, quarter)]
+                                .get(category, {})
+                                .get('Market Value', {})
+                                .get(item)
+                            )
+                            if mv not in (None, 0):
+                                row[label] = format_investment_cell(mv)
+                                has_data = True
+                            else:
+                                row[label] = '-'
+                        if has_data:
+                            investment_rows.append(row)
+
+                    total_row = {'Item': f'Total {category}'}
+                    for year, quarter, label in column_labels:
+                        total_mv = sum(
+                            period_data_cache[(year, quarter)]
+                            .get(category, {})
+                            .get('Market Value', {})
+                            .values()
+                        )
+                        total_row[label] = format_investment_cell(total_mv)
+                    investment_rows.append(total_row)
+
+                investment_table = pd.DataFrame(investment_rows)
+                st.dataframe(investment_table, use_container_width=True, hide_index=True)
+
+investment_income_forecast_bn = float(investment_income_input_value)
+investment_income_forecast_vnd = investment_income_forecast_bn * 1e9
 
 # Update summary with forecast brokerage and margin inputs
 target_column_label = f"{target_label} Base (bn VND)"
