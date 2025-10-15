@@ -1261,7 +1261,16 @@ if fvtpl_profit_value is not None:
     investment_display_df = pd.concat([investment_display_df, fvtpl_row], ignore_index=True)
 
 if not investment_display_df.empty:
-    st.dataframe(investment_display_df, use_container_width=True, hide_index=True)
+    display_df = investment_display_df.copy()
+    if 'Investment Income (bn)' in display_df.columns:
+        display_df['Investment Income (bn)'] = pd.to_numeric(
+            display_df['Investment Income (bn)'], errors='coerce'
+        )
+        display_df['Investment Income (bn)'] = display_df['Investment Income (bn)'].apply(
+            lambda x: "-" if pd.isna(x) else f"{x:,.0f}"
+        )
+
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
 else:
     st.info("No historical investment income data available for the last quarters.")
 
