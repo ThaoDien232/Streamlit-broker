@@ -1,6 +1,5 @@
 import math
 import re
-from pathlib import Path
 from datetime import datetime
 
 import numpy as np
@@ -12,6 +11,7 @@ import toml
 from utils.brokerage_codes import get_brokerage_code
 from utils.brokerage_data import load_brokerage_metrics
 from utils.investment_book import get_investment_data
+from utils.db import run_query
 
 
 st.set_page_config(page_title="Forecast", layout="wide")
@@ -86,16 +86,24 @@ def load_data():
             )
             df_bs_quarterly.columns.name = None
 
-    forecast_path = Path('sql/FORECAST.csv')
-    if not forecast_path.exists():
-        st.error("Forecast data file 'sql/FORECAST.csv' is missing. Please upload the latest forecast dataset.")
+    try:
+        df_forecast = run_query(
+            """
+            SELECT KEYCODE, KEYCODENAME, ORGANCODE, TICKER, DATE, VALUE, RATING, FORECASTDATE
+            FROM SIL.W_F_IRIS_FORECAST
+            """
+        )
+    except Exception as exc:
+        st.error(f"Unable to load forecast data from database: {exc}")
         st.stop()
 
-    df_forecast = pd.read_csv(forecast_path, low_memory=False)
-    df_forecast['DATE'] = pd.to_numeric(df_forecast['DATE'], errors='coerce')
-    df_forecast = df_forecast.dropna(subset=['DATE'])
-    df_forecast['DATE'] = df_forecast['DATE'].astype(int)
-    df_forecast['VALUE'] = pd.to_numeric(df_forecast['VALUE'], errors='coerce')
+    if df_forecast.empty:
+        st.warning("No forecast data returned from database. Proceeding with empty forecast table.")
+    else:
+        df_forecast['DATE'] = pd.to_numeric(df_forecast['DATE'], errors='coerce')
+        df_forecast = df_forecast.dropna(subset=['DATE'])
+        df_forecast['DATE'] = df_forecast['DATE'].astype(int)
+        df_forecast['VALUE'] = pd.to_numeric(df_forecast['VALUE'], errors='coerce')
 
     df_index = _safe_read_csv('sql/INDEX.csv', parse_dates=['TRADINGDATE'])
     df_turnover = _safe_read_excel('sql/turnover.xlsx')
@@ -173,7 +181,10 @@ def prepare_quarter_metrics(df_is: pd.DataFrame, ticker: str) -> pd.DataFrame:
     for segment in SEGMENTS:
         df[segment['key']] = sum_columns(df, segment['columns'])
 
-    df['pbt'] = pd.to_numeric(df.get('IS.65', 0.0), errors='coerce').fillna(0.0)
+    if 'IS.65' in df.columns:
+        df['pbt'] = pd.to_numeric(df['IS.65'], errors='coerce').fillna(0.0)
+    else:
+        df['pbt'] = 0.0
 
     columns = ['YEARREPORT', 'LENGTHREPORT', 'ENDDATE', 'pbt'] + [segment['key'] for segment in SEGMENTS]
     return df[columns]
