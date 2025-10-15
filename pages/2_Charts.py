@@ -227,7 +227,8 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
         for _, toi_row in toi_data.iterrows():
             year = toi_row['YEARREPORT']
             quarter = toi_row['LENGTHREPORT']
-            quarter_label = toi_row.get('Quarter_Label', '')
+            # Check both possible column names (Quarter_Label or QUARTER_LABEL)
+            quarter_label = toi_row.get('Quarter_Label', toi_row.get('QUARTER_LABEL', ''))
             toi_value = toi_row['VALUE']
 
             # Skip if data is invalid
