@@ -54,7 +54,21 @@ def load_data():
         base_columns = ['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'STARTDATE', 'ENDDATE', 'QUARTER_LABEL']
         df_metrics = df_metrics.drop_duplicates(subset=base_columns + ['KEYCODE'], keep='last')
 
-        df_is = df_metrics[df_metrics['KEYCODE'].str.startswith('IS.')]
+        required_is_codes = {
+            'PBT',
+            'NPAT',
+        }
+        for segment in SEGMENTS:
+            values = segment.get('columns') or []
+            if isinstance(values, str):
+                required_is_codes.add(values)
+            else:
+                required_is_codes.update(values)
+
+        df_is = df_metrics[
+            df_metrics['KEYCODE'].str.startswith('IS.')
+            | df_metrics['KEYCODE'].isin(required_is_codes)
+        ]
         if df_is.empty:
             df_is_quarterly = pd.DataFrame(columns=base_columns)
         else:
@@ -126,46 +140,37 @@ SEGMENTS = [
         "key": "brokerage_fee",
         "label": "Brokerage Fee",
         "forecast_key": "Net_Brokerage_Income",
-        "columns": ['IS.10', 'IS.33'],
-        "db_columns": ['Net_Brokerage_Income'],
+        "columns": ['Net_Brokerage_Income'],
     },
     {
         "key": "margin_income",
         "label": "Margin Income",
         "forecast_key": "Net_Margin_lending_Income",
-        "columns": ['IS.7', 'IS.30'],
-        "db_columns": ['Net_Margin_lending_Income'],
+        "columns": ['Net_Margin_lending_Income'],
     },
     {
         "key": "investment_income",
         "label": "Investment Income",
         "forecast_key": "Net_Investment",
-        "columns": [
-            'IS.3', 'IS.4', 'IS.5', 'IS.8', 'IS.9', 'IS.24', 'IS.25', 'IS.26',
-            'IS.27', 'IS.28', 'IS.29', 'IS.31', 'IS.32', 'IS.6'
-        ],
-        "db_columns": ['Net_investment_income'],
+        "columns": ['Net_investment_income'],
     },
     {
         "key": "ib_income",
         "label": "IB Income",
         "forecast_key": "Net_IB_Income",
-        "columns": ['IS.11', 'IS.12', 'IS.13', 'IS.15', 'IS.16', 'IS.17', 'IS.18', 'IS.34', 'IS.35', 'IS.36', 'IS.38'],
-        "db_columns": ['Net_IB_Income'],
+        "columns": ['Net_IB_Income'],
     },
     {
         "key": "sga",
         "label": "SG&A",
         "forecast_key": "SG_A",
-        "columns": ['IS.57', 'IS.58'],
-        "db_columns": ['SG_A'],
+        "columns": ['SG_A'],
     },
     {
         "key": "interest_expense",
         "label": "Interest Expense",
         "forecast_key": "Interest_Expense",
-        "columns": ['IS.51'],
-        "db_columns": ['Interest_Expense'],
+        "columns": ['Interest_Expense'],
     },
 ]
 
