@@ -10,7 +10,7 @@ Based on DATABASE_SCHEMA.md documentation.
 
 METRIC_TO_DB_KEYCODE = {
     # Income Statement - Revenue Streams
-    'NET_BROKERAGE_INCOME': 'NET_BROKERAGE_INCOME',  # Fixed: maps to itself (uppercase) per yesterday's fix
+    'NET_BROKERAGE_INCOME': 'Net_Brokerage_Income',  # Fixed: maps to itself (uppercase) per yesterday's fix
     'NET_IB_INCOME': 'NET_IB_INCOME',  # Fixed: maps to itself (uppercase)
     'NET_TRADING_INCOME': 'NET_TRADING_INCOME',  # Fixed: maps to itself (uppercase)
     'NET_INVESTMENT_INCOME': 'NET_INVESTMENT_INCOME',  # Fixed: maps to itself (uppercase)
