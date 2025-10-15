@@ -127,12 +127,14 @@ SEGMENTS = [
         "label": "Brokerage Fee",
         "forecast_key": "Net_Brokerage_Income",
         "columns": ['IS.10', 'IS.33'],
+        "db_columns": ['Net_Brokerage_Income'],
     },
     {
         "key": "margin_income",
         "label": "Margin Income",
         "forecast_key": "Net_Margin_lending_Income",
         "columns": ['IS.7', 'IS.30'],
+        "db_columns": ['Net_Margin_lending_Income'],
     },
     {
         "key": "investment_income",
@@ -142,34 +144,61 @@ SEGMENTS = [
             'IS.3', 'IS.4', 'IS.5', 'IS.8', 'IS.9', 'IS.24', 'IS.25', 'IS.26',
             'IS.27', 'IS.28', 'IS.29', 'IS.31', 'IS.32', 'IS.6'
         ],
+        "db_columns": ['Net_investment_income'],
     },
     {
         "key": "ib_income",
         "label": "IB Income",
         "forecast_key": "Net_IB_Income",
         "columns": ['IS.11', 'IS.12', 'IS.13', 'IS.15', 'IS.16', 'IS.17', 'IS.18', 'IS.34', 'IS.35', 'IS.36', 'IS.38'],
+        "db_columns": ['Net_IB_Income'],
     },
     {
         "key": "sga",
         "label": "SG&A",
         "forecast_key": "SG_A",
         "columns": ['IS.57', 'IS.58'],
+        "db_columns": ['SG_A'],
     },
     {
         "key": "interest_expense",
         "label": "Interest Expense",
         "forecast_key": "Interest_Expense",
         "columns": ['IS.51'],
+        "db_columns": ['Interest_Expense'],
     },
 ]
 
 
-def sum_columns(df: pd.DataFrame, columns):
-    values = pd.Series(0.0, index=df.index)
-    for col in columns:
-        if col in df.columns:
+def sum_columns(df: pd.DataFrame, columns=None, alt_columns=None):
+    column_groups = []
+
+    if alt_columns:
+        if isinstance(alt_columns, str):
+            column_groups.append([alt_columns])
+        else:
+            column_groups.append(list(alt_columns))
+
+    if columns:
+        if isinstance(columns, str):
+            column_groups.append([columns])
+        else:
+            column_groups.append(list(columns))
+
+    if not column_groups:
+        return pd.Series(0.0, index=df.index, dtype=float)
+
+    for group in column_groups:
+        available = [col for col in group if col in df.columns]
+        if not available:
+            continue
+
+        values = pd.Series(0.0, index=df.index, dtype=float)
+        for col in available:
             values = values.add(pd.to_numeric(df[col], errors='coerce').fillna(0.0), fill_value=0.0)
-    return values
+        return values
+
+    return pd.Series(0.0, index=df.index, dtype=float)
 
 
 def prepare_quarter_metrics(df_is: pd.DataFrame, ticker: str) -> pd.DataFrame:
@@ -189,9 +218,15 @@ def prepare_quarter_metrics(df_is: pd.DataFrame, ticker: str) -> pd.DataFrame:
     df['ENDDATE'] = pd.to_datetime(df['ENDDATE'], errors='coerce')
 
     for segment in SEGMENTS:
-        df[segment['key']] = sum_columns(df, segment['columns'])
+        df[segment['key']] = sum_columns(
+            df,
+            columns=segment.get('columns'),
+            alt_columns=segment.get('db_columns')
+        )
 
-    if 'IS.65' in df.columns:
+    if 'PBT' in df.columns:
+        df['pbt'] = pd.to_numeric(df['PBT'], errors='coerce').fillna(0.0)
+    elif 'IS.65' in df.columns:
         df['pbt'] = pd.to_numeric(df['IS.65'], errors='coerce').fillna(0.0)
     else:
         df['pbt'] = 0.0
