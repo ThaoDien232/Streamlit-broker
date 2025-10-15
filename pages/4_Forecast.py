@@ -11,7 +11,6 @@ import toml
 from utils.brokerage_codes import get_brokerage_code
 from utils.brokerage_data import load_brokerage_metrics
 from utils.investment_book import get_investment_data
-from utils.keycode_matcher import load_keycode_map, match_keycodes
 
 
 st.set_page_config(page_title="Forecast", layout="wide")
@@ -31,9 +30,44 @@ def load_data():
 
     theme_config = toml.load("utils/config.toml")
 
-    keycode_map = load_keycode_map('sql/IRIS_KEYCODE.csv')
-    df_is_quarterly = match_keycodes('sql/IS_security_quarterly.csv', keycode_map)
-    df_bs_quarterly = match_keycodes('sql/BS_security.csv', keycode_map)
+    df_metrics = load_brokerage_metrics(include_annual=False)
+
+    if df_metrics.empty:
+        df_is_quarterly = pd.DataFrame(columns=['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'STARTDATE', 'ENDDATE', 'QUARTER_LABEL'])
+        df_bs_quarterly = pd.DataFrame(columns=['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'STARTDATE', 'ENDDATE', 'QUARTER_LABEL'])
+    else:
+        df_metrics = df_metrics.copy()
+        base_columns = ['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'STARTDATE', 'ENDDATE', 'QUARTER_LABEL']
+
+        df_is = df_metrics[df_metrics['KEYCODE'].str.startswith('IS.')]
+        if df_is.empty:
+            df_is_quarterly = pd.DataFrame(columns=base_columns)
+        else:
+            df_is_quarterly = (
+                df_is.pivot_table(
+                    index=base_columns,
+                    columns='KEYCODE',
+                    values='VALUE',
+                    aggfunc='first'
+                )
+                .reset_index()
+            )
+            df_is_quarterly.columns.name = None
+
+        df_bs = df_metrics[df_metrics['KEYCODE'].str.startswith('BS.')]
+        if df_bs.empty:
+            df_bs_quarterly = pd.DataFrame(columns=base_columns)
+        else:
+            df_bs_quarterly = (
+                df_bs.pivot_table(
+                    index=base_columns,
+                    columns='KEYCODE',
+                    values='VALUE',
+                    aggfunc='first'
+                )
+                .reset_index()
+            )
+            df_bs_quarterly.columns.name = None
 
     df_forecast = pd.read_csv('sql/FORECAST.csv', low_memory=False)
     df_forecast['DATE'] = pd.to_numeric(df_forecast['DATE'], errors='coerce')
