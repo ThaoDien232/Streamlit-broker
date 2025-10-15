@@ -1330,26 +1330,10 @@ st.subheader("Baseline Breakdown")
 st.caption(f"Base assumptions derived from {target_year} full-year forecast minus actual results up to {latest_label}.")
 st.dataframe(summary_df, hide_index=True)
 
-st.subheader(f"{target_label} Segment Assumptions")
-
-segment_inputs = {}
-input_columns = st.columns(3)
-
-for idx, segment in enumerate(SEGMENTS):
-    if segment['key'] in ('brokerage_fee', 'margin_income', 'ib_income', 'sga', 'investment_income', 'interest_expense'):
-        continue
-    col = input_columns[idx % len(input_columns)]
-    with col:
-        base_bn = format_bn(base_segments.get(segment['key'], 0.0))
-        if not math.isfinite(base_bn):
-            base_bn = 0.0
-        value = col.number_input(
-            f"{segment['label']} (bn VND)",
-            value=float(round(base_bn)),
-            step=10.0,
-            format="%.0f"
-        )
-        segment_inputs[segment['key']] = value * 1e9
+segment_inputs = {
+    segment['key']: base_segments.get(segment['key'], 0.0)
+    for segment in SEGMENTS
+}
 
 segment_inputs['brokerage_fee'] = net_brokerage_forecast
 segment_inputs['margin_income'] = margin_income_forecast_bn * 1e9
