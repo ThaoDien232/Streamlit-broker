@@ -1112,6 +1112,58 @@ st.dataframe(margin_table_df, use_container_width=True)
 
 st.caption("Margin lending income and interest expense calculated as balance × rate ÷ 4 for the forecast quarter.")
 
+
+def render_segment_override(segment_key: str, title: str, input_key: str) -> tuple[float, float]:
+    st.markdown(f"#### {title}")
+
+    history = (
+        df_actual[['YEARREPORT', 'LENGTHREPORT', segment_key]]
+        .dropna(subset=[segment_key])
+        .sort_values(['YEARREPORT', 'LENGTHREPORT'])
+        .tail(4)
+    )
+
+    if not history.empty:
+        history_display = history.copy()
+        history_display['Quarter'] = history_display.apply(
+            lambda row: quarter_label(int(row['YEARREPORT']), int(row['LENGTHREPORT'])),
+            axis=1
+        )
+        history_display[f"{title} (bn)"] = history_display[segment_key].apply(lambda v: v / 1e9)
+        display_df = history_display[['Quarter', f"{title} (bn)"]].copy()
+        display_df[f"{title} (bn)"] = display_df[f"{title} (bn)"].apply(lambda x: f"{x:,.0f}")
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+    else:
+        st.info(f"No historical data available for {title.lower()}.")
+
+    base_value = base_segments.get(segment_key, 0.0)
+    base_bn = format_bn(base_value)
+    if not math.isfinite(base_bn):
+        base_bn = 0.0
+
+    input_bn = st.number_input(
+        f"{target_label} {title} (bn VND)",
+        value=float(round(base_bn)),
+        step=10.0,
+        format="%.0f",
+        key=input_key,
+    )
+
+    return float(input_bn), float(input_bn) * 1e9
+
+
+ib_income_forecast_bn, ib_income_forecast_vnd = render_segment_override(
+    'ib_income',
+    'IB Income',
+    'ib_income_input_override',
+)
+
+sga_forecast_bn, sga_forecast_vnd = render_segment_override(
+    'sga',
+    'SG&A Expense',
+    'sga_expense_input_override',
+)
+
 st.markdown("#### Investment Book Snapshot")
 
 investment_start_year = max(target_year - 3, 2017)
@@ -1294,6 +1346,8 @@ target_column_label = f"{target_label} Base (bn VND)"
 if target_column_label in summary_df.columns:
     summary_df.loc[summary_df['Segment'] == 'Brokerage Fee', target_column_label] = format_bn_str(net_brokerage_forecast)
     summary_df.loc[summary_df['Segment'] == 'Margin Income', target_column_label] = format_bn_str(margin_income_forecast_bn * 1e9)
+    summary_df.loc[summary_df['Segment'] == 'IB Income', target_column_label] = format_bn_str(ib_income_forecast_vnd)
+    summary_df.loc[summary_df['Segment'] == 'SG&A', target_column_label] = format_bn_str(sga_forecast_vnd)
     summary_df.loc[summary_df['Segment'] == 'Investment Income', target_column_label] = format_bn_str(investment_income_forecast_bn * 1e9)
     summary_df.loc[summary_df['Segment'] == 'Interest Expense', target_column_label] = format_bn_str(-interest_expense_forecast_bn * 1e9)
 
@@ -1307,7 +1361,7 @@ segment_inputs = {}
 input_columns = st.columns(3)
 
 for idx, segment in enumerate(SEGMENTS):
-    if segment['key'] in ('brokerage_fee', 'margin_income', 'investment_income', 'interest_expense'):
+    if segment['key'] in ('brokerage_fee', 'margin_income', 'ib_income', 'sga', 'investment_income', 'interest_expense'):
         continue
     col = input_columns[idx % len(input_columns)]
     with col:
@@ -1324,6 +1378,8 @@ for idx, segment in enumerate(SEGMENTS):
 
 segment_inputs['brokerage_fee'] = net_brokerage_forecast
 segment_inputs['margin_income'] = margin_income_forecast_bn * 1e9
+segment_inputs['ib_income'] = ib_income_forecast_vnd
+segment_inputs['sga'] = sga_forecast_vnd
 segment_inputs['investment_income'] = investment_income_forecast_bn * 1e9
 segment_inputs['interest_expense'] = -interest_expense_forecast_bn * 1e9
 
