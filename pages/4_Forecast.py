@@ -1,5 +1,6 @@
 import math
 import re
+from pathlib import Path
 from datetime import datetime
 
 import numpy as np
@@ -22,6 +23,22 @@ if 'price_cache' not in st.session_state:
     st.session_state.price_cache = {}
 if 'price_last_updated' not in st.session_state:
     st.session_state.price_last_updated = None
+
+
+def _safe_read_csv(path: str, **kwargs) -> pd.DataFrame:
+    try:
+        return pd.read_csv(path, **kwargs)
+    except FileNotFoundError:
+        st.warning(f"Required file '{path}' not found. Proceeding with empty data.")
+        return pd.DataFrame()
+
+
+def _safe_read_excel(path: str, **kwargs) -> pd.DataFrame:
+    try:
+        return pd.read_excel(path, **kwargs)
+    except FileNotFoundError:
+        st.warning(f"Required file '{path}' not found. Proceeding with empty data.")
+        return pd.DataFrame()
 
 
 @st.cache_data
@@ -69,14 +86,19 @@ def load_data():
             )
             df_bs_quarterly.columns.name = None
 
-    df_forecast = pd.read_csv('sql/FORECAST.csv', low_memory=False)
+    forecast_path = Path('sql/FORECAST.csv')
+    if not forecast_path.exists():
+        st.error("Forecast data file 'sql/FORECAST.csv' is missing. Please upload the latest forecast dataset.")
+        st.stop()
+
+    df_forecast = pd.read_csv(forecast_path, low_memory=False)
     df_forecast['DATE'] = pd.to_numeric(df_forecast['DATE'], errors='coerce')
     df_forecast = df_forecast.dropna(subset=['DATE'])
     df_forecast['DATE'] = df_forecast['DATE'].astype(int)
     df_forecast['VALUE'] = pd.to_numeric(df_forecast['VALUE'], errors='coerce')
 
-    df_index = pd.read_csv('sql/INDEX.csv', parse_dates=['TRADINGDATE'])
-    df_turnover = pd.read_excel('sql/turnover.xlsx')
+    df_index = _safe_read_csv('sql/INDEX.csv', parse_dates=['TRADINGDATE'])
+    df_turnover = _safe_read_excel('sql/turnover.xlsx')
 
     return theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_index, df_turnover
 
