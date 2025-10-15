@@ -138,7 +138,7 @@ def get_recent_market_share_periods(count: int) -> list[tuple[int, int]]:
 def get_metric_display_name(metric_code):
     """Convert metric code to display name"""
     metric_names = {
-        'NET_BROKERAGE_INCOME': 'Brokerage Income',
+        'Net_Brokerage_Income': 'Brokerage Income',
         'Net_Trading_Income': 'Trading Income',
         'Net_Interest_Income': 'Interest Income',
         'Net_investment_income': 'Investment Income',

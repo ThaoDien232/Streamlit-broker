@@ -10,7 +10,7 @@ Based on DATABASE_SCHEMA_1.md documentation.
 
 METRIC_TO_DB_KEYCODE = {
     # Income Statement - Revenue Streams (DATABASE_SCHEMA_1.md lines 684-694)
-    'NET_BROKERAGE_INCOME': 'Net_Brokerage_Income',  # line 684
+    'Net_Brokerage_Income': 'Net_Brokerage_Income',  # line 684
     'NET_IB_INCOME': 'Net_IB_Income',  # line 685
     'NET_TRADING_INCOME': 'Net_Trading_Income',  # line 686 - Fixed!
     'NET_INVESTMENT_INCOME': 'Net_investment_income',  # line 693
