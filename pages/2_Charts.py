@@ -29,11 +29,11 @@ def load_filtered_data(tickers, metrics, years, quarters):
     # If calculated metrics are requested, load their base components
     metrics_to_load = list(metrics)
 
-    if 'Total_Operating_Income' in metrics:
-        # TOI = Fee Income + Capital Income (6 components total)
-        toi_components = ['Net_Brokerage_Income', 'Net_IB_Income', 'Net_other_operating_income',
-                         'Net_Trading_Income', 'Net_Interest_Income', 'Net_Margin_lending_Income']
-        metrics_to_load.extend([m for m in toi_components if m not in metrics_to_load])
+    # ALWAYS load TOI and its components since TOI structure is a fixed chart
+    # TOI = Fee Income + Capital Income (6 components total)
+    toi_components = ['Total_Operating_Income', 'Net_Brokerage_Income', 'Net_IB_Income', 'Net_other_operating_income',
+                     'Net_Trading_Income', 'Net_Interest_Income', 'Net_Margin_lending_Income']
+    metrics_to_load.extend([m for m in toi_components if m not in metrics_to_load])
 
     df = load_filtered_brokerage_data(
         tickers=tickers,
