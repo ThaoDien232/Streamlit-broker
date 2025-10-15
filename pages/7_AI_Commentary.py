@@ -75,7 +75,7 @@ def calculate_financial_metrics(ticker_data, selected_quarter, ticker):
     key_metrics = {
         'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
         'IB Income': 'NET_IB_INCOME',
-        'Margin Income': 'NET_MARGIN_INCOME',  # Correct METRIC_CODE for margin lending income
+        'Margin Income': 'MARGIN_LENDING_INCOME',  # Correct METRIC_CODE for margin lending income
         'Investment Income': 'NET_INVESTMENT_INCOME',
         'Other Incomes': 'NET_OTHER_INCOME',
         'Total Operating Income': 'Total_Operating_Income',  # Total operating income
@@ -383,7 +383,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
             metric_code = {
                 'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
                 'IB Income': 'NET_IB_INCOME',
-                'Margin Income': 'NET_MARGIN_INCOME',  # Correct METRIC_CODE for margin lending income
+                'Margin Income': 'MARGIN_LENDING_INCOME',  # Correct METRIC_CODE for margin lending income
                 'Investment Income': 'NET_INVESTMENT_INCOME',
                 'Other Incomes': 'NET_OTHER_INCOME',
                 'Total Operating Income': 'Total_Operating_Income',
