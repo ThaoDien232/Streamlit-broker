@@ -48,7 +48,11 @@ def load_data():
         df_bs_quarterly = pd.DataFrame(columns=['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'STARTDATE', 'ENDDATE', 'QUARTER_LABEL'])
     else:
         df_metrics = df_metrics.copy()
+        if 'ACTUAL' in df_metrics.columns:
+            df_metrics = df_metrics[df_metrics['ACTUAL'] == 1]
+
         base_columns = ['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'STARTDATE', 'ENDDATE', 'QUARTER_LABEL']
+        df_metrics = df_metrics.drop_duplicates(subset=base_columns + ['KEYCODE'], keep='last')
 
         df_is = df_metrics[df_metrics['KEYCODE'].str.startswith('IS.')]
         if df_is.empty:
