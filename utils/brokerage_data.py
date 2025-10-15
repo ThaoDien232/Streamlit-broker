@@ -246,7 +246,7 @@ def calculate_metric(
         return roa
 
     elif metric_code == 'INTEREST_RATE':
-        # Interest Rate = INTEREST_EXPENSE / AVG_BORROWING_BALANCE
+        # Interest Rate = INTEREST_EXPENSE / AVG_BORROWING_BALANCE * 100
         # Need current and previous borrowing balance to calculate average
         current_borrowing = values['BORROWING_BALANCE']
 
@@ -263,7 +263,7 @@ def calculate_metric(
         if avg_borrowing == 0:
             return 0.0
 
-        interest_rate = values['INTEREST_EXPENSE'] / avg_borrowing
+        interest_rate = (values['INTEREST_EXPENSE'] / avg_borrowing) * 100
 
         # Annualize if quarterly
         if quarter in [1, 2, 3, 4] and formula_info['annualize_quarterly']:

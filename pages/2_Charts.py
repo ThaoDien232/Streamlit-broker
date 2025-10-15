@@ -533,17 +533,20 @@ with tab1:
 
                                 # Check if this is ROE, ROA, or rate metrics (percentage metrics)
                                 if metric in ['INTEREST_RATE', 'MARGIN_LENDING_RATE']:
-                                    broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce') * 100  # Convert to percentage
+                                    broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce')  # Already in percentage
                                     y_values = broker_data['DISPLAY_VALUE']
-                                    hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}}%<br><extra></extra>"
-                                
-                                if  metric in ['ROE', 'ROA']:
-                                    broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce')  # Convert to percentage
-                                    y_values = broker_data['DISPLAY_VALUE']  # Convert to percentage
                                     hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}}%<br><extra></extra>"
 
                                     if not broker_data_with_ma4.empty:
-                                        broker_data_with_ma4['MA4_DISPLAY'] = broker_data_with_ma4['MA4'] * 100
+                                        broker_data_with_ma4['MA4_DISPLAY'] = broker_data_with_ma4['MA4']  # Already in percentage
+
+                                elif  metric in ['ROE', 'ROA']:
+                                    broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce')  # Already in percentage
+                                    y_values = broker_data['DISPLAY_VALUE']
+                                    hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}}%<br><extra></extra>"
+
+                                    if not broker_data_with_ma4.empty:
+                                        broker_data_with_ma4['MA4_DISPLAY'] = broker_data_with_ma4['MA4']  # Already in percentage
                                 elif metric == 'NET_BROKERAGE_FEE':
                                     # Net Brokerage Fee is already in basis points
                                     broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce')
