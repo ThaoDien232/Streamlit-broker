@@ -1,5 +1,6 @@
 import math
 import re
+from pathlib import Path
 from datetime import datetime
 
 import numpy as np
@@ -11,7 +12,8 @@ import toml
 from utils.brokerage_codes import get_brokerage_code
 from utils.brokerage_data import load_brokerage_metrics
 from utils.investment_book import get_investment_data
-from utils.keycode_matcher import load_keycode_map, match_keycodes
+from utils.market_index_data import load_market_liquidity_data
+from utils.db import run_query
 
 
 st.set_page_config(page_title="Forecast", layout="wide")
@@ -25,26 +27,98 @@ if 'price_last_updated' not in st.session_state:
     st.session_state.price_last_updated = None
 
 
+def _safe_read_excel(path: str, **kwargs) -> pd.DataFrame:
+    try:
+        return pd.read_excel(path, **kwargs)
+    except FileNotFoundError:
+        st.warning(f"Required file '{path}' not found. Proceeding with empty data.")
+        return pd.DataFrame()
+
+
 @st.cache_data
 def load_data():
     """Load quarterly actuals, index data, and full-year forecast data."""
 
     theme_config = toml.load("utils/config.toml")
 
-    keycode_map = load_keycode_map('sql/IRIS_KEYCODE.csv')
-    df_is_quarterly = match_keycodes('sql/IS_security_quarterly.csv', keycode_map)
-    df_bs_quarterly = match_keycodes('sql/BS_security.csv', keycode_map)
+    df_metrics = load_brokerage_metrics(include_annual=False)
 
-    df_forecast = pd.read_csv('sql/FORECAST.csv', low_memory=False)
-    df_forecast['DATE'] = pd.to_numeric(df_forecast['DATE'], errors='coerce')
-    df_forecast = df_forecast.dropna(subset=['DATE'])
-    df_forecast['DATE'] = df_forecast['DATE'].astype(int)
-    df_forecast['VALUE'] = pd.to_numeric(df_forecast['VALUE'], errors='coerce')
+    if df_metrics.empty:
+        df_is_quarterly = pd.DataFrame(columns=['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'STARTDATE', 'ENDDATE', 'QUARTER_LABEL'])
+        df_bs_quarterly = pd.DataFrame(columns=['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'STARTDATE', 'ENDDATE', 'QUARTER_LABEL'])
+    else:
+        df_metrics = df_metrics.copy()
+        if 'ACTUAL' in df_metrics.columns:
+            df_metrics = df_metrics[df_metrics['ACTUAL'] == 1]
 
-    df_index = pd.read_csv('sql/INDEX.csv', parse_dates=['TRADINGDATE'])
-    df_turnover = pd.read_excel('sql/turnover.xlsx')
+        base_columns = ['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'STARTDATE', 'ENDDATE', 'QUARTER_LABEL']
+        df_metrics = df_metrics.drop_duplicates(subset=base_columns + ['KEYCODE'], keep='last')
 
-    return theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_index, df_turnover
+        df_is = df_metrics[df_metrics['KEYCODE'].str.startswith('IS.')]
+        if df_is.empty:
+            df_is_quarterly = pd.DataFrame(columns=base_columns)
+        else:
+            df_is_quarterly = (
+                df_is.pivot_table(
+                    index=base_columns,
+                    columns='KEYCODE',
+                    values='VALUE',
+                    aggfunc='first'
+                )
+                .reset_index()
+            )
+            df_is_quarterly.columns.name = None
+
+        df_bs = df_metrics[df_metrics['KEYCODE'].str.startswith('BS.')]
+        if df_bs.empty:
+            df_bs_quarterly = pd.DataFrame(columns=base_columns)
+        else:
+            df_bs_quarterly = (
+                df_bs.pivot_table(
+                    index=base_columns,
+                    columns='KEYCODE',
+                    values='VALUE',
+                    aggfunc='first'
+                )
+                .reset_index()
+            )
+            df_bs_quarterly.columns.name = None
+
+    forecast_query = """
+        SELECT KEYCODE, KEYCODENAME, ORGANCODE, TICKER, DATE, VALUE, RATING, FORECASTDATE
+        FROM SIL.W_F_IRIS_FORECAST
+    """
+
+    try:
+        df_forecast = run_query(forecast_query)
+    except Exception as exc:
+        st.warning(f"Database forecast query failed ({exc}); falling back to local CSV if available.")
+        df_forecast = pd.DataFrame()
+
+    if df_forecast.empty:
+        csv_path = Path('sql/FORECAST.csv')
+        if csv_path.exists():
+            st.info("Using local 'sql/FORECAST.csv' for forecast data.")
+            df_forecast = pd.read_csv(csv_path, low_memory=False)
+        else:
+            st.warning("Forecast data unavailable from database and local CSV not found. Proceeding without forecasts.")
+            df_forecast = pd.DataFrame(columns=['KEYCODE', 'KEYCODENAME', 'ORGANCODE', 'TICKER', 'DATE', 'VALUE', 'RATING', 'FORECASTDATE'])
+
+    if not df_forecast.empty:
+        df_forecast['DATE'] = pd.to_numeric(df_forecast['DATE'], errors='coerce')
+        df_forecast = df_forecast.dropna(subset=['DATE'])
+        df_forecast['DATE'] = df_forecast['DATE'].astype(int)
+        df_forecast['VALUE'] = pd.to_numeric(df_forecast['VALUE'], errors='coerce')
+
+    try:
+        df_liquidity = load_market_liquidity_data(start_year=2017)
+    except Exception as exc:
+        st.warning(f"Unable to load market liquidity data from database: {exc}")
+        df_liquidity = pd.DataFrame(columns=['Year', 'Quarter', 'Avg Daily Turnover (B VND)', 'Trading Days'])
+
+    df_turnover = _safe_read_excel('sql/turnover.xlsx')
+
+    return theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_liquidity, df_turnover
 
 
 SEGMENTS = [
@@ -53,12 +127,14 @@ SEGMENTS = [
         "label": "Brokerage Fee",
         "forecast_key": "Net_Brokerage_Income",
         "columns": ['IS.10', 'IS.33'],
+        "db_columns": ['Net_Brokerage_Income'],
     },
     {
         "key": "margin_income",
         "label": "Margin Income",
         "forecast_key": "Net_Margin_lending_Income",
         "columns": ['IS.7', 'IS.30'],
+        "db_columns": ['Net_Margin_lending_Income'],
     },
     {
         "key": "investment_income",
@@ -68,34 +144,61 @@ SEGMENTS = [
             'IS.3', 'IS.4', 'IS.5', 'IS.8', 'IS.9', 'IS.24', 'IS.25', 'IS.26',
             'IS.27', 'IS.28', 'IS.29', 'IS.31', 'IS.32', 'IS.6'
         ],
+        "db_columns": ['Net_investment_income'],
     },
     {
         "key": "ib_income",
         "label": "IB Income",
         "forecast_key": "Net_IB_Income",
         "columns": ['IS.11', 'IS.12', 'IS.13', 'IS.15', 'IS.16', 'IS.17', 'IS.18', 'IS.34', 'IS.35', 'IS.36', 'IS.38'],
+        "db_columns": ['Net_IB_Income'],
     },
     {
         "key": "sga",
         "label": "SG&A",
         "forecast_key": "SG_A",
         "columns": ['IS.57', 'IS.58'],
+        "db_columns": ['SG_A'],
     },
     {
         "key": "interest_expense",
         "label": "Interest Expense",
         "forecast_key": "Interest_Expense",
         "columns": ['IS.51'],
+        "db_columns": ['Interest_Expense'],
     },
 ]
 
 
-def sum_columns(df: pd.DataFrame, columns):
-    values = pd.Series(0.0, index=df.index)
-    for col in columns:
-        if col in df.columns:
+def sum_columns(df: pd.DataFrame, columns=None, alt_columns=None):
+    column_groups = []
+
+    if alt_columns:
+        if isinstance(alt_columns, str):
+            column_groups.append([alt_columns])
+        else:
+            column_groups.append(list(alt_columns))
+
+    if columns:
+        if isinstance(columns, str):
+            column_groups.append([columns])
+        else:
+            column_groups.append(list(columns))
+
+    if not column_groups:
+        return pd.Series(0.0, index=df.index, dtype=float)
+
+    for group in column_groups:
+        available = [col for col in group if col in df.columns]
+        if not available:
+            continue
+
+        values = pd.Series(0.0, index=df.index, dtype=float)
+        for col in available:
             values = values.add(pd.to_numeric(df[col], errors='coerce').fillna(0.0), fill_value=0.0)
-    return values
+        return values
+
+    return pd.Series(0.0, index=df.index, dtype=float)
 
 
 def prepare_quarter_metrics(df_is: pd.DataFrame, ticker: str) -> pd.DataFrame:
@@ -115,9 +218,18 @@ def prepare_quarter_metrics(df_is: pd.DataFrame, ticker: str) -> pd.DataFrame:
     df['ENDDATE'] = pd.to_datetime(df['ENDDATE'], errors='coerce')
 
     for segment in SEGMENTS:
-        df[segment['key']] = sum_columns(df, segment['columns'])
+        df[segment['key']] = sum_columns(
+            df,
+            columns=segment.get('columns'),
+            alt_columns=segment.get('db_columns')
+        )
 
-    df['pbt'] = pd.to_numeric(df.get('IS.65', 0.0), errors='coerce').fillna(0.0)
+    if 'PBT' in df.columns:
+        df['pbt'] = pd.to_numeric(df['PBT'], errors='coerce').fillna(0.0)
+    elif 'IS.65' in df.columns:
+        df['pbt'] = pd.to_numeric(df['IS.65'], errors='coerce').fillna(0.0)
+    else:
+        df['pbt'] = 0.0
 
     columns = ['YEARREPORT', 'LENGTHREPORT', 'ENDDATE', 'pbt'] + [segment['key'] for segment in SEGMENTS]
     return df[columns]
@@ -407,7 +519,7 @@ def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None]
 
 
 
-theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_index_raw, df_turnover = load_data()
+theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_liquidity_raw, df_turnover = load_data()
 
 theme = theme_config.get("theme", {}) if isinstance(theme_config, dict) else {}
 background_color = theme.get("backgroundColor", "#FFFFFF")
@@ -454,36 +566,33 @@ ytd_mask = (df_quarters['YEARREPORT'] == target_year) & (df_quarters['LENGTHREPO
 ytd_totals = collect_totals(df_quarters, ytd_mask)
 
 # Prepare market turnover metrics by quarter
-df_index = df_index_raw.copy()
-if 'COMGROUPCODE' in df_index.columns:
-    df_index = df_index[df_index['COMGROUPCODE'] == 'VNINDEX']
-df_index['TRADINGDATE'] = pd.to_datetime(df_index['TRADINGDATE'], errors='coerce')
-df_index = df_index.dropna(subset=['TRADINGDATE'])
+df_liquidity = df_liquidity_raw.copy()
 
-if not df_index.empty and 'TOTALVALUE' in df_index.columns:
-    df_index['QuarterPeriod'] = df_index['TRADINGDATE'].dt.to_period('Q')
-    quarter_stats_df = df_index.groupby('QuarterPeriod').agg(
-        total_turnover=('TOTALVALUE', 'sum'),
-        trading_days=('TRADINGDATE', 'nunique')
-    ).reset_index()
-    quarter_stats_df['Year'] = quarter_stats_df['QuarterPeriod'].dt.year
-    quarter_stats_df['Quarter'] = quarter_stats_df['QuarterPeriod'].dt.quarter
-    quarter_stats_df['avg_daily_bn'] = quarter_stats_df.apply(
-        lambda row: (row['total_turnover'] / row['trading_days'] / 1e9)
-        if row['trading_days'] else np.nan,
-        axis=1
-    )
+if not df_liquidity.empty:
+    required_cols = {'Year', 'Quarter', 'Avg Daily Turnover (B VND)', 'Trading Days'}
+    if not required_cols.issubset(df_liquidity.columns):
+        df_liquidity = pd.DataFrame(columns=['Year', 'Quarter', 'Avg Daily Turnover (B VND)', 'Trading Days'])
 else:
-    quarter_stats_df = pd.DataFrame(columns=['Year', 'Quarter', 'total_turnover', 'trading_days', 'avg_daily_bn'])
+    df_liquidity = pd.DataFrame(columns=['Year', 'Quarter', 'Avg Daily Turnover (B VND)', 'Trading Days'])
 
-quarter_stats_lookup = {
-    (int(row['Year']), int(row['Quarter'])): {
-        'total_turnover': float(row['total_turnover']) if not pd.isna(row['total_turnover']) else None,
-        'trading_days': int(row['trading_days']) if not pd.isna(row['trading_days']) else None,
-        'avg_daily_bn': float(row['avg_daily_bn']) if not pd.isna(row['avg_daily_bn']) else None,
+def _compute_total_turnover(row: pd.Series) -> float | None:
+    if pd.isna(row.get('Avg Daily Turnover (B VND)')) or pd.isna(row.get('Trading Days')):
+        return None
+    return float(row['Avg Daily Turnover (B VND)']) * float(row['Trading Days']) * 1e9
+
+quarter_stats_lookup = {}
+for _, liquidity_row in df_liquidity.iterrows():
+    year = int(liquidity_row['Year'])
+    quarter = int(liquidity_row['Quarter'])
+    avg_daily_bn = float(liquidity_row['Avg Daily Turnover (B VND)']) if pd.notna(liquidity_row['Avg Daily Turnover (B VND)']) else None
+    trading_days = int(liquidity_row['Trading Days']) if pd.notna(liquidity_row['Trading Days']) else None
+    total_turnover = _compute_total_turnover(liquidity_row)
+
+    quarter_stats_lookup[(year, quarter)] = {
+        'total_turnover': total_turnover,
+        'trading_days': trading_days,
+        'avg_daily_bn': avg_daily_bn,
     }
-    for _, row in quarter_stats_df.iterrows()
-}
 
 turnover_share_lookup = {}
 if not df_turnover.empty:
