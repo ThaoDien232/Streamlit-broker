@@ -114,6 +114,12 @@ def load_data():
         df_forecast['VALUE'] = pd.to_numeric(df_forecast['VALUE'], errors='coerce')
 
     df_index = _safe_read_csv('sql/INDEX.csv', parse_dates=['TRADINGDATE'])
+    if 'TRADINGDATE' in df_index.columns:
+        df_index['TRADINGDATE'] = pd.to_datetime(df_index['TRADINGDATE'], errors='coerce')
+        df_index = df_index.dropna(subset=['TRADINGDATE'])
+    else:
+        df_index = pd.DataFrame(columns=['TRADINGDATE'])
+
     df_turnover = _safe_read_excel('sql/turnover.xlsx')
 
     return theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_index, df_turnover
