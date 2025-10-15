@@ -7,14 +7,14 @@ Categories:
 - AFS (Available for Sale) - Long-term holdings at fair value through OCI
 - HTM (Held to Maturity) - Investments held to maturity at amortized cost
 
-Based on DATABASE_SCHEMA.md lines 413-453 (7.x and 8.x series KEYCODEs)
+Based on DATABASE_SCHEMA_1.md lines 635-677 (7.x and 8.x series KEYCODEs)
 """
 
 import pandas as pd
 from typing import Dict, List, Tuple, Optional
 
 # ============================================================================
-# INVESTMENT CATEGORY MAPPING (from DATABASE_SCHEMA.md)
+# INVESTMENT CATEGORY MAPPING (from DATABASE_SCHEMA_1.md)
 # ============================================================================
 
 # Maps KEYCODE to (Category, Instrument Type, Display Name, Valuation Basis)

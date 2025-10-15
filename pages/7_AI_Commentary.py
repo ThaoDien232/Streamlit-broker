@@ -73,18 +73,18 @@ def calculate_financial_metrics(ticker_data, selected_quarter, ticker):
 
     # Key financial metrics to extract using CALC statement type and METRIC_CODE (like Historical page)
     key_metrics = {
-        'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
-        'IB Income': 'NET_IB_INCOME',
-        'Margin Income': 'MARGIN_LENDING_INCOME',  # Correct METRIC_CODE for margin lending income
-        'Investment Income': 'NET_INVESTMENT_INCOME',
-        'Other Incomes': 'NET_OTHER_INCOME',
+        'Net Brokerage Income': 'Net_Brokerage_Income',
+        'IB Income': 'Net_IB_Income',
+        'Margin Income': 'Net_Margin_lending_Income',  # Correct METRIC_CODE for margin lending income
+        'Investment Income': 'Net_investment_income',
+        'Other Incomes': 'Net_Other_Income',
         'Total Operating Income': 'Total_Operating_Income',  # Total operating income
         'PBT': 'PBT',  # KEYCODE in database
         'NPAT': 'NPAT',  # KEYCODE in database
         'SG&A': 'SG_A',  # Selling, General & Administrative expenses
         'Interest Expense': 'Interest_Expense',  # Interest expense
         'Borrowing Balance': 'Borrowing_Balance',  # Total borrowing
-        'Margin Balance': 'MARGIN_BALANCE',
+        'Margin Balance': 'Margin_Lending_book',
         'ROE': 'ROE',  # Use existing ROE calculation from CSV
         'CIR': 'CIR',  # Cost-to-Income Ratio (calculated)
         'Interest Rate': 'Interest_Rate'  # Interest rate (calculated)
@@ -256,7 +256,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 else:
                     # Need to fetch if not already fetched
                     if margin_balance_value is None:
-                        margin_balance_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'MARGIN_BALANCE')
+                        margin_balance_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Margin_Lending_book')
                     if total_equity_value is None:
                         total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'BS.142')
 
@@ -270,8 +270,8 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
             if metric_name == 'CIR':
                 # Calculate CIR = SG&A / (Total Operating Income - Investment Income)
                 sga = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'SG_A')
-                total_op_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'TOTAL_OPERATING_INCOME')
-                investment_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'NET_INVESTMENT_INCOME')
+                total_op_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Total_Operating_Income')
+                investment_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Net_investment_income')
 
                 denominator = total_op_income - investment_income
                 if denominator and denominator != 0:
@@ -367,7 +367,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
 
             if metric_name == 'Net Brokerage Fee':
                 # Calculate Net Brokerage Fee = Net Brokerage Income / Trading Value (in basis points)
-                net_brokerage_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'NET_BROKERAGE_INCOME')
+                net_brokerage_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Net_Brokerage_Income')
                 institution_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
                 investor_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Investor_shares_trading_value')
                 total_trading_value = institution_shares + investor_shares
@@ -381,18 +381,18 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 continue
 
             metric_code = {
-                'Net Brokerage Income': 'NET_BROKERAGE_INCOME',
-                'IB Income': 'NET_IB_INCOME',
-                'Margin Income': 'MARGIN_LENDING_INCOME',  # Correct METRIC_CODE for margin lending income
-                'Investment Income': 'NET_INVESTMENT_INCOME',
-                'Other Incomes': 'NET_OTHER_INCOME',
+                'Net Brokerage Income': 'Net_Brokerage_Income',
+                'IB Income': 'Net_IB_Income',
+                'Margin Income': 'Net_Margin_lending_Income',  # Correct METRIC_CODE for margin lending income
+                'Investment Income': 'Net_investment_income',
+                'Other Incomes': 'Net_Other_Income',
                 'Total Operating Income': 'Total_Operating_Income',
                 'PBT': 'PBT',  # KEYCODE in database
                 'NPAT': 'NPAT',  # KEYCODE in database
                 'SG&A': 'SG_A',
                 'Interest Expense': 'Interest_Expense',
                 'Borrowing Balance': 'Borrowing_Balance',
-                'Margin Balance': 'MARGIN_BALANCE',
+                'Margin Balance': 'Margin_Lending_book',
                 'ROE': 'ROE',
                 'CIR': 'CIR',
                 'Interest Rate': 'Interest_Rate'

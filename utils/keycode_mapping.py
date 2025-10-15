@@ -1,6 +1,6 @@
 """
 KEYCODE Mapping between our CSV format and Dragon Capital database format.
-Based on DATABASE_SCHEMA.md documentation.
+Based on DATABASE_SCHEMA_1.md documentation.
 """
 
 # ============================================================================
@@ -14,7 +14,7 @@ METRIC_TO_DB_KEYCODE = {
     'NET_IB_INCOME': 'Net_IB_Income',  # Fixed: maps to itself (uppercase)
     'NET_TRADING_INCOME': 'NET_TRADING_INCOME',  # Fixed: maps to itself (uppercase)
     'NET_INVESTMENT_INCOME': 'Net_investment_income',  # Fixed: maps to itself (uppercase)
-    'MARGIN_LENDING_INCOME': 'Net_Margin_lending_Income',  # DATABASE_SCHEMA.md line 464: actual DB keycode
+    'MARGIN_LENDING_INCOME': 'Net_Margin_lending_Income',  # DATABASE_SCHEMA_1.md line 693: actual DB keycode
     'NET_OTHER_OP_INCOME': 'NET_OTHER_OP_INCOME',  # Fixed: maps to itself (uppercase)
     'NET_OTHER_INCOME': 'Net_Other_Income',
     'FEE_INCOME': 'Net_Fee_Income',
@@ -44,19 +44,20 @@ METRIC_TO_DB_KEYCODE = {
     'TOTAL_ASSETS': 'BS.92',  # TOTAL ASSETS
     'TOTAL_EQUITY': 'BS.142',  # OWNER'S EQUITY
 
-    # Trading Values (Note items - NOS101-110 section per DATABASE_SCHEMA.md lines 403-409)
+    # Trading Values (Note items - NOS101-110 section per DATABASE_SCHEMA_1.md)
     # KEYCODE column shows actual database values (descriptive names, not NOS codes)
     'INSTITUTION_SHARES_TRADING_VALUE': 'Institution_shares_trading_value',
     'INSTITUTION_BOND_TRADING_VALUE': 'Institution_bond_trading_value',
     'INVESTOR_SHARES_TRADING_VALUE': 'Investor_shares_trading_value',
     'INVESTOR_BOND_TRADING_VALUE': 'Investor_bond_trading_value',
 
-    # Calculated Ratios - These need to be calculated (not stored in database)
-    'ROE': None,  # Calculate: NPAT / TOTAL_EQUITY * 100 * 4 (annualized)
-    'ROA': None,  # Calculate: NPAT / TOTAL_ASSETS * 100 * 4 (annualized)
-    'INTEREST_RATE': None,  # Calculate: INTEREST_EXPENSE / AVG_BORROWING * 4 (annualized)
-    'NET_BROKERAGE_FEE': None,  # Calculate: NET_BROKERAGE_INCOME / TRADING_VALUES * 10000 (basis points)
-    'MARGIN_LENDING_RATE': None,  # Calculate: MARGIN_LENDING_INCOME / AVG_MARGIN_BALANCE * 100 (annualized)
+    # Ratio Metrics - Now available directly in database (DATABASE_SCHEMA_1.md lines 707-714)
+    'ROE': 'ROE',  # Return on Equity (annualized)
+    'ROA': 'ROA',  # Return on Assets (annualized)
+    'INTEREST_RATE': 'INTEREST_RATE',  # Borrowing Interest Rate (annualized)
+    'NET_BROKERAGE_FEE': 'NET_BROKERAGE_FEE',  # Net Brokerage Fee (bps)
+    'MARGIN_LENDING_RATE': 'MARGIN_LENDING_RATE',  # Margin Lending Rate (annualized)
+    'MARGIN_EQUITY_RATIO': 'MARGIN_EQUITY_RATIO',  # Margin to Equity Ratio
 }
 
 # ============================================================================
@@ -125,43 +126,6 @@ PORTFOLIO_KEYCODES = {
 }
 
 # ============================================================================
-# METRICS REQUIRING CALCULATION (not in database)
-# ============================================================================
-
-CALCULATED_METRICS = {
-    'ROE': {
-        'formula': 'NPAT / TOTAL_EQUITY * 100',
-        'components': ['NPAT', 'TOTAL_EQUITY'],
-        'annualize_quarterly': True,
-    },
-    'ROA': {
-        'formula': 'NPAT / TOTAL_ASSETS * 100',
-        'components': ['NPAT', 'TOTAL_ASSETS'],
-        'annualize_quarterly': True,
-    },
-    'INTEREST_RATE': {
-        'formula': 'INTEREST_EXPENSE / AVG_BORROWING_BALANCE',
-        'components': ['INTEREST_EXPENSE', 'BORROWING_BALANCE'],
-        'annualize_quarterly': True,
-    },
-    'MARGIN_EQUITY_RATIO': {
-        'formula': 'MARGIN_BALANCE / TOTAL_EQUITY * 100',
-        'components': ['MARGIN_BALANCE', 'TOTAL_EQUITY'],
-        'annualize_quarterly': False,
-    },
-    'NET_BROKERAGE_FEE': {
-        'formula': 'NET_BROKERAGE_INCOME / (INSTITUTION_SHARES_TRADING_VALUE + INVESTOR_SHARES_TRADING_VALUE) * 10000',
-        'components': ['NET_BROKERAGE_INCOME', 'INSTITUTION_SHARES_TRADING_VALUE', 'INVESTOR_SHARES_TRADING_VALUE'],
-        'annualize_quarterly': False,
-    },
-    'MARGIN_LENDING_RATE': {
-        'formula': 'MARGIN_LENDING_INCOME / AVG_MARGIN_BALANCE * 100',
-        'components': ['MARGIN_LENDING_INCOME', 'MARGIN_BALANCE'],
-        'annualize_quarterly': True,
-    }
-}
-
-# ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
@@ -173,7 +137,7 @@ def get_db_keycode(metric_code: str) -> str:
         metric_code: Our format (e.g., 'NET_BROKERAGE_INCOME')
 
     Returns:
-        Database KEYCODE (e.g., 'Net_Brokerage_Income') or None if needs calculation
+        Database KEYCODE (e.g., 'Net_Brokerage_Income')
     """
     return METRIC_TO_DB_KEYCODE.get(metric_code)
 
@@ -188,28 +152,3 @@ def get_metric_code(db_keycode: str) -> str:
         Our METRIC_CODE (e.g., 'NET_BROKERAGE_INCOME')
     """
     return DB_KEYCODE_TO_METRIC.get(db_keycode)
-
-def needs_calculation(metric_code: str) -> bool:
-    """
-    Check if a metric needs to be calculated (not available in database).
-
-    Args:
-        metric_code: Our METRIC_CODE
-
-    Returns:
-        True if metric needs calculation, False if available in database
-    """
-    db_keycode = METRIC_TO_DB_KEYCODE.get(metric_code)
-    return db_keycode is None or metric_code in CALCULATED_METRICS
-
-def get_calculation_formula(metric_code: str) -> dict:
-    """
-    Get calculation formula for a metric.
-
-    Args:
-        metric_code: Our METRIC_CODE
-
-    Returns:
-        Dictionary with formula details, or None if not a calculated metric
-    """
-    return CALCULATED_METRICS.get(metric_code)

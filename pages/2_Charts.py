@@ -29,10 +29,10 @@ def load_filtered_data(tickers, metrics, years, quarters):
     # If calculated metrics are requested, load their base components
     metrics_to_load = list(metrics)
 
-    if 'TOTAL_OPERATING_INCOME' in metrics:
+    if 'Total_Operating_Income' in metrics:
         # TOI = Fee Income + Capital Income (6 components total)
-        toi_components = ['NET_BROKERAGE_INCOME', 'NET_IB_INCOME', 'NET_OTHER_OP_INCOME',
-                         'NET_TRADING_INCOME', 'INTEREST_INCOME', 'MARGIN_LENDING_INCOME']
+        toi_components = ['Net_Brokerage_Income', 'Net_IB_Income', 'Net_other_operating_income',
+                         'Net_Trading_Income', 'Net_Interest_Income', 'Net_Margin_lending_Income']
         metrics_to_load.extend([m for m in toi_components if m not in metrics_to_load])
 
     df = load_filtered_brokerage_data(
@@ -138,21 +138,21 @@ def get_recent_market_share_periods(count: int) -> list[tuple[int, int]]:
 def get_metric_display_name(metric_code):
     """Convert metric code to display name"""
     metric_names = {
-        'NET_BROKERAGE_INCOME': 'Brokerage Income',
-        'NET_TRADING_INCOME': 'Trading Income',
-        'INTEREST_INCOME': 'Interest Income',
-        'NET_INVESTMENT_INCOME': 'Investment Income',
-        'FEE_INCOME': 'Fee Income',
-        'CAPITAL_INCOME': 'Capital Income',
-        'MARGIN_BALANCE': 'Margin Balance',
-        'TOTAL_OPERATING_INCOME': 'Total Operating Income',
-        'NET_IB_INCOME': 'IB Income',
-        'NET_OTHER_OP_INCOME': 'Other Income',
-        'BORROWING_BALANCE': 'Borrowing Balance',
+        'Net_Brokerage_Income': 'Brokerage Income',
+        'Net_Trading_Income': 'Trading Income',
+        'Net_Interest_Income': 'Interest Income',
+        'Net_investment_income': 'Investment Income',
+        'Net_Fee_Income': 'Fee Income',
+        'Net_Capital_Income': 'Capital Income',
+        'Margin_Lending_book': 'Margin Balance',
+        'Total_Operating_Income': 'Total Operating Income',
+        'Net_IB_Income': 'IB Income',
+        'Net_other_operating_income': 'Other Income',
+        'Borrowing_Balance': 'Borrowing Balance',
         'PBT': 'PBT',
         'NPAT': 'NPAT',
         'SGA': 'SG&A',
-        'MARGIN_LENDING_INCOME': 'Margin Lending Income',
+        'Net_Margin_lending_Income': 'Margin Lending Income',
         'ROE': 'ROE',
         'ROA': 'ROA',
         'INTEREST_RATE': 'Interest Rate',
@@ -203,12 +203,12 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
     # Capital Income = Net Trading + Interest + Margin Lending
     # So the 6 components that sum to 100% of TOI are:
     toi_components = {
-        'Brokerage Income': 'NET_BROKERAGE_INCOME',
-        'Margin Lending Income': 'MARGIN_LENDING_INCOME',
-        'Trading Income': 'NET_TRADING_INCOME',
-        'Interest Income': 'INTEREST_INCOME',
-        'IB Income': 'NET_IB_INCOME',
-        'Other Operating Income': 'NET_OTHER_OP_INCOME'
+        'Brokerage Income': 'Net_Brokerage_Income',
+        'Margin Lending Income': 'Net_Margin_lending_Income',
+        'Trading Income': 'Net_Trading_Income',
+        'Interest Income': 'Net_Interest_Income',
+        'IB Income': 'Net_IB_Income',
+        'Other Operating Income': 'Net_other_operating_income'
     }
 
     # Collect data for each broker
@@ -217,7 +217,7 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
     for broker in selected_brokers:
         # Get TOI values
         toi_data = filtered_df[(filtered_df['TICKER'] == broker) &
-                               (filtered_df['METRIC_CODE'] == 'TOTAL_OPERATING_INCOME')].copy()
+                               (filtered_df['METRIC_CODE'] == 'Total_Operating_Income')].copy()
 
         if toi_data.empty:
             continue
@@ -366,21 +366,21 @@ st.sidebar.header("Chart Filters")
 
 # Allowed metrics (all metrics available - no need to check database)
 allowed_metrics = [
-    'NET_BROKERAGE_INCOME',
-    'NET_TRADING_INCOME',
-    'INTEREST_INCOME',
-    'NET_INVESTMENT_INCOME',
-    'FEE_INCOME',
-    'CAPITAL_INCOME',
-    'MARGIN_BALANCE',
-    'TOTAL_OPERATING_INCOME',
-    'NET_IB_INCOME',
-    'NET_OTHER_OP_INCOME',
-    'BORROWING_BALANCE',
+    'Net_Brokerage_Income',
+    'Net_Trading_Income',
+    'Net_Interest_Income',
+    'Net_investment_income',
+    'Net_Fee_Income',
+    'Net_Capital_Income',
+    'Margin_Lending_book',
+    'Total_Operating_Income',
+    'Net_IB_Income',
+    'Net_other_operating_income',
+    'Borrowing_Balance',
     'PBT',  # Changed from full name
     'NPAT',  # Changed from full name
     'SGA',
-    'MARGIN_LENDING_INCOME',
+    'Net_Margin_lending_Income',
     'ROE',
     'ROA',
     'INTEREST_RATE',
@@ -417,7 +417,7 @@ selected_brokers = st.sidebar.multiselect(
 )
 
 # Fixed default charts (always displayed)
-fixed_charts = ['TOTAL_OPERATING_INCOME', 'PBT', 'ROE', 'MARGIN_LENDING_RATE', 'INTEREST_RATE', 'NET_BROKERAGE_FEE']
+fixed_charts = ['Total_Operating_Income', 'PBT', 'ROE', 'MARGIN_LENDING_RATE', 'INTEREST_RATE', 'NET_BROKERAGE_FEE']
 
 # Additional metrics selection - NOW ALWAYS AVAILABLE
 additional_metrics = st.sidebar.multiselect(
@@ -490,7 +490,7 @@ with tab1:
             chart_idx = 0
             for metric in selected_metrics:
                 # Special handling for TOI Structure chart
-                if metric == 'TOTAL_OPERATING_INCOME':
+                if metric == 'Total_Operating_Income':
                     st.subheader("Total Operating Income Structure")
                     toi_fig = create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type)
                     if toi_fig:

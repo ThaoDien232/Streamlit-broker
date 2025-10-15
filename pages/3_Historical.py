@@ -18,8 +18,8 @@ def calculate_net_brokerage_fee(df):
 
         # Try both METRIC_CODE and KEYCODE for calculated metrics
         net_brok = period_data[
-            (period_data['METRIC_CODE'] == 'NET_BROKERAGE_INCOME') |
-            (period_data['KEYCODE'] == 'NET_BROKERAGE_INCOME')
+            (period_data['METRIC_CODE'] == 'Net_Brokerage_Income') |
+            (period_data['KEYCODE'] == 'Net_Brokerage_Income')
         ]
         nos101 = period_data[period_data['KEYCODE'] == 'NOS101']
         nos109 = period_data[period_data['KEYCODE'] == 'NOS109']
@@ -55,8 +55,8 @@ def calculate_margin_lending_rate(df):
         margin_income_row = df[
             (df['YEARREPORT'] == year) &
             (df['LENGTHREPORT'] == quarter) &
-            ((df['METRIC_CODE'] == 'MARGIN_LENDING_INCOME') |
-             (df['KEYCODE'] == 'MARGIN_LENDING_INCOME'))
+            ((df['METRIC_CODE'] == 'Net_Margin_lending_Income') |
+             (df['KEYCODE'] == 'Net_Margin_lending_Income'))
         ]
 
         if margin_income_row.empty:
@@ -76,8 +76,8 @@ def calculate_margin_lending_rate(df):
             margin_book_row = df[
                 (df['YEARREPORT'] == y) &
                 (df['LENGTHREPORT'] == q_num) &
-                ((df['METRIC_CODE'] == 'MARGIN_BALANCE') |
-                 (df['KEYCODE'] == 'MARGIN_BALANCE'))
+                ((df['METRIC_CODE'] == 'Margin_Lending_book') |
+                 (df['KEYCODE'] == 'Margin_Lending_book'))
             ]
 
             if not margin_book_row.empty:
@@ -199,17 +199,17 @@ def display_income_statement(df, ticker, periods, display_mode):
     
     # Define key calculated IS metrics to display
     is_calc_metrics = [
-        ('NET_BROKERAGE_INCOME', 'Net Brokerage Income'),
+        ('Net_Brokerage_Income', 'Net Brokerage Income'),
         ('NET_BROKERAGE_FEE', 'Net Brokerage Fee (bps)'),
-        ('NET_IB_INCOME', 'Net IB Income'),
-        ('FEE_INCOME', 'Fee Income'),
-        ('NET_TRADING_INCOME', 'Net Trading Income'),
-        ('INTEREST_INCOME', 'Interest Income'),
-        ('NET_INVESTMENT_INCOME', 'Net Investment Income'),
-        ('MARGIN_LENDING_INCOME', 'Margin Lending Income'),
+        ('Net_IB_Income', 'Net IB Income'),
+        ('Net_Fee_Income', 'Fee Income'),
+        ('Net_Trading_Income', 'Net Trading Income'),
+        ('Net_Interest_Income', 'Interest Income'),
+        ('Net_investment_income', 'Net Investment Income'),
+        ('Net_Margin_lending_Income', 'Margin Lending Income'),
         ('MARGIN_LENDING_RATE', 'Margin Lending Rate (%)'),
-        ('CAPITAL_INCOME', 'Capital Income'),
-        ('TOTAL_OPERATING_INCOME', 'Total Operating Income'),
+        ('Net_Capital_Income', 'Capital Income'),
+        ('Total_Operating_Income', 'Total Operating Income'),
         ('SGA', 'SG&A'),
         ('INTEREST_EXPENSE', 'Interest Expense'),
         ('PBT', 'Profit Before Tax'),
@@ -322,8 +322,8 @@ def display_balance_sheet(df, ticker, periods, display_mode):
     
     # Define key calculated BS metrics to display
     bs_calc_metrics = [
-        ('MARGIN_BALANCE', 'Margin Balance'),
-        ('BORROWING_BALANCE', 'Borrowing Balance'),
+        ('Margin_Lending_book', 'Margin Balance'),
+        ('Borrowing_Balance', 'Borrowing Balance'),
     ]
     
     if display_mode == "Absolute Values":
@@ -514,19 +514,6 @@ def display_investment_book(df, broker, periods):
             mime="text/csv",
             key=f"download_inv_{broker}"
         )
-
-    # Add explanatory note
-    with st.expander("ℹ️ Understanding Investment Categories"):
-        st.markdown("""
-        **FVTPL** (Fair Value Through Profit or Loss): Trading securities held for short-term profit
-
-        **AFS** (Available-for-Sale): Long-term financial assets measured at fair value through OCI
-
-        **HTM** (Held-to-Maturity): Fixed maturity investments measured at amortized cost
-
-        **Values shown**: Market Value (MV) in VND Billions for the most recent 6 quarters
-        """)
-
 
 def main():
     # Header with reload button
