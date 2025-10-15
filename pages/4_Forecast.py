@@ -485,6 +485,8 @@ def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None]
         return None, None
 
     tickers = quarter_holdings['Ticker'].tolist()
+    quarter_holdings['Ticker'] = quarter_holdings['Ticker'].astype(str).str.strip().str.upper()
+    tickers = quarter_holdings['Ticker'].tolist()
     quarter_prices = get_quarter_end_prices(tickers, selected_quarter)
     current_prices = get_current_prices(tickers)
 
