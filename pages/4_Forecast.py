@@ -1,5 +1,6 @@
 import math
 import re
+from pathlib import Path
 from datetime import datetime
 
 import numpy as np
@@ -86,20 +87,27 @@ def load_data():
             )
             df_bs_quarterly.columns.name = None
 
+    forecast_query = """
+        SELECT KEYCODE, KEYCODENAME, ORGANCODE, TICKER, DATE, VALUE, RATING, FORECASTDATE
+        FROM SIL.W_F_IRIS_FORECAST
+    """
+
     try:
-        df_forecast = run_query(
-            """
-            SELECT KEYCODE, KEYCODENAME, ORGANCODE, TICKER, DATE, VALUE, RATING, FORECASTDATE
-            FROM SIL.W_F_IRIS_FORECAST
-            """
-        )
+        df_forecast = run_query(forecast_query)
     except Exception as exc:
-        st.error(f"Unable to load forecast data from database: {exc}")
-        st.stop()
+        st.warning(f"Database forecast query failed ({exc}); falling back to local CSV if available.")
+        df_forecast = pd.DataFrame()
 
     if df_forecast.empty:
-        st.warning("No forecast data returned from database. Proceeding with empty forecast table.")
-    else:
+        csv_path = Path('sql/FORECAST.csv')
+        if csv_path.exists():
+            st.info("Using local 'sql/FORECAST.csv' for forecast data.")
+            df_forecast = pd.read_csv(csv_path, low_memory=False)
+        else:
+            st.warning("Forecast data unavailable from database and local CSV not found. Proceeding without forecasts.")
+            df_forecast = pd.DataFrame(columns=['KEYCODE', 'KEYCODENAME', 'ORGANCODE', 'TICKER', 'DATE', 'VALUE', 'RATING', 'FORECASTDATE'])
+
+    if not df_forecast.empty:
         df_forecast['DATE'] = pd.to_numeric(df_forecast['DATE'], errors='coerce')
         df_forecast = df_forecast.dropna(subset=['DATE'])
         df_forecast['DATE'] = df_forecast['DATE'].astype(int)
