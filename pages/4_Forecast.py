@@ -172,13 +172,23 @@ SEGMENTS = [
 ]
 
 
+def _normalize_name(name: str) -> str:
+    return str(name).replace('_', '').replace('-', '').lower().strip()
+
+
 def sum_columns(df: pd.DataFrame, columns):
     values = pd.Series(0.0, index=df.index, dtype=float)
     if isinstance(columns, str):
         columns = [columns]
+
+    available_columns = {col: _normalize_name(col) for col in df.columns}
+
     for col in columns:
-        if col in df.columns:
-            values = values.add(pd.to_numeric(df[col], errors='coerce').fillna(0.0), fill_value=0.0)
+        target = _normalize_name(col)
+        matches = [name for name, norm in available_columns.items() if norm == target]
+        for match in matches:
+            values = values.add(pd.to_numeric(df[match], errors='coerce').fillna(0.0), fill_value=0.0)
+
     return values
 
 
@@ -927,11 +937,14 @@ def extract_is_value(year: int, quarter: int, codes: list[str]) -> float | None:
         return None
 
     row = subset.iloc[0]
+    normalized_map = { _normalize_name(col): col for col in row.index }
     total = 0.0
     found = False
     for code in codes:
-        if code in row:
-            value = pd.to_numeric(row[code], errors='coerce')
+        norm = _normalize_name(code)
+        match = normalized_map.get(norm)
+        if match and match in row:
+            value = pd.to_numeric(row[match], errors='coerce')
             if pd.notnull(value):
                 total += float(value)
                 found = True
@@ -961,7 +974,7 @@ def extract_bs_value(year: int, quarter: int, codes: list[str]) -> float | None:
     return total if found else None
 
 
-MARGIN_INCOME_CODES = ['IS.7', 'IS.30']
+MARGIN_INCOME_CODES = ['Net_Margin_lending_Income', 'IS.7', 'IS.30']
 INTEREST_EXPENSE_CODES = ['IS.51']
 MARGIN_BALANCE_CODES = ['BS.8']
 BORROWING_BALANCE_CODES = ['BS.95', 'BS.100', 'BS.122', 'BS.127']
