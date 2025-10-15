@@ -494,15 +494,34 @@ def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None]
 
     for _, row in quarter_holdings.iterrows():
         ticker = row['Ticker']
-        value = float(row['FVTPL value'])
+        raw_value = float(row['FVTPL value'])
         quarter_price = quarter_prices.get(ticker)
         current_price = current_prices.get(ticker)
 
-        if quarter_price in (None, 0) or current_price in (None, 0) or value == 0:
+        if math.isnan(raw_value):
             continue
 
-        volume = value / quarter_price
-        profit = volume * (current_price - quarter_price)
+        try:
+            quarter_price_value = float(quarter_price)
+            current_price_value = float(current_price)
+        except (TypeError, ValueError):
+            continue
+
+        if (
+            quarter_price_value == 0
+            or current_price_value == 0
+            or math.isnan(quarter_price_value)
+            or math.isnan(current_price_value)
+            or raw_value == 0
+        ):
+            continue
+
+        value_vnd = raw_value
+        if abs(raw_value) < 1e7:
+            value_vnd = raw_value * 1e9
+
+        volume = value_vnd / quarter_price_value
+        profit = volume * (current_price_value - quarter_price_value)
         profit_total += profit
 
     if profit_total == 0.0:
