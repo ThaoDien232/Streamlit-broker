@@ -54,10 +54,7 @@ def load_data():
         base_columns = ['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'STARTDATE', 'ENDDATE', 'QUARTER_LABEL']
         df_metrics = df_metrics.drop_duplicates(subset=base_columns + ['KEYCODE'], keep='last')
 
-        required_is_codes = {
-            'PBT',
-            'NPAT',
-        }
+        required_is_codes = {'PBT', 'NPAT'}
         for segment in SEGMENTS:
             values = segment.get('columns') or []
             if isinstance(values, str):
@@ -146,7 +143,7 @@ SEGMENTS = [
         "key": "margin_income",
         "label": "Margin Income",
         "forecast_key": "Net_Margin_lending_Income",
-        "columns": ['Net_Margin_lending_Income'],
+        "columns": ['Net_Margin_lending_Income', 'Net_Margin_Lending_Income'],
     },
     {
         "key": "investment_income",
@@ -175,35 +172,14 @@ SEGMENTS = [
 ]
 
 
-def sum_columns(df: pd.DataFrame, columns=None, alt_columns=None):
-    column_groups = []
-
-    if alt_columns:
-        if isinstance(alt_columns, str):
-            column_groups.append([alt_columns])
-        else:
-            column_groups.append(list(alt_columns))
-
-    if columns:
-        if isinstance(columns, str):
-            column_groups.append([columns])
-        else:
-            column_groups.append(list(columns))
-
-    if not column_groups:
-        return pd.Series(0.0, index=df.index, dtype=float)
-
-    for group in column_groups:
-        available = [col for col in group if col in df.columns]
-        if not available:
-            continue
-
-        values = pd.Series(0.0, index=df.index, dtype=float)
-        for col in available:
+def sum_columns(df: pd.DataFrame, columns):
+    values = pd.Series(0.0, index=df.index, dtype=float)
+    if isinstance(columns, str):
+        columns = [columns]
+    for col in columns:
+        if col in df.columns:
             values = values.add(pd.to_numeric(df[col], errors='coerce').fillna(0.0), fill_value=0.0)
-        return values
-
-    return pd.Series(0.0, index=df.index, dtype=float)
+    return values
 
 
 def prepare_quarter_metrics(df_is: pd.DataFrame, ticker: str) -> pd.DataFrame:
@@ -223,16 +199,10 @@ def prepare_quarter_metrics(df_is: pd.DataFrame, ticker: str) -> pd.DataFrame:
     df['ENDDATE'] = pd.to_datetime(df['ENDDATE'], errors='coerce')
 
     for segment in SEGMENTS:
-        df[segment['key']] = sum_columns(
-            df,
-            columns=segment.get('columns'),
-            alt_columns=segment.get('db_columns')
-        )
+        df[segment['key']] = sum_columns(df, segment.get('columns', []))
 
     if 'PBT' in df.columns:
         df['pbt'] = pd.to_numeric(df['PBT'], errors='coerce').fillna(0.0)
-    elif 'IS.65' in df.columns:
-        df['pbt'] = pd.to_numeric(df['IS.65'], errors='coerce').fillna(0.0)
     else:
         df['pbt'] = 0.0
 
