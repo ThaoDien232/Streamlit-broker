@@ -14,7 +14,7 @@ METRIC_TO_DB_KEYCODE = {
     'NET_IB_INCOME': 'Net_IB_Income',
     'NET_TRADING_INCOME': 'Net_Trading_Income',
     'NET_INVESTMENT_INCOME': 'Net_investment_income',
-    'MARGIN_LENDING_INCOME': 'MARGIN_LENDING_INCOME',  # Fixed: correct DB keycode
+    'NET_MARGIN_INCOME': 'Net_Margin_lending_Income',  # Fixed: correct DB keycode from DATABASE_SCHEMA.md line 464
     'NET_OTHER_OP_INCOME': 'Net_other_operating_income',
     'NET_OTHER_INCOME': 'Net_Other_Income',
     'FEE_INCOME': 'Net_Fee_Income',
@@ -155,8 +155,8 @@ CALCULATED_METRICS = {
         'annualize_quarterly': False,
     },
     'MARGIN_LENDING_RATE': {
-        'formula': 'MARGIN_LENDING_INCOME / AVG_MARGIN_BALANCE * 100',
-        'components': ['MARGIN_LENDING_INCOME', 'MARGIN_BALANCE'],
+        'formula': 'NET_MARGIN_INCOME / AVG_MARGIN_BALANCE * 100',
+        'components': ['NET_MARGIN_INCOME', 'MARGIN_BALANCE'],
         'annualize_quarterly': True,
     }
 }
