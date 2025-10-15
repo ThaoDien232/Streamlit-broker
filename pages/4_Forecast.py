@@ -54,7 +54,21 @@ def load_data():
         base_columns = ['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'STARTDATE', 'ENDDATE', 'QUARTER_LABEL']
         df_metrics = df_metrics.drop_duplicates(subset=base_columns + ['KEYCODE'], keep='last')
 
-        df_is = df_metrics[df_metrics['KEYCODE'].str.startswith('IS.')]
+        required_is_codes = {
+            'PBT',
+            'NPAT',
+        }
+        for segment in SEGMENTS:
+            values = segment.get('columns') or []
+            if isinstance(values, str):
+                required_is_codes.add(values)
+            else:
+                required_is_codes.update(values)
+
+        df_is = df_metrics[
+            df_metrics['KEYCODE'].str.startswith('IS.')
+            | df_metrics['KEYCODE'].isin(required_is_codes)
+        ]
         if df_is.empty:
             df_is_quarterly = pd.DataFrame(columns=base_columns)
         else:
