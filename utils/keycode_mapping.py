@@ -13,7 +13,7 @@ METRIC_TO_DB_KEYCODE = {
     'NET_BROKERAGE_INCOME': 'Net_Brokerage_Income',  # Fixed: maps to itself (uppercase) per yesterday's fix
     'NET_IB_INCOME': 'Net_IB_Income',  # Fixed: maps to itself (uppercase)
     'NET_TRADING_INCOME': 'NET_TRADING_INCOME',  # Fixed: maps to itself (uppercase)
-    'NET_INVESTMENT_INCOME': 'NET_INVESTMENT_INCOME',  # Fixed: maps to itself (uppercase)
+    'NET_INVESTMENT_INCOME': 'Net_investment_income',  # Fixed: maps to itself (uppercase)
     'MARGIN_LENDING_INCOME': 'Net_Margin_lending_Income',  # DATABASE_SCHEMA.md line 464: actual DB keycode
     'NET_OTHER_OP_INCOME': 'NET_OTHER_OP_INCOME',  # Fixed: maps to itself (uppercase)
     'NET_OTHER_INCOME': 'Net_Other_Income',
