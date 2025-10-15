@@ -416,7 +416,7 @@ selected_brokers = st.sidebar.multiselect(
     help="Brokers organized by tier: Top (SSI, VCI, VND, HCM, TCBS, VPBS, VPS) | Mid (MBS, VIX, SHS, BSI, FTS) | Regional (DSE, VDS, LPBS, Kafi, ACBS, OCBS, HDBS)"
 )
 
-# Fixed default charts (always displayed) - TOI Structure first
+# Fixed default charts (always displayed)
 fixed_charts = ['TOTAL_OPERATING_INCOME', 'PBT', 'ROE', 'MARGIN_LENDING_RATE', 'INTEREST_RATE', 'NET_BROKERAGE_FEE']
 
 # Additional metrics selection - NOW ALWAYS AVAILABLE
@@ -473,78 +473,6 @@ df_calc = load_filtered_data(
 # Create quarter labels if data loaded
 if not df_calc.empty:
     df_calc['Quarter_Label'] = df_calc.apply(create_quarter_label, axis=1)
-
-# DEBUG: Show component data for calculated metrics
-if not df_calc.empty and ('NET_BROKERAGE_FEE' in selected_metrics or 'MARGIN_LENDING_RATE' in selected_metrics):
-    with st.expander("🔍 Debug: Component Data for Calculated Metrics"):
-        st.write(f"**Total rows loaded:** {len(df_calc)}")
-        st.write(f"**Columns:** {list(df_calc.columns)}")
-
-        if 'NET_BROKERAGE_FEE' in selected_metrics:
-            st.subheader("Net Brokerage Fee Components")
-
-            # Check for NET_BROKERAGE_INCOME
-            if 'METRIC_CODE' in df_calc.columns:
-                net_brok_data = df_calc[df_calc['METRIC_CODE'] == 'NET_BROKERAGE_INCOME']
-            else:
-                net_brok_data = pd.DataFrame()
-
-            # Check for INSTITUTION_SHARES_TRADING_VALUE
-            inst_data = df_calc[df_calc['METRIC_CODE'] == 'INSTITUTION_SHARES_TRADING_VALUE']
-            st.write(f"**INSTITUTION_SHARES_TRADING_VALUE** rows found: {len(inst_data)}")
-            if not inst_data.empty:
-                st.dataframe(inst_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
-            else:
-                # Try with KEYCODE NOS101
-                inst_data_alt = df_calc[df_calc['KEYCODE'] == 'Institution_shares_trading_value']
-                st.write(f"**Institution_shares_trading_value (KEYCODE)** rows found: {len(inst_data_alt)}")
-                if not inst_data_alt.empty:
-                    st.dataframe(inst_data_alt[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'KEYCODE', 'VALUE', 'QUARTER_LABEL']].head(10))
-
-            # Check for INVESTOR_SHARES_TRADING_VALUE
-            inv_data = df_calc[df_calc['METRIC_CODE'] == 'INVESTOR_SHARES_TRADING_VALUE']
-            st.write(f"**INVESTOR_SHARES_TRADING_VALUE** rows found: {len(inv_data)}")
-            if not inv_data.empty:
-                st.dataframe(inv_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
-            else:
-                # Try with KEYCODE NOS109
-                inv_data_alt = df_calc[df_calc['KEYCODE'] == 'Investor_shares_trading_value']
-                st.write(f"**Investor_shares_trading_value (KEYCODE)** rows found: {len(inv_data_alt)}")
-                if not inv_data_alt.empty:
-                    st.dataframe(inv_data_alt[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'KEYCODE', 'VALUE', 'QUARTER_LABEL']].head(10))
-
-        if 'MARGIN_LENDING_RATE' in selected_metrics:
-            st.subheader("Margin Lending Rate Components")
-
-            # Check for MARGIN_LENDING_INCOME
-            margin_income_data = df_calc[df_calc['METRIC_CODE'] == 'MARGIN_LENDING_INCOME']
-            st.write(f"**MARGIN_LENDING_INCOME** rows found: {len(margin_income_data)}")
-            if not margin_income_data.empty:
-                st.dataframe(margin_income_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
-            else:
-                # Try with KEYCODE
-                margin_income_alt = df_calc[df_calc['KEYCODE'] == 'Net_Margin_lending_Income']
-                st.write(f"**Net_Margin_lending_Income (KEYCODE)** rows found: {len(margin_income_alt)}")
-                if not margin_income_alt.empty:
-                    st.dataframe(margin_income_alt[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'KEYCODE', 'VALUE', 'QUARTER_LABEL']].head(10))
-
-            # Check for MARGIN_BALANCE
-            margin_balance_data = df_calc[df_calc['METRIC_CODE'] == 'MARGIN_BALANCE']
-            st.write(f"**MARGIN_BALANCE** rows found: {len(margin_balance_data)}")
-            if not margin_balance_data.empty:
-                st.dataframe(margin_balance_data[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE', 'QUARTER_LABEL']].head(10))
-            else:
-                # Try with KEYCODE
-                margin_balance_alt = df_calc[df_calc['KEYCODE'] == 'Margin_Lending_book']
-                st.write(f"**Margin_Lending_book (KEYCODE)** rows found: {len(margin_balance_alt)}")
-                if not margin_balance_alt.empty:
-                    st.dataframe(margin_balance_alt[['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'KEYCODE', 'VALUE', 'QUARTER_LABEL']].head(10))
-
-        # Show all unique METRIC_CODEs in loaded data
-        st.subheader("All Loaded METRIC_CODEs")
-        unique_metrics = sorted(df_calc['METRIC_CODE'].unique())
-        st.write(f"Total unique metrics: {len(unique_metrics)}")
-        st.write(unique_metrics)
 
 # Create tabs for different sections
 tab1, tab2 = st.tabs(["📊 Financial Charts", "📈 Market Share Data"])
@@ -604,8 +532,13 @@ with tab1:
                                 broker_data_with_ma4 = calculate_ma4(filtered_df, metric, broker)
 
                                 # Check if this is ROE, ROA, or rate metrics (percentage metrics)
-                                if metric in ['ROE', 'ROA', 'INTEREST_RATE', 'MARGIN_LENDING_RATE']:
+                                if metric in ['INTEREST_RATE', 'MARGIN_LENDING_RATE']:
                                     broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce') * 100  # Convert to percentage
+                                    y_values = broker_data['DISPLAY_VALUE']
+                                    hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}}%<br><extra></extra>"
+                                
+                                if  metric in ['ROE', 'ROA']:
+                                    broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce')  # Convert to percentage
                                     y_values = broker_data['DISPLAY_VALUE']
                                     hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}}%<br><extra></extra>"
 
