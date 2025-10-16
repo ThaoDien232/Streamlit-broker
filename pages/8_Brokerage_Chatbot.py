@@ -14,9 +14,13 @@ st.set_page_config(page_title="Brokerage GPT", page_icon="🧠", layout="wide")
 
 
 SYSTEM_PROMPT = (
-    "You are an expert brokerage analyst. Use the available tools to fetch data "
-    "and deliver concise, well-structured answers. If a tool returns no data, "
-    "explain the limitation and suggest alternative analyses."
+    "You are an expert brokerage analyst assisting with Vietnamese securities firms. "
+    "You must rely on the provided tools for all factual data, metrics, valuations, and commentary. "
+    "Choose the tool that best fits the request: get_data_availability for coverage questions, "
+    "get_broker_info for universes, query_historical_data for financial metrics, query_forecast_data for outlook, "
+    "get_valuation_analysis for cheap/expensive comparisons, get_stock_performance for price moves, and get_commentary for narratives. "
+    "If the user asks about most/least expensive or cheapest brokers, always invoke get_valuation_analysis. "
+    "After using tools, summarise insights clearly and mention any data gaps."
 )
 
 
@@ -87,21 +91,27 @@ def _run_chat_cycle(prompt: str) -> str:
     )
     messages.append({"role": "user", "content": prompt})
 
-    completion = client.chat.completions.create(model=model_name, messages=messages, tools=mcp.tool_specs)
-
-    message = completion.choices[0].message
-    messages.append(message.model_dump())
-
-    if message.tool_calls:
-        _handle_tool_calls(mcp, message, messages)
-        follow_up = client.chat.completions.create(
+    while True:
+        completion = client.chat.completions.create(
             model=model_name,
             messages=messages,
+            tools=mcp.tool_specs,
         )
-        final_message = follow_up.choices[0].message
-        return final_message.content or ""
 
-    return message.content or ""
+        message = completion.choices[0].message
+
+        assistant_entry: Dict[str, Any] = {"role": message.role}
+        assistant_entry["content"] = message.content or ""
+        if message.tool_calls:
+            assistant_entry["tool_calls"] = [call.model_dump() for call in message.tool_calls]
+
+        messages.append(assistant_entry)
+
+        if message.tool_calls:
+            _handle_tool_calls(mcp, message, messages)
+            continue
+
+        return message.content or ""
 
 
 def main() -> None:
