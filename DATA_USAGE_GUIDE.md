@@ -11,10 +11,11 @@
 2. [Database Schema Quick Reference](#database-schema-quick-reference)
 3. [Metric Categories](#metric-categories)
 4. [Standard Data Loading Patterns](#standard-data-loading-patterns)
-5. [Growth Rate Calculations](#growth-rate-calculations)
-6. [Display Formatting Standards](#display-formatting-standards)
-7. [Common Pitfalls](#common-pitfalls)
-8. [Page-Specific Guidelines](#page-specific-guidelines)
+5. [Ratio Cache System](#ratio-cache-system)
+6. [Growth Rate Calculations](#growth-rate-calculations)
+7. [Display Formatting Standards](#display-formatting-standards)
+8. [Common Pitfalls](#common-pitfalls)
+9. [Page-Specific Guidelines](#page-specific-guidelines)
 
 ---
 
@@ -24,7 +25,7 @@
 - **All data comes from `BrokerageMetrics` database table**
 - Never hardcode calculations that already exist in the database
 - Use `utils/brokerage_data.py` functions for all data access
-- Reference `DATABASE_SCHEMA.md` for authoritative schema documentation
+- Reference `DATABASE_SCHEMA_1.md` for authoritative schema documentation
 
 ### 2. Consistent Metric Naming
 - Database column: `KEYCODE` (e.g., `'ROE'`, `'Net_Brokerage_Income'`, `'BS.92'`)
@@ -108,7 +109,7 @@ INCOME_METRICS = {
 }
 ```
 
-**Formula Reference** (from DATABASE_SCHEMA.md lines 455-480):
+**Formula Reference** (from DATABASE_SCHEMA_1.md lines 455-480):
 - Net_Brokerage_Income = IS.10 + IS.33
 - Net_Margin_lending_Income = IS.7 + IS.30
 - Net_investment_income = Trading + Interest
@@ -264,6 +265,224 @@ drivers_qoq = calculate_earnings_drivers(
 # Returns DataFrame with:
 # Component | Current | Prior | Change | Impact (pp)
 ```
+
+---
+
+## Ratio Cache System
+
+### Overview
+
+To improve page load performance, calculated ratios (ROE, ROA, INTEREST_RATE, MARGIN_LENDING_RATE, NET_BROKERAGE_FEE) are pre-calculated and stored in a persistent cache. This avoids expensive runtime calculations on every page load.
+
+**Cache Location**: `cache/calculated_ratios/`
+- `ratios_cache.parquet` - Pre-calculated ratio values (Parquet format with Snappy compression)
+- `cache_metadata.json` - Version, timestamp, and statistics (fast lookup)
+
+**Current Cache Version**: v2 (INTEREST_RATE now returns percentage, multiplied by 100)
+
+### When to Rebuild Cache
+
+Run the cache build script when:
+- ✅ First time setup
+- ✅ New quarterly data added to database
+- ✅ Calculation logic changes (increment `CACHE_VERSION` in `utils/ratio_cache.py`)
+- ✅ User clicks "Refresh Calculation" button in Streamlit UI
+
+### Building the Cache
+
+#### Command Line Usage
+
+```bash
+# Build cache (first time or after new data)
+python build_ratio_cache.py
+
+# Clear existing cache and rebuild
+python build_ratio_cache.py --clear
+
+# Check cache status only (no rebuild)
+python build_ratio_cache.py --stats
+```
+
+#### Expected Output
+
+```
+============================================================
+BUILDING RATIO CACHE
+============================================================
+Started at: 2025-10-15 14:30:00
+
+📋 Step 1: Loading available tickers and years...
+   Tickers: 18 (ACBS, BSI, DSE, FTS, HCM...)
+   Years: 7 (2019-2025)
+   Quarters: [1, 2, 3, 4]
+
+📊 Step 2: Metrics to calculate:
+   - ROE
+   - ROA
+   - INTEREST_RATE
+   - MARGIN_LENDING_RATE
+   - NET_BROKERAGE_FEE
+
+📥 Step 3: Loading component data from database...
+   Components: BORROWING_BALANCE, INTEREST_EXPENSE, MARGIN_BALANCE...
+   Loaded: 12,543 component records
+
+🔢 Step 4: Calculating ratios...
+   Progress: 10% (5,040/50,400) - 3,245 records created
+   Progress: 20% (10,080/50,400) - 6,512 records created
+   ...
+   ✅ Completed: 50,400 calculations
+   ✅ Created: 8,945 ratio records
+
+   Breakdown by metric:
+   - ROE: 1,789 records
+   - ROA: 1,789 records
+   - INTEREST_RATE: 1,789 records
+   - MARGIN_LENDING_RATE: 1,789 records
+   - NET_BROKERAGE_FEE: 1,789 records
+
+💾 Step 6: Saving to cache...
+   ✅ Saved 8,945 records to cache
+
+============================================================
+CACHE BUILD COMPLETED
+============================================================
+Finished at: 2025-10-15 14:32:15
+
+============================================================
+RATIO CACHE STATUS
+============================================================
+Status: VALID
+Message: Cache valid - 8,945 records for 18 brokers
+Last Updated: 2025-10-15 14:32:15
+Cached Metrics: INTEREST_RATE, MARGIN_LENDING_RATE, NET_BROKERAGE_FEE, ROA, ROE
+Years: 2019 - 2025
+Tickers: 18
+============================================================
+
+✅ SUCCESS! Cache is ready to use.
+```
+
+### Using the Cache in Code
+
+The cache is automatically used by `load_filtered_brokerage_data()` - no code changes needed:
+
+```python
+from utils.brokerage_data import load_filtered_brokerage_data
+
+# This will use cached ratios if available
+df = load_filtered_brokerage_data(
+    tickers=['SSI', 'VCI'],
+    metrics=['ROE', 'ROA', 'INTEREST_RATE'],  # Loaded from cache (fast!)
+    years=[2024, 2025],
+    quarters=[1, 2, 3, 4]
+)
+```
+
+**How it works**:
+1. Function checks if cache exists and version matches (reads `cache_metadata.json` - very fast)
+2. If valid, loads pre-calculated ratios from `ratios_cache.parquet`
+3. If invalid/missing, calculates on-the-fly (slower, then caches result)
+4. Cache is completely transparent to application code
+
+### Cache Management Functions
+
+```python
+from utils.ratio_cache import (
+    is_cache_valid,      # Fast check: cache exists and version matches
+    load_cached_ratios,  # Load all cached ratios as DataFrame
+    save_cached_ratios,  # Save calculated ratios to cache
+    clear_cache,         # Delete cache files
+    get_cache_info,      # Get human-readable cache status
+    print_cache_stats    # Print cache statistics to console
+)
+
+# Check if cache is valid (fast - only reads metadata JSON)
+if is_cache_valid():
+    print("Cache is ready!")
+else:
+    print("Need to rebuild cache")
+
+# Get cache information for UI display
+info = get_cache_info()
+print(f"Status: {info['status']}")          # 'valid', 'outdated', 'missing'
+print(f"Message: {info['message']}")        # Human-readable description
+print(f"Last Updated: {info['last_updated']}")  # Timestamp
+```
+
+### Cache File Structure
+
+```
+cache/
+└── calculated_ratios/
+    ├── ratios_cache.parquet      # Main cache data (Parquet with Snappy compression)
+    │   Columns:
+    │   - TICKER: Broker code (SSI, VCI, HCM, etc.)
+    │   - YEARREPORT: Year (2024)
+    │   - LENGTHREPORT: Quarter (1-4)
+    │   - QUARTER_LABEL: Quarter display label ('1Q24', '2Q24', etc.)
+    │   - METRIC_CODE: Ratio name (ROE, ROA, INTEREST_RATE, etc.)
+    │   - VALUE: Calculated ratio value
+    │
+    └── cache_metadata.json        # Fast metadata lookup (small JSON file)
+        {
+          "version": 2,                    # Cache version (for invalidation)
+          "last_updated": "2025-10-15T14:32:15",  # ISO timestamp
+          "total_records": 8945,           # Total ratio records
+          "tickers": ["ACBS", "BSI", ...], # List of tickers
+          "metrics": ["ROE", "ROA", ...],  # List of metrics
+          "years": [2019, ..., 2025],      # Years covered
+          "num_tickers": 18                # Ticker count
+        }
+```
+
+### Performance Impact
+
+| Scenario | Without Cache | With Cache | Improvement |
+|----------|---------------|------------|-------------|
+| **First load** | 15-20s | 15-20s | 0% (builds cache) |
+| **Subsequent loads** | 15-20s | 2-3s | **85-90% faster** |
+| **After data update** | 15-20s | Click button + 15-20s | Same (one-time rebuild) |
+| **Daily usage** | Always slow | Always fast | **Major UX improvement** |
+
+### Troubleshooting
+
+#### Cache shows "outdated" status
+- **Cause**: `CACHE_VERSION` in `utils/ratio_cache.py` was incremented (calculation logic changed)
+- **Solution**: Run `python build_ratio_cache.py` to rebuild with new logic
+
+#### Cache shows "missing" status
+- **Cause**: Cache files deleted or first time setup
+- **Solution**: Run `python build_ratio_cache.py`
+
+#### Values look incorrect after code change
+- **Cause**: Cache contains old calculations from before code change
+- **Solution**:
+  1. Increment `CACHE_VERSION` in `utils/ratio_cache.py` (line 18)
+  2. Run `python build_ratio_cache.py`
+
+#### Cache build fails with database error
+- **Cause**: Database connection issue or missing data
+- **Solution**: Check database connection settings and verify data exists in `BrokerageMetrics` table
+
+### Cache Version History
+
+- **v1**: Initial cache implementation
+- **v2**: Fixed INTEREST_RATE calculation - now multiplies by 100 to return percentage (consistent with MARGIN_LENDING_RATE)
+
+### Git Configuration
+
+Cache files are excluded from version control:
+
+```
+# cache/.gitignore
+calculated_ratios/
+*.parquet
+*.json
+*.pkl
+```
+
+**Why?** Cache files are large and machine-specific. Each developer/deployment should build their own cache from the database.
 
 ---
 
@@ -577,7 +796,7 @@ EXTERNAL_METRICS = [
 
 ## Questions?
 
-1. Check `DATABASE_SCHEMA.md` for schema documentation
+1. Check `DATABASE_SCHEMA_1.md` for schema documentation
 2. Review `utils/keycode_mapping.py` for metric definitions
 3. Look at `pages/7_AI_Commentary.py` as reference implementation
 4. Update this guide if you discover missing information

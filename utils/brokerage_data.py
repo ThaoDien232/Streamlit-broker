@@ -7,12 +7,6 @@ import pandas as pd
 import streamlit as st
 from typing import Optional, List
 from utils.db import run_query
-from utils.keycode_mapping import (
-    get_db_keycode,
-    get_metric_code,
-    needs_calculation,
-    CALCULATED_METRICS
-)
 
 # ============================================================================
 # EXCLUDED BROKERS (defunct/inactive/small brokers to filter out)
@@ -113,9 +107,9 @@ def load_brokerage_metrics(
     if 'ENDDATE' in df.columns:
         df['ENDDATE'] = pd.to_datetime(df['ENDDATE'], errors='coerce')
 
-    # IMPORTANT: Translate KEYCODE back to our METRIC_CODE format
-    from utils.keycode_mapping import get_metric_code
-    df['METRIC_CODE'] = df['KEYCODE'].apply(lambda k: get_metric_code(k) or k)
+    # NOTE: METRIC_CODE is already set to KEYCODE from database query (line 87)
+    # Database stores correct KEYCODEs: 'Total_Operating_Income', 'Net_Brokerage_Income', 'PBT', 'ROE', etc.
+    # No translation needed!
 
     st.success(f"✅ Loaded {len(df):,} records for {df['TICKER'].nunique()} brokers from database")
 
@@ -129,30 +123,21 @@ def get_calc_metric_value(
     metric_code: str
 ) -> float:
     """
-    Get a specific calculated metric value from database or calculate it.
-    Compatible with existing code that used CSV data.
+    Get a specific metric value from database.
+    All metrics including ratios (ROE, ROA, etc.) are now stored in the database.
 
     Args:
         df: DataFrame from load_brokerage_metrics() (can be None, will query directly)
         ticker: Broker ticker
         year: Year
         quarter: Quarter (1-4)
-        metric_code: Our METRIC_CODE format
+        metric_code: Database KEYCODE (e.g., 'Total_Operating_Income', 'PBT', 'ROE')
 
     Returns:
         Metric value (float)
     """
 
-    # Check if this metric needs calculation
-    if needs_calculation(metric_code):
-        return calculate_metric(ticker, year, quarter, metric_code, df)
-
-    # Translate to database KEYCODE
-    db_keycode = get_db_keycode(metric_code)
-
-    if db_keycode is None:
-        st.warning(f"⚠️ Unknown metric: {metric_code}")
-        return 0.0
+    # metric_code is already the database KEYCODE - no translation needed!
 
     # If df provided, use it (faster)
     if df is not None and not df.empty:
@@ -160,7 +145,7 @@ def get_calc_metric_value(
             (df['TICKER'] == ticker) &
             (df['YEARREPORT'] == year) &
             (df['LENGTHREPORT'] == quarter) &
-            (df['METRIC_CODE'] == db_keycode)
+            (df['METRIC_CODE'] == metric_code)
         ]
 
         if not result.empty:
@@ -180,155 +165,11 @@ def get_calc_metric_value(
         'ticker': ticker,
         'year': year,
         'quarter': quarter,
-        'keycode': db_keycode
+        'keycode': metric_code
     })
 
     if not result.empty:
         return float(result.iloc[0]['VALUE'])
-
-    return 0.0
-
-def calculate_metric(
-    ticker: str,
-    year: int,
-    quarter: int,
-    metric_code: str,
-    df: Optional[pd.DataFrame] = None
-) -> float:
-    """
-    Calculate metrics that aren't in the database.
-
-    Args:
-        ticker: Broker ticker
-        year: Year
-        quarter: Quarter
-        metric_code: Metric to calculate (ROE, ROA, INTEREST_RATE, etc.)
-        df: Optional DataFrame to use (faster than querying)
-
-    Returns:
-        Calculated value
-    """
-
-    if metric_code not in CALCULATED_METRICS:
-        return 0.0
-
-    formula_info = CALCULATED_METRICS[metric_code]
-    components = formula_info['components']
-
-    # Get component values
-    values = {}
-    for component in components:
-        values[component] = get_calc_metric_value(df, ticker, year, quarter, component)
-
-    # Calculate based on formula
-    if metric_code == 'ROE':
-        # ROE = NPAT / TOTAL_EQUITY * 100
-        if values['TOTAL_EQUITY'] == 0:
-            return 0.0
-        roe = (values['NPAT'] / values['TOTAL_EQUITY']) * 100
-
-        # Annualize if quarterly
-        if quarter in [1, 2, 3, 4] and formula_info['annualize_quarterly']:
-            roe = roe * 4
-
-        return roe
-
-    elif metric_code == 'ROA':
-        # ROA = NPAT / TOTAL_ASSETS * 100
-        if values['TOTAL_ASSETS'] == 0:
-            return 0.0
-        roa = (values['NPAT'] / values['TOTAL_ASSETS']) * 100
-
-        # Annualize if quarterly
-        if quarter in [1, 2, 3, 4] and formula_info['annualize_quarterly']:
-            roa = roa * 4
-
-        return roa
-
-    elif metric_code == 'INTEREST_RATE':
-        # Interest Rate = INTEREST_EXPENSE / AVG_BORROWING_BALANCE * 100
-        # Need current and previous borrowing balance to calculate average
-        current_borrowing = values['BORROWING_BALANCE']
-
-        # Get previous quarter borrowing
-        if quarter == 1:
-            prev_year, prev_quarter = year - 1, 4
-        else:
-            prev_year, prev_quarter = year, quarter - 1
-
-        prev_borrowing = get_calc_metric_value(df, ticker, prev_year, prev_quarter, 'BORROWING_BALANCE')
-
-        avg_borrowing = (current_borrowing + prev_borrowing) / 2
-
-        if avg_borrowing == 0:
-            return 0.0
-
-        interest_rate = (values['INTEREST_EXPENSE'] / avg_borrowing) * 100
-
-        # Annualize if quarterly
-        if quarter in [1, 2, 3, 4] and formula_info['annualize_quarterly']:
-            interest_rate = interest_rate * 4
-
-        return interest_rate
-
-    elif metric_code == 'MARGIN_EQUITY_RATIO':
-        # Margin/Equity % = MARGIN_BALANCE / TOTAL_EQUITY * 100
-        if values['TOTAL_EQUITY'] == 0:
-            return 0.0
-        return (values['MARGIN_BALANCE'] / values['TOTAL_EQUITY']) * 100
-
-    elif metric_code == 'NET_BROKERAGE_FEE':
-        # Net Brokerage Fee (bps) = NET_BROKERAGE_INCOME / (Institution + Investor shares trading value) * 10000
-        institution_trading = values['INSTITUTION_SHARES_TRADING_VALUE']
-        investor_trading = values['INVESTOR_SHARES_TRADING_VALUE']
-        total_trading_value = institution_trading + investor_trading
-
-        if total_trading_value == 0:
-            return 0.0
-
-        net_brokerage_fee = (values['NET_BROKERAGE_INCOME'] / total_trading_value) * 10000
-        return net_brokerage_fee
-
-    elif metric_code == 'MARGIN_LENDING_RATE':
-        # Margin Lending Rate (%) = MARGIN_LENDING_INCOME / AVG_MARGIN_BALANCE * 100
-        # For quarterly data: average of 4 quarters, then annualize (*4)
-        # For annual data: average of 2 years (current + previous)
-
-        current_margin_balance = values['MARGIN_BALANCE']
-
-        # Calculate average margin balance based on period type
-        if quarter == 5:  # Annual data
-            # Average of 2 years (current year and previous year)
-            prev_year_margin = get_calc_metric_value(df, ticker, year - 1, 5, 'MARGIN_BALANCE')
-            avg_margin_balance = (current_margin_balance + prev_year_margin) / 2
-        else:  # Quarterly data
-            # Average of 4 quarters (current quarter and previous 3 quarters)
-            margin_balances = [current_margin_balance]
-
-            for i in range(1, 4):
-                if quarter - i >= 1:
-                    # Same year, previous quarters
-                    prev_quarter_margin = get_calc_metric_value(df, ticker, year, quarter - i, 'MARGIN_BALANCE')
-                else:
-                    # Previous year
-                    prev_year = year - 1
-                    prev_quarter = 4 + (quarter - i)
-                    prev_quarter_margin = get_calc_metric_value(df, ticker, prev_year, prev_quarter, 'MARGIN_BALANCE')
-
-                margin_balances.append(prev_quarter_margin)
-
-            avg_margin_balance = sum(margin_balances) / 4
-
-        if avg_margin_balance == 0:
-            return 0.0
-
-        margin_lending_rate = (values['MARGIN_LENDING_INCOME'] / avg_margin_balance) * 100
-
-        # Annualize if quarterly
-        if quarter in [1, 2, 3, 4] and formula_info['annualize_quarterly']:
-            margin_lending_rate = margin_lending_rate * 4
-
-        return margin_lending_rate
 
     return 0.0
 
@@ -465,7 +306,7 @@ def load_filtered_brokerage_data(
 
     Args:
         tickers: List of broker tickers to load (e.g., ['SSI', 'VCI'])
-        metrics: List of METRIC_CODEs to load (e.g., ['NET_BROKERAGE_INCOME', 'PBT'])
+        metrics: List of database KEYCODEs to load (e.g., ['Net_Brokerage_Income', 'PBT', 'ROE'])
         years: List of years to load (e.g., [2024, 2025])
         quarters: List of quarters to load (e.g., [1, 2, 3, 4])
 
@@ -473,43 +314,17 @@ def load_filtered_brokerage_data(
         Filtered DataFrame with only requested data
     """
 
-    if not tickers or not years or not quarters:
+    if not tickers or not years or not quarters or not metrics:
         return pd.DataFrame()
 
-    # Separate calculated vs database metrics
-    db_metrics = []
-    calculated_metrics_list = []
-
-    for metric in metrics:
-        if needs_calculation(metric):
-            calculated_metrics_list.append(metric)
-        else:
-            db_metrics.append(metric)
-
-    # Translate database metrics to KEYCODEs
-    db_keycodes = []
-    for metric in db_metrics:
-        keycode = get_db_keycode(metric)
-        if keycode:
-            db_keycodes.append(keycode)
-
-    # For calculated metrics, we need to load their components
-    for calc_metric in calculated_metrics_list:
-        formula_info = CALCULATED_METRICS.get(calc_metric)
-        if formula_info:
-            for component in formula_info['components']:
-                component_keycode = get_db_keycode(component)
-                if component_keycode and component_keycode not in db_keycodes:
-                    db_keycodes.append(component_keycode)
-
-    if not db_keycodes:
-        return pd.DataFrame()
+    # metrics are already database KEYCODEs - no translation needed!
+    # All metrics including ratios are now stored in database with exact KEYCODEs
 
     # Build optimized query
     ticker_list = ','.join([f"'{t}'" for t in tickers])
     year_list = ','.join(map(str, years))
     quarter_list = ','.join(map(str, quarters))
-    keycode_list = ','.join([f"'{k}'" for k in db_keycodes])
+    keycode_list = ','.join([f"'{k}'" for k in metrics])
     excluded_list = ','.join([f"'{t}'" for t in EXCLUDED_TICKERS])
 
     query = f"""
@@ -547,50 +362,9 @@ def load_filtered_brokerage_data(
     df['LENGTHREPORT'] = df['LENGTHREPORT'].astype(int)
     df['VALUE'] = pd.to_numeric(df['VALUE'], errors='coerce')
 
-    # IMPORTANT: Translate KEYCODE back to our METRIC_CODE format
-    # Database returns 'Net_Brokerage_Income', 'Net_Trading_Income', etc.
-    # But we need 'NET_BROKERAGE_INCOME', 'NET_TRADING_INCOME', etc.
-    # to match what the Charts/Historical pages filter by
-    from utils.keycode_mapping import get_metric_code
-    df['METRIC_CODE'] = df['KEYCODE'].apply(lambda k: get_metric_code(k) or k)
-
-    # Calculate requested metrics that aren't in the database (like ROE, ROA)
-    if calculated_metrics_list:
-        calculated_rows = []
-
-        for ticker in tickers:
-            for year in years:
-                for quarter in quarters:
-                    for calc_metric in calculated_metrics_list:
-                        # Calculate the metric value
-                        value = calculate_metric(ticker, year, quarter, calc_metric, df)
-
-                        if value != 0:  # Only add non-zero values
-                            # Find quarter label
-                            quarter_label_row = df[
-                                (df['TICKER'] == ticker) &
-                                (df['YEARREPORT'] == year) &
-                                (df['LENGTHREPORT'] == quarter)
-                            ]
-
-                            quarter_label = quarter_label_row['QUARTER_LABEL'].iloc[0] if not quarter_label_row.empty else f"{quarter}Q{year%100}"
-
-                            calculated_rows.append({
-                                'TICKER': ticker,
-                                'YEARREPORT': year,
-                                'LENGTHREPORT': quarter,
-                                'QUARTER_LABEL': quarter_label,
-                                'METRIC_CODE': calc_metric,
-                                'VALUE': value,
-                                'KEYCODE': calc_metric,
-                                'KEYCODE_NAME': calc_metric,
-                                'STATEMENT_TYPE': 'CALC'
-                            })
-
-        # Append calculated metrics to the dataframe
-        if calculated_rows:
-            calc_df = pd.DataFrame(calculated_rows)
-            df = pd.concat([df, calc_df], ignore_index=True)
+    # NOTE: METRIC_CODE is already set to KEYCODE from database query (line 353)
+    # Database stores correct KEYCODEs: 'Total_Operating_Income', 'Net_Brokerage_Income', 'PBT', 'ROE', etc.
+    # No translation needed!
 
     return df
 
@@ -664,9 +438,9 @@ def load_ticker_quarter_data(ticker: str, quarter_label: str, lookback_quarters:
     if 'ENDDATE' in df.columns:
         df['ENDDATE'] = pd.to_datetime(df['ENDDATE'], errors='coerce')
 
-    # IMPORTANT: Translate KEYCODE back to our METRIC_CODE format
-    from utils.keycode_mapping import get_metric_code
-    df['METRIC_CODE'] = df['KEYCODE'].apply(lambda k: get_metric_code(k) or k)
+    # NOTE: METRIC_CODE is already set to KEYCODE from database query (line 426)
+    # Database stores correct KEYCODEs: 'Total_Operating_Income', 'Net_Brokerage_Income', 'PBT', 'ROE', etc.
+    # No translation needed!
 
     return df
 
