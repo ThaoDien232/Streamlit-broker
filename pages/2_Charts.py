@@ -157,6 +157,7 @@ def get_metric_display_name(metric_code):
         'ROA': 'ROA',
         'INTEREST_RATE': 'Interest Rate',
         'MARGIN_LENDING_RATE': 'Margin Lending Rate',
+        'MARGIN_LENDING_SPREAD': 'Margin Lending Spread',
         'NET_BROKERAGE_FEE': 'Net Brokerage Fee (bps)'
     }
     return metric_names.get(metric_code, metric_code)
@@ -386,6 +387,7 @@ allowed_metrics = [
     'ROA',
     'INTEREST_RATE',
     'MARGIN_LENDING_RATE',
+    'MARGIN_LENDING_SPREAD',
     'NET_BROKERAGE_FEE'
 ]
 
@@ -533,7 +535,7 @@ with tab1:
                                 broker_data_with_ma4 = calculate_ma4(filtered_df, metric, broker)
 
                                 # Check if this is ROE, ROA, or rate metrics (percentage metrics)
-                                if metric in ['INTEREST_RATE', 'MARGIN_LENDING_RATE']:
+                                if metric in ['INTEREST_RATE', 'MARGIN_LENDING_RATE', 'MARGIN_LENDING_SPREAD']:
                                     broker_data['DISPLAY_VALUE'] = pd.to_numeric(broker_data['VALUE'], errors='coerce')  # Already in percentage
                                     y_values = broker_data['DISPLAY_VALUE']
                                     hover_template = f"<b>{broker}</b><br>Period: %{{x}}<br>Value: %{{y:,.2f}}%<br><extra></extra>"
@@ -599,7 +601,7 @@ with tab1:
                                     )
 
                         # Set y-axis title and format based on metric type
-                        if metric in ['ROE', 'ROA', 'INTEREST_RATE', 'MARGIN_LENDING_RATE']:
+                        if metric in ['ROE', 'ROA', 'INTEREST_RATE', 'MARGIN_LENDING_RATE', 'MARGIN_LENDING_SPREAD']:
                             yaxis_title = "Percentage (%)"
                             tick_format = ".2f"
                         elif metric == 'NET_BROKERAGE_FEE':

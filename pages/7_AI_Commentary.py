@@ -201,6 +201,8 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
         'Margin Income',
         'Margin Balance',
         'Margin/Equity %',
+        'Margin Lending Rate',
+        'Margin Lending Spread',
         'Investment Income',
         'Other Incomes',
         'Total Operating Income',
@@ -393,6 +395,8 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 'Interest Expense': 'Interest_Expense',
                 'Borrowing Balance': 'Borrowing_Balance',
                 'Margin Balance': 'Margin_Lending_book',
+                'Margin Lending Rate': 'MARGIN_LENDING_RATE',
+                'Margin Lending Spread': 'MARGIN_LENDING_SPREAD',
                 'ROE': 'ROE',
                 'CIR': 'CIR',
                 'Interest Rate': 'Interest_Rate'
@@ -974,7 +978,7 @@ if selected_ticker and selected_quarter:
                 try:
                     value = float(value)
                     # Percentages - already calculated as percentages (e.g., 15.5 means 15.5%)
-                    if metric_name in ['ROE', 'ROA', 'Margin/Equity %', 'CIR', 'Interest Rate', 'Brokerage Market Share']:
+                    if metric_name in ['ROE', 'ROA', 'Margin/Equity %', 'CIR', 'Interest Rate', 'Brokerage Market Share', 'Margin Lending Rate', 'Margin Lending Spread']:
                         return f"{value:.2f}%"
                     # Basis points
                     elif metric_name == 'Net Brokerage Fee':

@@ -429,20 +429,6 @@ TOI Growth: {growth_pct_yoy:+.1f}% vs {prior_q_yoy}
 NOTE: The "Impact (pp)" column shows each income stream's contribution to TOI growth in percentage points.
 The "% of TOI" column shows what percentage each income stream represents of Total Operating Income.
 """
-
-    prompt += """
-Hierarchy of Investment Data (for context):
-Each investment item follows a structured multi-level numbering system (e.g., NOS119–NOS160) that encodes both accounting and asset-type hierarchy:
-- Levels 7–8 correspond to the main accounting classifications:
-  • FVTPL (Fair Value Through Profit or Loss)
-  • AFS (Available-for-Sale)
-  • HTM (Held-to-Maturity)
-- Within each category, sub-levels represent specific asset types such as:
-  • Listed Shares, Unlisted Shares, Funds, Bonds (under FVTPL or AFS)
-  • Deposits or CDs (typically under HTM)
-These sub-items roll up into their respective accounting groups.
-When analyzing investment income, you should interpret both the *top-level accounting exposure* (FVTPL vs AFS vs HTM) and the *underlying asset mix* (equities vs bonds vs deposits).
-"""
     prompt += """
 Your answer must follow this structure exactly. Do not add or remove sections.
 
@@ -468,8 +454,8 @@ Discuss how the current level implies lending capacity or headroom versus the 20
 ## 3. Investment (max 3 bullet points)
 Present investment income growth QoQ and YoY and connect it to the composition and any change in the investment book.
 Go beyond FVTPL, AFS, or HTM classification — describe whether the broker mainly holds bonds, equities, or deposits/CDs, as this determines the nature of its investment style.
-A broker with large holdings in bonds, deposits, or CDs typically shows stable investment income, while one with heavy listed equity exposure tends to show higher volatility.
-If the broker has high exposure to listed FVTPL equities, include the top holdings and explain how they may have affected performance.
+A broker with large holdings in bonds, CDs/deposits, typically shows stable investment income, while one with heavy marked-to-market equity exposure tends to show higher volatility.
+If the broker has high exposure to marked-to-market equities, include the top holdings and explain how they may have affected performance.
 Comment on whether recent shifts in the investment mix suggest a more conservative or aggressive investment posture.
 
 ## 4. IB (max 2 bullet points)
@@ -477,11 +463,14 @@ Only discuss IB income if QoQ growth is great mer than 30 percent.
 Show IB income QoQ and YoY growth and briefly explain if this came from deal volume recovery or large mandates.
 
 ## 5. Cost control (max 3 bullet points)
-Present SGA growth QoQ and YoY and discuss CIR trend.
+Present SG&A growth QoQ and YoY and discuss the CIR trend.
 Discuss interest expense growth QoQ and YoY, interest rate changes, and borrowing balance growth.
-Since TOI drivers only show revenue streams (before costs), you should analyze cost pressures separately here by comparing SGA and interest expense growth to TOI growth.
-For example: "TOI grew 15% QoQ but SGA increased 20%, compressing margins" or "Interest expense rose 25% QoQ on higher borrowing, offsetting strong revenue growth."
-Highlight if interest rate increased more than 20 bps QoQ or if cost pressure is significant.
+Analyze whether higher borrowing or interest expenses are proportionate to faster margin lending expansion.
+Introduce and assess the margin lending spread — defined as the difference between the average margin lending rate and the average funding cost (interest expense rate). 
+If this spread remains stable or increases, higher borrowing balance and interest expense are part of normal operations rather than a risk signal. 
+Only highlight funding pressure if the spread is narrowing or if the rising cost meaningfully compresses profitability.
+Explain whether overall cost pressures (SG&A or interest) are being offset by stronger revenue momentum, or if they are starting to erode earnings quality.
+Also note if the interest rate increased more than 20 bps QoQ or if cost pressure is significant.
 
 Writing Approach Rules:
 Each bullet across all sections must weave number + meaning in one line.
