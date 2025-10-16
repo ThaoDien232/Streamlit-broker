@@ -435,42 +435,42 @@ Your answer must follow this structure exactly. Do not add or remove sections.
 ## 1. Overall (max 5 bullet points)
 Write these bullets as a story-driven investor takeaway.
 Focus on what kind of quarter this was, state the absolute quarter PBT, what drove it, and how sustainable it looks.
-Keep numbers supportive, but not the headline. (Example: "Profit rebound looks strong, but much of it came from one-offs, raising questions about repeatability." instead of "PBT +33% QoQ.")
-Describe which specific income stream (brokerage, margin, investment, or IB) primarily drove the quarter's change.
-Use the "Impact (pp)" column from the TOI driver table to pinpoint which income streams contributed the most to TOI growth.
-For example: "Margin income added +19pp to TOI growth, while brokerage contributed +12pp."
-Note that TOI (Total Operating Income) consists of 6 income streams: brokerage, margin lending, trading, interest, IB, and other operating income.
-TOI drivers show revenue momentum BEFORE costs (SG&A and interest expense), so you should separately discuss cost pressures in the "Cost control" section.
-Use this section to clearly summarize what defined the quarter (improving, stable, or softening) and whether the revenue momentum is sustainable.
+Use the TOI driver table to show which income streams contributed most to TOI growth and which detracted. 
+For example: "Margin lending income added +19pp to TOI growth, offset by -15pp from weaker brokerage."
+Compare both QoQ and YoY performance — note if the quarter showed low or flat QoQ growth but high YoY growth, or vice versa, and interpret what that implies for momentum.
+Apply this grading:
+0–15% QoQ TOI growth = normal quarter; >15% QoQ growth = strong/good quarter; <-10% = weak quarter.
+Clearly explain what defined this quarter (improving, stable, or softening) and whether the revenue momentum looks sustainable or driven by short-term factors.
+Story first, numbers second.
 
 ## 2. Traditional brokerage (max 3 bullet points)
-Present brokerage income growth QoQ and YoY, followed by the trend in market liquidity (average daily trading value).
-Conclude whether brokerage income changes were primarily driven by market liquidity, market share or net brokerage fee.
+Present brokerage income growth QoQ and YoY, then identify whether the change in brokerage income was driven by (1) market liquidity (avg daily trading value), (2) market share movement, (3) changes in the average net brokerage fee, or a combination of these factors.
+Do not give a blanket statement — specify the relative contribution of each factor (e.g., lower liquidity and reduced fee offset a slight market share gain).
 Then discuss margin lending income and balance growth QoQ and YoY, connecting margin income growth to margin balance growth to show whether it was driven by lending volume or rate changes.
-When mentioning margin/equity ratio, include both the current and previous quarter’s level to give context.
+Always mention the **absolute margin lending balance** for context (to illustrate size and scale of the margin book).
+When mentioning margin/equity ratio, include both the current and previous quarter’s levels for context.
 Classify the margin/equity ratio as follows: above 150 percent = high, 70–150 percent = normal, below 70 percent = low.
 Discuss how the current level implies lending capacity or headroom versus the 200 percent legal cap.
 
 ## 3. Investment (max 3 bullet points)
 Present investment income growth QoQ and YoY and connect it to the composition and any change in the investment book.
-Go beyond FVTPL, AFS, or HTM classification — describe whether the broker mainly holds bonds, equities, or deposits/CDs, as this determines the nature of its investment style.
-A broker with large holdings in bonds, CDs/deposits, typically shows stable investment income, while one with heavy marked-to-market equity exposure tends to show higher volatility.
-If the broker has high exposure to marked-to-market equities, include the top holdings and explain how they may have affected performance.
-Comment on whether recent shifts in the investment mix suggest a more conservative or aggressive investment posture.
+Separate accounting categories (FVTPL, AFS, HTM) from underlying asset types (listed equities, unlisted equities, bonds, funds, deposits/CDs).
+Explain which asset types dominate each category and how that structure impacts income stability.
+A broker holding mainly bonds or CDs/deposits typically shows stable income but may leave upside on the table in a market uptrend.
+A broker with high marked-to-market equity exposure (especially listed FVTPL equities) tends to have volatile but potentially higher income when markets rally.
+If the broker holds notable listed equities, include top holdings and explain their influence on investment income.
+Comment on whether recent changes in the mix (e.g., shifting between CDs, bonds, and equities) suggest a more conservative or aggressive investment posture.
 
 ## 4. IB (max 2 bullet points)
-Only discuss IB income if QoQ growth is great mer than 30 percent.
-Show IB income QoQ and YoY growth and briefly explain if this came from deal volume recovery or large mandates.
+Discuss IB income only if QoQ growth exceeds 30%, showing QoQ and YoY trends and explaining whether growth came from deal volume or large mandates
 
 ## 5. Cost control (max 3 bullet points)
 Present SG&A growth QoQ and YoY and discuss the CIR trend.
 Discuss interest expense growth QoQ and YoY, interest rate changes, and borrowing balance growth.
 Analyze whether higher borrowing or interest expenses are proportionate to faster margin lending expansion.
-Introduce and assess the margin lending spread — defined as the difference between the average margin lending rate and the average funding cost (interest expense rate). 
-If this spread remains stable or increases, higher borrowing balance and interest expense are part of normal operations rather than a risk signal. 
+Introduce and assess the margin lending spread — defined as the difference between the average margin lending rate and the average funding cost (interest expense rate).
+If this spread remains stable or increases, higher borrowing balance and interest expense are part of normal operations rather than a risk signal.
 Only highlight funding pressure if the spread is narrowing or if the rising cost meaningfully compresses profitability.
-Explain whether overall cost pressures (SG&A or interest) are being offset by stronger revenue momentum, or if they are starting to erode earnings quality.
-Also note if the interest rate increased more than 20 bps QoQ or if cost pressure is significant.
 
 Writing Approach Rules:
 Each bullet across all sections must weave number + meaning in one line.
@@ -481,7 +481,7 @@ Tone should be factual, concise, and investment-oriented.
 Formatting:
 Use one decimal place for percentages (e.g., 15.7%).
 Keep output clean and easy to read.
-"""
+
 
     # If we have cached commentary and not forcing regeneration, return it now
     if cached_commentary is not None:
