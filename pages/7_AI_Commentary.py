@@ -793,6 +793,46 @@ with st.sidebar:
 
     st.markdown("---")
 
+    # Debug section for keycodes
+    st.header("🐛 Debug Tools")
+    if st.button("Show Available Keycodes"):
+        try:
+            from utils.brokerage_data import get_database_connection
+
+            conn = get_database_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT DISTINCT KEYCODE FROM dbo.BrokerageMetrics ORDER BY KEYCODE")
+            keycodes = [row[0] for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+
+            st.success(f"Found {len(keycodes)} distinct keycodes")
+
+            # Display in expandable section
+            with st.expander("View All Keycodes", expanded=True):
+                # Display in columns for better readability
+                col1, col2, col3 = st.columns(3)
+                third = len(keycodes) // 3
+
+                with col1:
+                    for keycode in keycodes[:third]:
+                        st.text(keycode)
+
+                with col2:
+                    for keycode in keycodes[third:2*third]:
+                        st.text(keycode)
+
+                with col3:
+                    for keycode in keycodes[2*third:]:
+                        st.text(keycode)
+
+        except Exception as e:
+            st.error(f"Error fetching keycodes: {e}")
+            import traceback
+            st.code(traceback.format_exc())
+
+    st.markdown("---")
+
 # Load available tickers and quarters (lightweight queries)
 from utils.brokerage_data import get_available_tickers, get_ticker_quarters_list
 
