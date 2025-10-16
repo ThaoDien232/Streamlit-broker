@@ -411,8 +411,8 @@ def display_balance_sheet(df, ticker, periods, display_mode):
             st.info("No growth data available for Balance Sheet metrics.")
 
 def display_investment_book(df, broker, periods):
-    """Display Investment Book (Notes 7.x and 8.x) showing Market Value across quarters"""
-    st.subheader("📊 Investment Book")
+    """Display Simplified Investment Book showing 4 asset groups with market values across quarters"""
+    st.subheader("📊 Investment Book - Simplified View")
 
     # Only show for quarterly data (investment book not meaningful for annual aggregates)
     quarterly_periods = [p for p in periods if p['LENGTHREPORT'] != 5]
@@ -424,94 +424,107 @@ def display_investment_book(df, broker, periods):
     # Get last 6 quarters (or all available if less than 6)
     display_periods = quarterly_periods[:6]
 
-    # Build investment book table with MV across quarters
+    # Build simplified investment book table with MV across quarters
     investment_rows = []
 
-    # Get all unique investment items across all periods
-    all_items = set()
+    # Check if we have any investment data
+    has_investment_data = False
     for period in display_periods:
         year = period['YEARREPORT']
         quarter = period['LENGTHREPORT']
         period_data = get_investment_data(df, broker, year, quarter)
+        if any(value > 0 for value in period_data.values()):
+            has_investment_data = True
+            break
 
-        for category in ['FVTPL', 'AFS', 'HTM']:
-            if category in period_data:
-                mv_items = period_data[category].get('Market Value', {})
-                for item in mv_items.keys():
-                    all_items.add((category, item))
-
-    if not all_items:
+    if not has_investment_data:
         st.info(f"No investment holdings data available for {broker}")
         return
 
-    # Group items by category
-    for category in ['FVTPL', 'AFS', 'HTM']:
-        category_items = sorted([item for cat, item in all_items if cat == category])
+    # Create table with 4 simplified asset groups
+    from utils.investment_book import SIMPLIFIED_CATEGORIES
+    
+    for category in SIMPLIFIED_CATEGORIES:
+        row = {'Asset Group': category}
+        has_data = False
 
-        if category_items:
-            # Add category header
-            header_row = {'Item': category}
-            for period in display_periods:
-                label = period['QUARTER_LABEL']
-                header_row[label] = ''
-            investment_rows.append(header_row)
+        for period in display_periods:
+            year = period['YEARREPORT']
+            quarter = period['LENGTHREPORT']
+            label = period['QUARTER_LABEL']
 
-            # Add items
-            for item in category_items:
-                row = {'Item': f'  {item}'}
-                has_data = False
+            period_data = get_investment_data(df, broker, year, quarter)
+            value = period_data.get(category, 0)
 
-                for period in display_periods:
-                    year = period['YEARREPORT']
-                    quarter = period['LENGTHREPORT']
-                    label = period['QUARTER_LABEL']
+            if value != 0:
+                row[label] = format_vnd_billions(value)
+                has_data = True
+            else:
+                row[label] = '-'
 
-                    period_data = get_investment_data(df, broker, year, quarter)
-                    mv = period_data.get(category, {}).get('Market Value', {}).get(item, 0)
+        if has_data:
+            investment_rows.append(row)
 
-                    if mv != 0:
-                        mv_b = mv / 1_000_000_000
-                        row[label] = format_vnd_billions(mv)
-                        has_data = True
-                    else:
-                        row[label] = '-'
+    # Add total row
+    total_row = {'Asset Group': 'TOTAL INVESTMENTS'}
+    for period in display_periods:
+        year = period['YEARREPORT']
+        quarter = period['LENGTHREPORT']
+        label = period['QUARTER_LABEL']
 
-                if has_data:
-                    investment_rows.append(row)
+        period_data = get_investment_data(df, broker, year, quarter)
+        total_value = sum(period_data.values())
 
-            # Add category total
-            total_row = {'Item': f'Total {category}'}
-            for period in display_periods:
-                year = period['YEARREPORT']
-                quarter = period['LENGTHREPORT']
-                label = period['QUARTER_LABEL']
+        if total_value != 0:
+            total_row[label] = format_vnd_billions(total_value)
+        else:
+            total_row[label] = '-'
 
-                period_data = get_investment_data(df, broker, year, quarter)
-                total_mv = sum(period_data.get(category, {}).get('Market Value', {}).values())
-
-                if total_mv != 0:
-                    total_row[label] = format_vnd_billions(total_mv)
-                else:
-                    total_row[label] = '-'
-
-            investment_rows.append(total_row)
-
-            # Add blank row
-            blank_row = {'Item': ''}
-            for period in display_periods:
-                blank_row[period['QUARTER_LABEL']] = ''
-            investment_rows.append(blank_row)
+    investment_rows.append(total_row)
 
     if investment_rows:
         investment_df = pd.DataFrame(investment_rows)
-        st.dataframe(investment_df, use_container_width=True, hide_index=True)
+        
+        # Style the dataframe to highlight the total row
+        def highlight_total(row):
+            return ['font-weight: bold' if row['Asset Group'] == 'TOTAL INVESTMENTS' else '' for _ in row]
+        
+        st.dataframe(
+            investment_df.style.apply(highlight_total, axis=1),
+            use_container_width=True, 
+            hide_index=True
+        )
+
+        # Add summary statistics
+        col1, col2, col3 = st.columns(3)
+        
+        # Get latest period data for summary
+        latest_period = display_periods[0]
+        latest_year = latest_period['YEARREPORT']
+        latest_quarter = latest_period['LENGTHREPORT']
+        latest_data = get_investment_data(df, broker, latest_year, latest_quarter)
+        
+        with col1:
+            total_investments = sum(latest_data.values()) / 1_000_000_000
+            st.metric("Total Investments", f"{total_investments:,.1f}B VND")
+        
+        with col2:
+            # Find largest category
+            if latest_data:
+                largest_category = max(latest_data.items(), key=lambda x: x[1])
+                st.metric("Largest Category", f"{largest_category[0]}")
+        
+        with col3:
+            # Count non-zero categories
+            active_categories = sum(1 for value in latest_data.values() if value > 0)
+            st.metric("Active Categories", active_categories)
 
         # Add download button
         csv = investment_df.to_csv(index=False)
         st.download_button(
             label="📥 Download Investment Book",
             data=csv,
-            file_name=f"investment_book_{broker}.csv",
+            file_name=f"simplified_investment_book_{broker}.csv",
             mime="text/csv",
             key=f"download_inv_{broker}"
         )
