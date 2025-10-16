@@ -329,7 +329,7 @@ def generate_commentary(ticker: str, year_quarter: str, df: pd.DataFrame,
     cached_commentary = None
     if not force_regenerate and os.path.exists(cache_file):
         try:
-            cache_df = pd.read_csv(cache_file, quoting=1, escapechar='\\')
+            cache_df = pd.read_csv(cache_file, quoting=1)
             cached = cache_df[(cache_df['TICKER'] == ticker) &
                              (cache_df['QUARTER'] == year_quarter)]
             if not cached.empty:
@@ -481,7 +481,7 @@ Tone should be factual, concise, and investment-oriented.
 Formatting:
 Use one decimal place for percentages (e.g., 15.7%).
 Keep output clean and easy to read.
-
+"""
 
     # If we have cached commentary and not forcing regeneration, return it now
     if cached_commentary is not None:
@@ -522,8 +522,8 @@ Keep output clean and easy to read.
             else:
                 cache_df = pd.DataFrame([cache_data])
 
-            # Use quoting and escapechar to handle newlines and quotes in commentary
-            cache_df.to_csv(cache_file, index=False, quoting=1, escapechar='\\')
+            # Use quoting to handle newlines and quotes in commentary
+            cache_df.to_csv(cache_file, index=False, quoting=1)
         except Exception as e:
             print(f"Could not save to cache: {e}")
 
