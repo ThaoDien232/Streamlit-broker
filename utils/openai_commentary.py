@@ -291,8 +291,8 @@ def generate_commentary(ticker: str, year_quarter: str, df: pd.DataFrame,
                        market_share_table: pd.DataFrame = None,
                        prop_holdings_table: pd.DataFrame = None,
                        investment_composition_table: pd.DataFrame = None,
-                       earnings_drivers_qoq: pd.DataFrame = None,
-                       earnings_drivers_yoy: pd.DataFrame = None,
+                       toi_drivers_qoq: pd.DataFrame = None,
+                       toi_drivers_yoy: pd.DataFrame = None,
                        return_prompt: bool = False) -> str:
     """
     Generate AI commentary for a broker's quarterly performance using prepared analysis table.
@@ -391,31 +391,32 @@ Investment Book Composition (Selected Quarter: {year_quarter}):
 {investment_composition_table.to_markdown(index=False, tablefmt='grid')}
 """
 
-    # Add earnings drivers analysis if available
-    if earnings_drivers_qoq is not None and not earnings_drivers_qoq.empty:
-        growth_pct_qoq = earnings_drivers_qoq.attrs.get('growth_pct', 0)
-        prior_q_qoq = earnings_drivers_qoq.attrs.get('prior_quarter', '')
+    # Add TOI drivers analysis if available
+    if toi_drivers_qoq is not None and not toi_drivers_qoq.empty:
+        growth_pct_qoq = toi_drivers_qoq.attrs.get('growth_pct', 0)
+        prior_q_qoq = toi_drivers_qoq.attrs.get('prior_quarter', '')
         prompt += f"""
-Earnings Drivers Analysis (Quarter-over-Quarter):
-PBT Growth: {growth_pct_qoq:+.1f}% vs {prior_q_qoq}
+TOI Drivers Analysis (Quarter-over-Quarter):
+TOI Growth: {growth_pct_qoq:+.1f}% vs {prior_q_qoq}
 
-{earnings_drivers_qoq.to_markdown(index=False, tablefmt='grid')}
+{toi_drivers_qoq.to_markdown(index=False, tablefmt='grid')}
 
-NOTE: The "Impact (pp)" column shows each component's contribution to PBT growth in percentage points.
-For example, if Net Brokerage Income shows +5.2pp, it means brokerage contributed 5.2 percentage points to the total PBT growth.
-All impacts sum to the total PBT growth rate.
+NOTE: The "Impact (pp)" column shows each income stream's contribution to TOI growth in percentage points.
+For example, if Net Brokerage Income shows +5.2pp, it means brokerage contributed 5.2 percentage points to the total TOI growth.
+All impacts sum to the total TOI growth rate. The "% of TOI" column shows what percentage each income stream represents of Total Operating Income.
 """
 
-    if earnings_drivers_yoy is not None and not earnings_drivers_yoy.empty:
-        growth_pct_yoy = earnings_drivers_yoy.attrs.get('growth_pct', 0)
-        prior_q_yoy = earnings_drivers_yoy.attrs.get('prior_quarter', '')
+    if toi_drivers_yoy is not None and not toi_drivers_yoy.empty:
+        growth_pct_yoy = toi_drivers_yoy.attrs.get('growth_pct', 0)
+        prior_q_yoy = toi_drivers_yoy.attrs.get('prior_quarter', '')
         prompt += f"""
-Earnings Drivers Analysis (Year-over-Year):
-PBT Growth: {growth_pct_yoy:+.1f}% vs {prior_q_yoy}
+TOI Drivers Analysis (Year-over-Year):
+TOI Growth: {growth_pct_yoy:+.1f}% vs {prior_q_yoy}
 
-{earnings_drivers_yoy.to_markdown(index=False, tablefmt='grid')}
+{toi_drivers_yoy.to_markdown(index=False, tablefmt='grid')}
 
-NOTE: The "Impact (pp)" column shows each component's contribution to PBT growth in percentage points.
+NOTE: The "Impact (pp)" column shows each income stream's contribution to TOI growth in percentage points.
+The "% of TOI" column shows what percentage each income stream represents of Total Operating Income.
 """
 
     prompt += """
@@ -437,12 +438,13 @@ Your answer must follow this structure exactly. Do not add or remove sections.
 ## 1. Overall (max 5 bullet points)
 Write these bullets as a story-driven investor takeaway.
 Focus on what kind of quarter this was, state the absolute quarter PBT, what drove it, and how sustainable it looks.
-Keep numbers supportive, but not the headline. (Example: “Profit rebound looks strong, but much of it came from one-offs, raising questions about repeatability.” instead of “PBT +33% QoQ.”)
-Describe which specific income stream (brokerage, margin, investment, or IB) primarily drove the quarter’s change.
-Use the “Impact (pp)” column from the earnings driver table to pinpoint which components contributed the most or detracted from PBT growth. 
-For example: “Margin income added +19pp to PBT growth, offset partly by higher interest expense (-15pp).”
-Avoid mentioning total operating income as a driver, since it is a sum of all income streams.
-Use this section to clearly summarize what defined the quarter (improving, stable, or softening) and whether the earnings momentum is sustainable.
+Keep numbers supportive, but not the headline. (Example: "Profit rebound looks strong, but much of it came from one-offs, raising questions about repeatability." instead of "PBT +33% QoQ.")
+Describe which specific income stream (brokerage, margin, investment, or IB) primarily drove the quarter's change.
+Use the "Impact (pp)" column from the TOI driver table to pinpoint which income streams contributed the most to TOI growth.
+For example: "Margin income added +19pp to TOI growth, while brokerage contributed +12pp."
+Note that TOI (Total Operating Income) consists of 6 income streams: brokerage, margin lending, trading, interest, IB, and other operating income.
+TOI drivers show revenue momentum BEFORE costs (SG&A and interest expense), so you should separately discuss cost pressures in the "Cost control" section.
+Use this section to clearly summarize what defined the quarter (improving, stable, or softening) and whether the revenue momentum is sustainable.
 
 ## 2. Traditional brokerage (max 3 bullet points)
 Present brokerage income growth QoQ and YoY, followed by the trend in market liquidity (average daily trading value).
@@ -466,7 +468,8 @@ Show IB income QoQ and YoY growth and briefly explain if this came from deal vol
 ## 5. Cost control (max 3 bullet points)
 Present SGA growth QoQ and YoY and discuss CIR trend.
 Discuss interest expense growth QoQ and YoY, interest rate changes, and borrowing balance growth.
-Use the “Impact (pp)” from the earnings driver table to explain how cost drivers (SG&A, interest expense) offset the revenue gains and affected PBT growth.
+Since TOI drivers only show revenue streams (before costs), you should analyze cost pressures separately here by comparing SGA and interest expense growth to TOI growth.
+For example: "TOI grew 15% QoQ but SGA increased 20%, compressing margins" or "Interest expense rose 25% QoQ on higher borrowing, offsetting strong revenue growth."
 Highlight if interest rate increased more than 20 bps QoQ or if cost pressure is significant.
 
 Writing Approach Rules:
