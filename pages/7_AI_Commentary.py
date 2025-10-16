@@ -898,16 +898,16 @@ if selected_ticker and selected_quarter:
         # Display the data processing results
         st.subheader(f"Financial Analysis: {selected_ticker} - {selected_quarter}")
 
-        # Display earnings drivers analysis
-        st.write("**Earnings Drivers Analysis:**")
+        # Display TOI drivers analysis
+        st.write("**TOI Drivers Analysis:**")
         try:
-            from utils.earnings_drivers import calculate_earnings_drivers
+            from utils.toi_drivers import calculate_toi_drivers
 
             # Create tabs for QoQ and YoY
             tab_qoq, tab_yoy = st.tabs(["Quarter-over-Quarter", "Year-over-Year"])
 
             with tab_qoq:
-                drivers_qoq = calculate_earnings_drivers(selected_ticker, selected_quarter, 'QoQ')
+                drivers_qoq = calculate_toi_drivers(selected_ticker, selected_quarter, 'QoQ')
 
                 if not drivers_qoq.empty:
                     # Format the dataframe for display
@@ -921,18 +921,20 @@ if selected_ticker and selected_quarter:
                         display_df.at[idx, 'Prior'] = f"{row['Prior']:.1f}B"
                         display_df.at[idx, 'Change'] = f"{row['Change']:+.1f}B"
                         display_df.at[idx, 'Impact (pp)'] = f"{row['Impact (pp)']:+.1f}pp"
+                        if '% of TOI' in display_df.columns and row['% of TOI'] != '':
+                            display_df.at[idx, '% of TOI'] = f"{row['% of TOI']:.1f}%"
 
                     st.dataframe(display_df, use_container_width=True, hide_index=True)
 
                     # Show summary metrics
                     growth_pct = drivers_qoq.attrs.get('growth_pct', 0)
                     prior_q = drivers_qoq.attrs.get('prior_quarter', '')
-                    st.info(f"PBT Growth: **{growth_pct:+.1f}%** vs {prior_q}")
+                    st.info(f"TOI Growth: **{growth_pct:+.1f}%** vs {prior_q}")
                 else:
                     st.warning("Insufficient data for QoQ analysis (need at least 2 quarters)")
 
             with tab_yoy:
-                drivers_yoy = calculate_earnings_drivers(selected_ticker, selected_quarter, 'YoY')
+                drivers_yoy = calculate_toi_drivers(selected_ticker, selected_quarter, 'YoY')
 
                 if not drivers_yoy.empty:
                     # Format the dataframe for display
@@ -946,19 +948,21 @@ if selected_ticker and selected_quarter:
                         display_df.at[idx, 'Prior'] = f"{row['Prior']:.1f}B"
                         display_df.at[idx, 'Change'] = f"{row['Change']:+.1f}B"
                         display_df.at[idx, 'Impact (pp)'] = f"{row['Impact (pp)']:+.1f}pp"
+                        if '% of TOI' in display_df.columns and row['% of TOI'] != '':
+                            display_df.at[idx, '% of TOI'] = f"{row['% of TOI']:.1f}%"
 
                     st.dataframe(display_df, use_container_width=True, hide_index=True)
 
                     # Show summary metrics
                     growth_pct = drivers_yoy.attrs.get('growth_pct', 0)
                     prior_q = drivers_yoy.attrs.get('prior_quarter', '')
-                    st.info(f"PBT Growth: **{growth_pct:+.1f}%** vs {prior_q}")
+                    st.info(f"TOI Growth: **{growth_pct:+.1f}%** vs {prior_q}")
                 else:
                     st.warning("Insufficient data for YoY analysis (need at least 5 quarters)")
 
         except Exception as e:
             import traceback
-            st.error(f"Error calculating earnings drivers: {e}")
+            st.error(f"Error calculating TOI drivers: {e}")
             st.code(traceback.format_exc())
 
         # Show calculated metrics
@@ -1180,10 +1184,10 @@ if generate_button and selected_ticker and selected_quarter:
                         # Convert analysis table to string for OpenAI
                         analysis_text = analysis_table.to_string(index=False)
 
-                        # Calculate earnings drivers for OpenAI
-                        from utils.earnings_drivers import calculate_earnings_drivers
-                        drivers_qoq = calculate_earnings_drivers(selected_ticker, selected_quarter, 'QoQ')
-                        drivers_yoy = calculate_earnings_drivers(selected_ticker, selected_quarter, 'YoY')
+                        # Calculate TOI drivers for OpenAI
+                        from utils.toi_drivers import calculate_toi_drivers
+                        drivers_qoq = calculate_toi_drivers(selected_ticker, selected_quarter, 'QoQ')
+                        drivers_yoy = calculate_toi_drivers(selected_ticker, selected_quarter, 'YoY')
 
                         # Generate commentary and get the prompt
                         result = generate_commentary(
@@ -1196,8 +1200,8 @@ if generate_button and selected_ticker and selected_quarter:
                             market_share_table=market_share_table,  # Pass market share table
                             prop_holdings_table=prop_holdings_table,  # Pass prop holdings table
                             investment_composition_table=investment_composition_table,  # Pass investment composition table
-                            earnings_drivers_qoq=drivers_qoq,  # Pass earnings drivers QoQ
-                            earnings_drivers_yoy=drivers_yoy,  # Pass earnings drivers YoY
+                            toi_drivers_qoq=drivers_qoq,  # Pass TOI drivers QoQ
+                            toi_drivers_yoy=drivers_yoy,  # Pass TOI drivers YoY
                             return_prompt=True  # Request the prompt to be returned
                         )
 
