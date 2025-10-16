@@ -27,23 +27,24 @@ SYSTEM_PROMPT = (
 )
 
 
+SUPPORTED_MODELS = [
+    "gpt-4o-mini",
+    "gpt-4o",
+]
+
+
 def _default_model_name() -> str:
     env_model = os.getenv("OPENAI_MODEL")
     if env_model:
         return env_model
-    try:
-        model = st.secrets["openai"].get("model")
-        if model:
-            return model
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        model = st.secrets.get("OPENAI_MODEL")
-        if model:
-            return str(model)
-    except Exception:  # noqa: BLE001
-        pass
-    return "gpt-5-mini"
+    for key in ("model", "OPENAI_MODEL"):
+        try:
+            value = st.secrets["openai"].get(key) if key == "model" else st.secrets.get(key)
+            if value:
+                return str(value)
+        except Exception:  # noqa: BLE001
+            continue
+    return SUPPORTED_MODELS[0]
 
 
 def calculate_cost(input_tokens: int, output_tokens: int, model: str) -> float:
@@ -251,14 +252,49 @@ def chat_with_brokerage_streaming(user_message: str) -> str:
     rounds = 0
     while rounds < max_rounds:
         rounds += 1
-        stream = client.chat.completions.create(
-            model=st.session_state.brokerage_selected_model,
-            messages=messages,
-            tools=tool_system.tool_specs,
-            tool_choice="auto",
-            stream=True,
-            stream_options={"include_usage": True},
-        )
+        try:
+            stream = client.chat.completions.create(
+                model=st.session_state.brokerage_selected_model,
+                messages=messages,
+                tools=tool_system.tool_specs,
+                tool_choice="auto",
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+        except Exception as exc:  # noqa: BLE001
+            typing_container.empty()
+            err_name = exc.__class__.__name__
+            err_msg = getattr(exc, "message", None) or str(exc)
+            sanitized = err_msg if err_msg else "unknown error"
+            fallback = (
+                f"OpenAI request failed ({err_name}). Check the selected model/quota. "
+                f"Details: {sanitized}"
+            )
+            assistant_entry = {"role": "assistant", "content": fallback}
+            st.session_state.brokerage_messages.append(assistant_entry)
+            st.session_state.brokerage_compressed_history.append(
+                {
+                    "role": "assistant_compressed",
+                    "data": {
+                        "summary": "OpenAI error",
+                        "tools": [],
+                        "tickers": [],
+                        "periods": [],
+                        "metrics": {},
+                    },
+                }
+            )
+            if len(st.session_state.brokerage_compressed_history) > 20:
+                st.session_state.brokerage_compressed_history = st.session_state.brokerage_compressed_history[-20:]
+            st.session_state.brokerage_tool_executions.append(
+                {
+                    "tool": "openai_chat",
+                    "status": "failed",
+                    "error": err_msg,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
+            return fallback
         current_tool_calls: List[Dict[str, Any]] = []
         assistant_content = ""
         is_tool_call = False
@@ -405,7 +441,7 @@ def main() -> None:
             st.session_state.brokerage_developer_mode = dev_toggle
             _ensure_tool_system(force_reload=True)
             st.experimental_rerun()
-        model_options = ["gpt-5", "gpt-5-mini"]
+        model_options = SUPPORTED_MODELS.copy()
         if st.session_state.brokerage_selected_model not in model_options:
             model_options.insert(0, st.session_state.brokerage_selected_model)
         selected_model = st.selectbox(
