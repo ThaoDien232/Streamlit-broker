@@ -18,6 +18,32 @@ from utils.valuation_data import load_brokerage_valuation_data
 from utils.valuation_analysis import calculate_distribution_stats, get_metric_column
 
 
+@st.cache_data(ttl=3600)
+def get_brokerage_universe() -> List[str]:
+    """Return the curated brokerage ticker universe from Sector_Map (L2='Brokerage')."""
+
+    query = """
+        SELECT DISTINCT Ticker
+        FROM dbo.Sector_Map
+        WHERE L2 = 'Brokerage' AND Ticker IS NOT NULL AND Ticker <> ''
+    """
+
+    try:
+        df = run_query(query)
+        if not df.empty and "Ticker" in df.columns:
+            tickers = sorted({str(t).strip().upper() for t in df["Ticker"] if str(t).strip()})
+            if tickers:
+                return tickers
+    except Exception:
+        pass
+
+    # Fallback to existing utility list if Sector_Map unavailable
+    try:
+        return sorted({t.strip().upper() for t in brokerage_data.get_available_tickers()})
+    except Exception:
+        return []
+
+
 def _now_ts() -> float:
     return time.time()
 
@@ -352,7 +378,7 @@ class BrokerageMCP:
             },
         )
         def _tool(tickers: Optional[List[str]] = None) -> Dict[str, Any]:
-            available = get_brokerage_universe()
+            available = self._brokerage_universe
             if not tickers:
                 return {"tickers": available, "count": len(available)}
 
@@ -443,6 +469,10 @@ class BrokerageMCP:
             ticker_list = _normalize_ticker_list(tickers)
             if not ticker_list:
                 raise ValueError("No tickers provided and none available.")
+
+            ticker_list = [t for t in ticker_list if t in self._brokerage_universe]
+            if not ticker_list:
+                raise ValueError("Requested tickers are not part of the brokerage universe.")
 
             metrics: List[str] = []
             if metric:
@@ -548,6 +578,10 @@ class BrokerageMCP:
             ticker_list = _normalize_ticker_list(tickers)
             if not ticker_list:
                 raise ValueError("No tickers provided and none available.")
+
+            ticker_list = [t for t in ticker_list if t in self._brokerage_universe]
+            if not ticker_list:
+                raise ValueError("Requested tickers are not part of the brokerage universe.")
 
             metric_list = metrics or [
                 "Net_Brokerage_Income",
@@ -687,8 +721,13 @@ class BrokerageMCP:
                     return None
                 return float(subset.iloc[-1]["close"])
 
+            requested = _normalize_ticker_list(tickers)
+            tickers_filtered = [t for t in requested if t in self._brokerage_universe]
+            if not tickers_filtered:
+                raise ValueError("No valid brokerage tickers supplied for performance analysis.")
+
             results = []
-            for ticker in _normalize_ticker_list(tickers):
+            for ticker in tickers_filtered:
                 try:
                     start_px = fetch_price(ticker, start_date)
                     end_px = fetch_price(ticker, end_date)
