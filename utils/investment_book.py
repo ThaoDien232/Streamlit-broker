@@ -1,14 +1,14 @@
 """
 Simplified Investment Book Classification for Brokerage Firms
-Maps database KEYCODEs to 4 simplified asset groups with market values.
+Maps database METRIC_CODEs to 4 simplified asset groups with market values.
 
 Simplified Categories:
-- Marked-to-market equities (FVTPL Equities)
-- Not marked-to-market equities (AFS + HTM Equities)  
+- Marked-to-market equities (MTM Equities)
+- Not marked-to-market equities (Non-MTM Equities)  
 - Bonds (All bond types)
 - CDs/Deposits (All deposit types)
 
-Based on DATABASE_SCHEMA_1.md lines 635-677 (7.x and 8.x series KEYCODEs)
+Uses METRIC_CODE mapping like 'mtm_equities_market_value' -> 'MTM Equities'
 """
 
 import pandas as pd
@@ -18,33 +18,19 @@ from typing import Dict, List, Tuple, Optional
 # SIMPLIFIED INVESTMENT CATEGORY MAPPING
 # ============================================================================
 
-# Maps actual database KEYCODE to simplified category
+# Maps METRIC_CODE to simplified category
 INVESTMENT_CLASSIFICATION = {
-    # MTM Equities (FVTPL - 8.x series market value)
-    '8.1.1.1. Listed Shares': 'MTM Equities',
-    '8.1.1.2. Unlisted Shares': 'MTM Equities',
-    '8.1.2. Fund Certificates': 'MTM Equities',
-    '8.1.3. Other Equity Securities': 'MTM Equities',
+    # MTM Equities 
+    'mtm_equities_market_value': 'MTM Equities',
     
-    # Non-MTM Equities (AFS + HTM - 7.x series market value)
-    '7.1.1.1. Listed Shares': 'Non-MTM Equities',
-    '7.1.1.2. Unlisted Shares': 'Non-MTM Equities', 
-    '7.1.2. Fund Certificates': 'Non-MTM Equities',
-    '7.1.3. Other Equity Securities': 'Non-MTM Equities',
+    # Non-MTM Equities  
+    'not_mtm_equities_market_value': 'Non-MTM Equities',
     
-    # Bonds (All bond types - 7.x and 8.x series)
-    '7.2.1. Government Bonds': 'Bonds',
-    '7.2.2. Municipal Bonds': 'Bonds',
-    '7.2.3. Corporate Bonds': 'Bonds',
-    '7.2.4. Other Debt Securities': 'Bonds',
-    '8.2.1. Government Bonds': 'Bonds',
-    '8.2.2. Municipal Bonds': 'Bonds', 
-    '8.2.3. Corporate Bonds': 'Bonds',
-    '8.2.4. Other Debt Securities': 'Bonds',
+    # Bonds
+    'bonds_market_value': 'Bonds',
     
-    # CDs/Deposits (All deposit types)
-    '7.3. Term Deposits': 'CDs/Deposits',
-    '8.3. Term Deposits': 'CDs/Deposits',
+    # CDs/Deposits
+    'cds_deposits_market_value': 'CDs/Deposits',
 }
 
 # Display order for the 4 categories
@@ -59,24 +45,24 @@ SIMPLIFIED_CATEGORIES = [
 # HELPER FUNCTIONS
 # ============================================================================
 
-def classify_investment(keycode: str) -> Optional[str]:
+def classify_investment(metric_code: str) -> Optional[str]:
     """
-    Classify an investment based on KEYCODE.
+    Classify an investment based on METRIC_CODE.
 
     Args:
-        keycode: Database KEYCODE (e.g., '8.1.1.1. Listed Shares')
+        metric_code: Database METRIC_CODE (e.g., 'mtm_equities_market_value')
 
     Returns:
         Simplified category name or None if not an investment code
     """
-    return INVESTMENT_CLASSIFICATION.get(keycode)
+    return INVESTMENT_CLASSIFICATION.get(metric_code)
 
 def get_investment_data(df: pd.DataFrame, ticker: str, year: int, quarter: int) -> Dict[str, float]:
     """
     Extract simplified investment holdings for a broker in a specific period.
 
     Args:
-        df: DataFrame with brokerage metrics (must have KEYCODE and VALUE columns)
+        df: DataFrame with brokerage metrics (must have METRIC_CODE and VALUE columns)
         ticker: Broker ticker
         year: Year
         quarter: Quarter (1-4) or 5 for annual
@@ -84,20 +70,29 @@ def get_investment_data(df: pd.DataFrame, ticker: str, year: int, quarter: int) 
     Returns:
         Dictionary with market values for the 4 simplified categories
     """
-    # Filter data for this broker/period
-    period_data = df[
-        (df['TICKER'] == ticker) &
-        (df['YEARREPORT'] == year) &
-        (df['LENGTHREPORT'] == quarter)
-    ].copy()
-
     # Initialize simplified categories
     investment_book = {category: 0.0 for category in SIMPLIFIED_CATEGORIES}
+    
+    # Check if DataFrame has required columns
+    required_columns = ['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'METRIC_CODE', 'VALUE']
+    if df.empty or not all(col in df.columns for col in required_columns):
+        return investment_book
+    
+    # Filter data for this broker/period
+    try:
+        period_data = df[
+            (df['TICKER'] == ticker) &
+            (df['YEARREPORT'] == year) &
+            (df['LENGTHREPORT'] == quarter)
+        ].copy()
+    except Exception as e:
+        print(f"Error filtering data: {e}")
+        return investment_book
 
     # Classify each row
     for _, row in period_data.iterrows():
-        keycode = row['KEYCODE']
-        category = classify_investment(keycode)
+        metric_code = row['METRIC_CODE']
+        category = classify_investment(metric_code)
 
         if category:
             value = row.get('VALUE', 0)
