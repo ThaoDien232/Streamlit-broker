@@ -28,6 +28,7 @@ SYSTEM_PROMPT = (
 
 
 SUPPORTED_MODELS = [
+    "gpt-5-mini",
     "gpt-4o-mini",
     "gpt-4o",
 ]
