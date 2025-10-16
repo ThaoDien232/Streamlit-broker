@@ -7,10 +7,6 @@ import pandas as pd
 import streamlit as st
 from typing import Optional, List
 from utils.db import run_query
-from utils.keycode_mapping import (
-    get_db_keycode,
-    get_metric_code
-)
 
 # ============================================================================
 # EXCLUDED BROKERS (defunct/inactive/small brokers to filter out)
@@ -111,9 +107,9 @@ def load_brokerage_metrics(
     if 'ENDDATE' in df.columns:
         df['ENDDATE'] = pd.to_datetime(df['ENDDATE'], errors='coerce')
 
-    # IMPORTANT: Translate KEYCODE back to our METRIC_CODE format
-    from utils.keycode_mapping import get_metric_code
-    df['METRIC_CODE'] = df['KEYCODE'].apply(lambda k: get_metric_code(k) or k)
+    # NOTE: METRIC_CODE is already set to KEYCODE from database query (line 87)
+    # Database stores correct KEYCODEs: 'Total_Operating_Income', 'Net_Brokerage_Income', 'PBT', 'ROE', etc.
+    # No translation needed!
 
     st.success(f"✅ Loaded {len(df):,} records for {df['TICKER'].nunique()} brokers from database")
 
@@ -135,18 +131,13 @@ def get_calc_metric_value(
         ticker: Broker ticker
         year: Year
         quarter: Quarter (1-4)
-        metric_code: Our METRIC_CODE format
+        metric_code: Database KEYCODE (e.g., 'Total_Operating_Income', 'PBT', 'ROE')
 
     Returns:
         Metric value (float)
     """
 
-    # Translate to database KEYCODE
-    db_keycode = get_db_keycode(metric_code)
-
-    if db_keycode is None:
-        st.warning(f"⚠️ Unknown metric: {metric_code}")
-        return 0.0
+    # metric_code is already the database KEYCODE - no translation needed!
 
     # If df provided, use it (faster)
     if df is not None and not df.empty:
@@ -154,7 +145,7 @@ def get_calc_metric_value(
             (df['TICKER'] == ticker) &
             (df['YEARREPORT'] == year) &
             (df['LENGTHREPORT'] == quarter) &
-            (df['METRIC_CODE'] == db_keycode)
+            (df['METRIC_CODE'] == metric_code)
         ]
 
         if not result.empty:
@@ -174,7 +165,7 @@ def get_calc_metric_value(
         'ticker': ticker,
         'year': year,
         'quarter': quarter,
-        'keycode': db_keycode
+        'keycode': metric_code
     })
 
     if not result.empty:
@@ -315,7 +306,7 @@ def load_filtered_brokerage_data(
 
     Args:
         tickers: List of broker tickers to load (e.g., ['SSI', 'VCI'])
-        metrics: List of METRIC_CODEs to load (e.g., ['NET_BROKERAGE_INCOME', 'PBT'])
+        metrics: List of database KEYCODEs to load (e.g., ['Net_Brokerage_Income', 'PBT', 'ROE'])
         years: List of years to load (e.g., [2024, 2025])
         quarters: List of quarters to load (e.g., [1, 2, 3, 4])
 
@@ -323,25 +314,17 @@ def load_filtered_brokerage_data(
         Filtered DataFrame with only requested data
     """
 
-    if not tickers or not years or not quarters:
+    if not tickers or not years or not quarters or not metrics:
         return pd.DataFrame()
 
-    # Translate all metrics to database KEYCODEs
-    # All metrics including ratios are now stored in database
-    db_keycodes = []
-    for metric in metrics:
-        keycode = get_db_keycode(metric)
-        if keycode:
-            db_keycodes.append(keycode)
-
-    if not db_keycodes:
-        return pd.DataFrame()
+    # metrics are already database KEYCODEs - no translation needed!
+    # All metrics including ratios are now stored in database with exact KEYCODEs
 
     # Build optimized query
     ticker_list = ','.join([f"'{t}'" for t in tickers])
     year_list = ','.join(map(str, years))
     quarter_list = ','.join(map(str, quarters))
-    keycode_list = ','.join([f"'{k}'" for k in db_keycodes])
+    keycode_list = ','.join([f"'{k}'" for k in metrics])
     excluded_list = ','.join([f"'{t}'" for t in EXCLUDED_TICKERS])
 
     query = f"""
@@ -379,11 +362,9 @@ def load_filtered_brokerage_data(
     df['LENGTHREPORT'] = df['LENGTHREPORT'].astype(int)
     df['VALUE'] = pd.to_numeric(df['VALUE'], errors='coerce')
 
-    # IMPORTANT: Translate KEYCODE back to our METRIC_CODE format
-    # Database returns 'Net_Brokerage_Income', 'ROE', etc.
-    # All metrics including ratios are now in the database
-    from utils.keycode_mapping import get_metric_code
-    df['METRIC_CODE'] = df['KEYCODE'].apply(lambda k: get_metric_code(k) or k)
+    # NOTE: METRIC_CODE is already set to KEYCODE from database query (line 353)
+    # Database stores correct KEYCODEs: 'Total_Operating_Income', 'Net_Brokerage_Income', 'PBT', 'ROE', etc.
+    # No translation needed!
 
     return df
 
@@ -457,9 +438,9 @@ def load_ticker_quarter_data(ticker: str, quarter_label: str, lookback_quarters:
     if 'ENDDATE' in df.columns:
         df['ENDDATE'] = pd.to_datetime(df['ENDDATE'], errors='coerce')
 
-    # IMPORTANT: Translate KEYCODE back to our METRIC_CODE format
-    from utils.keycode_mapping import get_metric_code
-    df['METRIC_CODE'] = df['KEYCODE'].apply(lambda k: get_metric_code(k) or k)
+    # NOTE: METRIC_CODE is already set to KEYCODE from database query (line 426)
+    # Database stores correct KEYCODEs: 'Total_Operating_Income', 'Net_Brokerage_Income', 'PBT', 'ROE', etc.
+    # No translation needed!
 
     return df
 

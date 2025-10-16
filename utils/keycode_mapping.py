@@ -9,17 +9,17 @@ Based on DATABASE_SCHEMA_1.md documentation.
 # ============================================================================
 
 METRIC_TO_DB_KEYCODE = {
-    # Income Statement - Revenue Streams (DATABASE_SCHEMA_1.md lines 684-694)
-    'Net_Brokerage_Income': 'Net_Brokerage_Income',  # line 684
-    'NET_IB_INCOME': 'Net_IB_Income',  # line 685
-    'NET_TRADING_INCOME': 'Net_Trading_Income',  # line 686 - Fixed!
-    'NET_INVESTMENT_INCOME': 'Net_investment_income',  # line 693
-    'MARGIN_LENDING_INCOME': 'Net_Margin_lending_Income',  # line 688
-    'NET_OTHER_OP_INCOME': 'Net_other_operating_income',  # line 689 - Fixed!
-    'NET_OTHER_INCOME': 'Net_Other_Income',  # line 690
-    'FEE_INCOME': 'Net_Fee_Income',  # line 691
-    'CAPITAL_INCOME': 'Net_Capital_Income',  # line 692
-    'TOTAL_OPERATING_INCOME': 'Total_Operating_Income',  # line 694
+    # Income Statement - Revenue Streams
+    'NET_BROKERAGE_INCOME': 'Net_Brokerage_Income',  # Fixed: maps to itself (uppercase) per yesterday's fix
+    'NET_IB_INCOME': 'Net_IB_Income',  # Fixed: maps to itself (uppercase)
+    'NET_TRADING_INCOME': 'NET_TRADING_INCOME',  # Fixed: maps to itself (uppercase)
+    'NET_INVESTMENT_INCOME': 'Net_investment_income',  # Fixed: maps to itself (uppercase)
+    'MARGIN_LENDING_INCOME': 'Net_Margin_lending_Income',  # DATABASE_SCHEMA.md line 464: actual DB keycode
+    'NET_OTHER_OP_INCOME': 'NET_OTHER_OP_INCOME',  # Fixed: maps to itself (uppercase)
+    'NET_OTHER_INCOME': 'Net_Other_Income',
+    'FEE_INCOME': 'Net_Fee_Income',
+    'CAPITAL_INCOME': 'Net_Capital_Income',
+    'TOTAL_OPERATING_INCOME': 'Total_Operating_Income',
 
     # Income Statement - Other Items
     'FX_GAIN_LOSS': 'FX_Income',
@@ -44,7 +44,7 @@ METRIC_TO_DB_KEYCODE = {
     'TOTAL_ASSETS': 'BS.92',  # TOTAL ASSETS
     'TOTAL_EQUITY': 'BS.142',  # OWNER'S EQUITY
 
-    # Trading Values (Note items - NOS101-110 section per DATABASE_SCHEMA_1.md)
+    # Trading Values (Note items - NOS101-110 section per DATABASE_SCHEMA.md lines 403-409)
     # KEYCODE column shows actual database values (descriptive names, not NOS codes)
     'INSTITUTION_SHARES_TRADING_VALUE': 'Institution_shares_trading_value',
     'INSTITUTION_BOND_TRADING_VALUE': 'Institution_bond_trading_value',
