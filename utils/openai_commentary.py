@@ -14,13 +14,25 @@ import openai
 load_dotenv()
 
 def get_openai_client():
-    """Initialize OpenAI client with API key from Streamlit secrets only."""
+    """Initialize OpenAI client with API key from Streamlit secrets or environment."""
+
+    api_key = None
+
     try:
-        api_key = st.secrets["openai"]["api_key"]
-    except KeyError as exc:
+        if "openai" in st.secrets and "api_key" in st.secrets["openai"]:
+            api_key = st.secrets["openai"]["api_key"]
+        elif "OPENAI_API_KEY" in st.secrets:
+            api_key = st.secrets["OPENAI_API_KEY"]
+    except Exception:  # noqa: BLE001
+        api_key = None
+
+    if not api_key:
+        api_key = os.getenv("OPENAI_API_KEY")
+
+    if not api_key:
         raise ValueError(
-            "OpenAI API key not found. Please store it in Streamlit secrets under [openai]."
-        ) from exc
+            "OpenAI API key not found. Please add it to Streamlit secrets under [openai] or set OPENAI_API_KEY."
+        )
 
     return openai.OpenAI(api_key=api_key)
 
