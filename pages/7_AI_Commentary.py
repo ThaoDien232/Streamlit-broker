@@ -719,52 +719,6 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Debug section for keycodes
-    st.header("🐛 Debug Tools")
-    if st.button("Show Available Keycodes"):
-        try:
-            from utils.db import run_query
-
-            # Query distinct keycodes from database
-            query = """
-            SELECT DISTINCT KEYCODE
-            FROM dbo.BrokerageMetrics
-            ORDER BY KEYCODE
-            """
-
-            df = run_query(query)
-
-            if not df.empty:
-                keycodes = df['KEYCODE'].tolist()
-                st.success(f"Found {len(keycodes)} distinct keycodes")
-
-                # Display in expandable section
-                with st.expander("View All Keycodes", expanded=True):
-                    # Display in columns for better readability
-                    col1, col2, col3 = st.columns(3)
-                    third = len(keycodes) // 3
-
-                    with col1:
-                        for keycode in keycodes[:third]:
-                            st.text(keycode)
-
-                    with col2:
-                        for keycode in keycodes[third:2*third]:
-                            st.text(keycode)
-
-                    with col3:
-                        for keycode in keycodes[2*third:]:
-                            st.text(keycode)
-            else:
-                st.warning("No keycodes found in database")
-
-        except Exception as e:
-            st.error(f"Error fetching keycodes: {e}")
-            import traceback
-            st.code(traceback.format_exc())
-
-    st.markdown("---")
-
 # Load available tickers and quarters (lightweight queries)
 from utils.brokerage_data import get_available_tickers, get_ticker_quarters_list
 
@@ -1016,55 +970,6 @@ if selected_ticker and selected_quarter:
             if not prop_holdings_table.empty:
                 st.write("**Top Proprietary Holdings:**")
                 st.dataframe(prop_holdings_table, use_container_width=True, hide_index=True)
-
-            # Show raw metrics for debugging (expandable)
-            with st.expander("Detailed Calculation Data"):
-                st.write("**Raw Historical Data (last 10 quarters):**")
-                recent_quarters = sort_quarters_chronologically([q for q in ticker_data['QUARTER_LABEL'].unique() if pd.notna(q)])[-10:]
-                recent_data = ticker_data[ticker_data['QUARTER_LABEL'].isin(recent_quarters)]
-                st.dataframe(recent_data[['QUARTER_LABEL', 'KEYCODE_NAME', 'VALUE']].head(20))
-
-                # Special debug for ROE if SSI is selected
-                if selected_ticker == 'SSI':
-                    st.write("**ROE Debug for SSI (1Q24 to 1Q25):**")
-                    roe_debug_quarters = ['1Q24', '2Q24', '3Q24', '4Q24', '1Q25']
-                    roe_debug_data = []
-
-                    for quarter in roe_debug_quarters:
-                        # Parse quarter to get year and quarter number
-                        try:
-                            quarter_num = int(quarter[0])
-                            year_str = quarter[-2:]
-                            year = 2000 + int(year_str)
-
-                            roe_value = get_calc_metric_value(ticker_data, selected_ticker, year, quarter_num, 'ROE')
-                            roe_debug_data.append({
-                                'Quarter': quarter,
-                                'Year': year,
-                                'Quarter_Num': quarter_num,
-                                'ROE_Value': roe_value
-                            })
-                        except:
-                            roe_debug_data.append({
-                                'Quarter': quarter,
-                                'Year': 'Error',
-                                'Quarter_Num': 'Error',
-                                'ROE_Value': 'Error'
-                            })
-
-                    st.dataframe(pd.DataFrame(roe_debug_data))
-
-                    # Also show raw ROE data from the dataset
-                    st.write("**Raw ROE data from CSV:**")
-                    roe_raw = ticker_data[
-                        (ticker_data['STATEMENT_TYPE'] == 'CALC') &
-                        (ticker_data['METRIC_CODE'] == 'ROE') &
-                        (ticker_data['QUARTER_LABEL'].isin(roe_debug_quarters))
-                    ][['QUARTER_LABEL', 'YEARREPORT', 'LENGTHREPORT', 'VALUE']].sort_values('QUARTER_LABEL')
-                    st.dataframe(roe_raw)
-
-                st.write("**Calculated Metrics:**")
-                st.dataframe(calculated_metrics)
 
             # Check if cached analysis exists (just show status, don't display)
             if cache_exists:
