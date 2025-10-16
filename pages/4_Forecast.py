@@ -1,6 +1,5 @@
 import math
 import re
-from pathlib import Path
 from datetime import datetime
 
 import numpy as np
@@ -97,23 +96,22 @@ def load_data():
 
     forecast_query = """
         SELECT KEYCODE, KEYCODENAME, ORGANCODE, TICKER, DATE, VALUE, RATING, FORECASTDATE
-        FROM SIL.W_F_IRIS_FORECAST
+        FROM Forecast
     """
 
-    try:
-        df_forecast = run_query(forecast_query)
-    except Exception as exc:
-        st.warning(f"Database forecast query failed ({exc}); falling back to local CSV if available.")
-        df_forecast = pd.DataFrame()
+    df_forecast = run_query(forecast_query)
 
-    if df_forecast.empty:
-        csv_path = Path('sql/FORECAST.csv')
-        if csv_path.exists():
-            st.info("Using local 'sql/FORECAST.csv' for forecast data.")
-            df_forecast = pd.read_csv(csv_path, low_memory=False)
-        else:
-            st.warning("Forecast data unavailable from database and local CSV not found. Proceeding without forecasts.")
-            df_forecast = pd.DataFrame(columns=['KEYCODE', 'KEYCODENAME', 'ORGANCODE', 'TICKER', 'DATE', 'VALUE', 'RATING', 'FORECASTDATE'])
+    expected_forecast_columns = ['KEYCODE', 'KEYCODENAME', 'ORGANCODE', 'TICKER', 'DATE', 'VALUE', 'RATING', 'FORECASTDATE']
+
+    missing_columns = [col for col in expected_forecast_columns if col not in df_forecast.columns]
+    for column in missing_columns:
+        df_forecast[column] = pd.NA
+
+    if missing_columns or set(df_forecast.columns) != set(expected_forecast_columns):
+        df_forecast = df_forecast[expected_forecast_columns]
+
+    if df_forecast.empty and missing_columns:
+        st.warning("Forecast data failed to load from the database; forecast metrics will be unavailable.")
 
     if not df_forecast.empty:
         df_forecast['DATE'] = pd.to_numeric(df_forecast['DATE'], errors='coerce')

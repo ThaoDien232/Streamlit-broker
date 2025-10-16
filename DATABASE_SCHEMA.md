@@ -12,8 +12,9 @@ This document provides a comprehensive reference for all database tables created
 3. [Banking Analytics Tables](#banking-analytics-tables)
 4. [Brokerage Analytics Tables](#brokerage-analytics-tables)
 5. [Reference Data Tables](#reference-data-tables)
-6. [Table Relationships](#table-relationships)
-7. [Data Update Patterns](#data-update-patterns)
+6. [Economic Data Tables](#economic-data-tables) (includes Monthly_Income, Container_volume)
+7. [Table Relationships](#table-relationships)
+8. [Data Update Patterns](#data-update-patterns)
 
 ---
 
@@ -224,8 +225,14 @@ This document provides a comprehensive reference for all database tables created
 **Update Frequency**: Quarterly and Annual (auto-calculated from BankingMetrics)
 **Data Range**: 2017 - Present (requires 4+ quarters for meaningful analysis)
 **Row Count**: ~8,500+ (quarterly + annual, all comparison types)
+**Total Columns**: 104
 
-**Key Columns**:
+**Primary Key**: TICKER + PERIOD_TYPE + DATE
+
+---
+
+#### 1. Key Identification Columns (4)
+
 | Column | Data Type | Nullable | Description | Example |
 |--------|-----------|----------|-------------|---------|
 | **TICKER** | NVARCHAR(20) | NO | Bank ticker or tier aggregate | 'VCB' or 'SOCB' |
@@ -233,53 +240,267 @@ This document provides a comprehensive reference for all database tables created
 | **DATE** | NVARCHAR(20) | NO | Period identifier | '2024-Q1' or '2024' |
 | Type | NVARCHAR(50) | YES | Bank classification | 'SOCB', 'Private_1' |
 
-**Source Metrics** (from BankingMetrics):
+---
+
+#### 2. Source Metrics - Current Period (11)
+
+Base financial metrics for the current reporting period (from BankingMetrics):
+
 | Column | Description | Typical Range |
 |--------|-------------|---------------|
-| PBT | Pre-tax Profit | 500-30000 bn VND |
 | TOI | Total Operating Income | 1000-50000 bn VND |
+| Net Interest Income | Interest revenue net of expense | 500-30000 bn VND |
+| Fees Income | Non-interest fee income | 100-5000 bn VND |
+| OPEX | Operating Expenses | -500 to -20000 bn VND |
+| Provision expense | Credit provision expense | -100 to -10000 bn VND |
+| PBT | Profit Before Tax | 500-30000 bn VND |
+| Loan | Total customer loans | 10000-1500000 bn VND |
+| NIM | Net Interest Margin | 2-5% |
 | Core TOI | Net Interest Income + Fees Income | 800-40000 bn VND |
 | Core PBT | Core TOI + OPEX + Provision | 400-25000 bn VND |
 | Non-recurring income | PBT - Core PBT | -5000 to +10000 bn VND |
 
-**Main Impact Scores** (sum to ±100% for growth, normalized):
+---
+
+#### 3. Source Metrics - T12M (Trailing 12 Months) (9)
+
+Same metrics averaged/summed over trailing 12 months:
+
+```
+Core TOI_T12M
+PBT_T12M
+OPEX_T12M
+Provision expense_T12M
+Non-recurring income_T12M
+Net Interest Income_T12M
+Fees Income_T12M
+Loan_T12M
+NIM_T12M
+```
+
+---
+
+#### 4. Change Calculations (7)
+
+Absolute changes used in driver calculations:
+
+```
+Core_TOI_Change       - Change in Core TOI vs comparison period
+PBT_Change            - Change in PBT vs comparison period
+OPEX_Change           - Change in OPEX vs comparison period
+Provision_Change      - Change in Provision vs comparison period
+Non_Recurring_Change  - Change in Non-recurring income vs comparison period
+NII_Change            - Change in Net Interest Income vs comparison period
+Fee_Change            - Change in Fees Income vs comparison period
+```
+
+---
+
+#### 5. Source Metrics - QoQ (Quarter-over-Quarter) (9)
+
+Metrics for previous quarter comparison:
+
+```
+Core TOI_QoQ
+PBT_QoQ
+OPEX_QoQ
+Provision expense_QoQ
+Non-recurring income_QoQ
+Net Interest Income_QoQ
+Fees Income_QoQ
+Loan_QoQ
+NIM_QoQ
+```
+
+---
+
+#### 6. Source Metrics - YoY (Year-over-Year) (9)
+
+Metrics for same quarter last year comparison:
+
+```
+Core TOI_YoY
+PBT_YoY
+OPEX_YoY
+Provision expense_YoY
+Non-recurring income_YoY
+Net Interest Income_YoY
+Fees Income_YoY
+Loan_YoY
+NIM_YoY
+```
+
+---
+
+#### 7. Source Metrics - Prior Year (9)
+
+Metrics from prior year (for annual comparisons):
+
+```
+Core TOI_Prior_Year
+PBT_Prior_Year
+OPEX_Prior_Year
+Provision expense_Prior_Year
+Non-recurring income_Prior_Year
+Net Interest Income_Prior_Year
+Fees Income_Prior_Year
+Loan_Prior_Year
+NIM_Prior_Year
+```
+
+---
+
+#### 8. Growth Percentages (5)
+
+| Column | Description | Example |
+|--------|-------------|---------|
+| Loan_Growth_% | Loan growth percentage | 15.2% |
+| PBT_Growth_% | Percentage change in PBT (unsuffixed) | 20.5% |
+| PBT_Growth_%_T12M | PBT growth vs T12M average | 18.3% |
+| PBT_Growth_%_QoQ | PBT growth vs previous quarter | 5.2% |
+| PBT_Growth_%_YoY | PBT growth vs same quarter last year | 22.1% |
+
+---
+
+#### 9. Main Impact Scores - Unsuffixed (10)
+
+Primary earnings driver impacts (comparison basis unclear - see note below):
+
 | Column | Description | Interpretation |
 |--------|-------------|----------------|
 | Top_Line_Impact | Revenue contribution to PBT growth | Positive = revenue drove growth |
 | Cost_Cutting_Impact | Cost management contribution | Positive = expense control helped |
 | Non_Recurring_Impact | One-time items contribution | Positive = one-time gains |
-| Total_Impact | Sum of above three | Should ≈ ±100% |
+| Total_Impact | Sum of above three | Should ≈ ±100% or growth % |
+| NII_Impact | Net Interest Income impact | Sub-component of Top_Line |
+| Fee_Impact | Fee income impact | Sub-component of Top_Line |
+| OPEX_Impact | Operating expense impact | Sub-component of Cost_Cutting |
+| Provision_Impact | Provision expense impact | Sub-component of Cost_Cutting |
+| Loan_Impact | Loan volume growth impact | Sub-component of NII |
+| NIM_Impact | Net Interest Margin impact | Sub-component of NII |
 
-**Sub-Component Impacts** (details of main drivers):
-| Column | Description | Parent Driver |
-|--------|-------------|---------------|
-| NII_Impact | Net Interest Income impact | Top_Line_Impact |
-| Fee_Impact | Fee income impact | Top_Line_Impact |
-| OPEX_Impact | Operating expense impact | Cost_Cutting_Impact |
-| Provision_Impact | Provision expense impact | Cost_Cutting_Impact |
-| Loan_Impact | Loan volume growth impact | NII_Impact |
-| NIM_Impact | Net Interest Margin impact | NII_Impact |
+**Note**: Relationship between unsuffixed and _T12M variants needs clarification.
 
-**Quarterly Comparison Types** (3 perspectives):
-- **Unsuffixed** (e.g., `Top_Line_Impact`): T12M comparison (trailing 12 months average) - default
-- **_QoQ** suffix: Quarter-over-Quarter comparison (vs previous quarter)
-- **_YoY** suffix: Year-over-Year comparison (vs same quarter last year)
+---
 
-**Example Columns**:
-- `Top_Line_Impact` (T12M), `Top_Line_Impact_QoQ`, `Top_Line_Impact_YoY`
-- `Cost_Cutting_Impact` (T12M), `Cost_Cutting_Impact_QoQ`, `Cost_Cutting_Impact_YoY`
-- All sub-components have these three variants
+#### 10. Main Impact Scores - T12M (Trailing 12 Months) (10)
 
-**Metadata Columns**:
-| Column | Description | Example |
-|--------|-------------|---------|
-| PBT_Growth_% | Percentage change in PBT | 20.5% (growth) |
-| PBT_Change | Absolute PBT change | 5000 bn VND |
-| Loan_Growth_% | Loan growth percentage | 15.2% |
-| Small_PBT_Flag | Flag for small PBT adjustment | 0 or 1 |
-| Impacts_Capped | Flag if scores were capped | 0 or 1 |
+Earnings driver impacts based on T12M comparison:
 
-**Primary Key**: TICKER + PERIOD_TYPE + DATE
+```
+Top_Line_Impact_T12M
+Cost_Cutting_Impact_T12M
+Non_Recurring_Impact_T12M
+NII_Impact_T12M
+Fee_Impact_T12M
+OPEX_Impact_T12M
+Provision_Impact_T12M
+Loan_Impact_T12M
+NIM_Impact_T12M
+Total_Impact_T12M
+```
+
+---
+
+#### 11. Main Impact Scores - QoQ (Quarter-over-Quarter) (10)
+
+Earnings driver impacts based on QoQ comparison:
+
+```
+Top_Line_Impact_QoQ
+Cost_Cutting_Impact_QoQ
+Non_Recurring_Impact_QoQ
+NII_Impact_QoQ
+Fee_Impact_QoQ
+OPEX_Impact_QoQ
+Provision_Impact_QoQ
+Loan_Impact_QoQ
+NIM_Impact_QoQ
+Total_Impact_QoQ
+```
+
+---
+
+#### 12. Main Impact Scores - YoY (Year-over-Year) (10)
+
+Earnings driver impacts based on YoY comparison:
+
+```
+Top_Line_Impact_YoY
+Cost_Cutting_Impact_YoY
+Non_Recurring_Impact_YoY
+NII_Impact_YoY
+Fee_Impact_YoY
+OPEX_Impact_YoY
+Provision_Impact_YoY
+Loan_Impact_YoY
+NIM_Impact_YoY
+Total_Impact_YoY
+```
+
+---
+
+#### 13. Control Flags (3)
+
+| Column | Description | Values |
+|--------|-------------|--------|
+| Small_PBT_Flag | Flag for small PBT adjustment applied | 0 or 1 |
+| Impacts_Capped | Flag if impact scores were capped | 0 or 1 |
+| Scores_Capped | Flag if raw scores were capped | 0 or 1 |
+
+---
+
+### Column Summary by Category
+
+| Category | Column Count | Description |
+|----------|--------------|-------------|
+| Identification | 4 | TICKER, Type, DATE, PERIOD_TYPE |
+| Current Metrics | 11 | TOI, PBT, NII, Fees, OPEX, Provision, Loan, NIM, Core metrics |
+| T12M Metrics | 9 | Trailing 12-month averages |
+| Change Calculations | 7 | Absolute changes vs comparison periods |
+| QoQ Metrics | 9 | Previous quarter comparisons |
+| YoY Metrics | 9 | Same quarter last year comparisons |
+| Prior Year Metrics | 9 | Prior year values for annual comparisons |
+| Growth Percentages | 5 | PBT and Loan growth rates |
+| Impact Scores (Unsuffixed) | 10 | Primary driver impacts |
+| Impact Scores (T12M) | 10 | T12M driver impacts |
+| Impact Scores (QoQ) | 10 | QoQ driver impacts |
+| Impact Scores (YoY) | 10 | YoY driver impacts |
+| Control Flags | 3 | Small_PBT, Impacts_Capped, Scores_Capped |
+| **TOTAL** | **106** | **Complete schema** |
+
+---
+
+### Comparison Type Explanation
+
+**Three Comparison Perspectives** (for quarterly data only):
+
+1. **T12M (Trailing 12 Months)**:
+   - Compares current vs average of last 12 months
+   - Smooths seasonality
+   - Most stable for trend analysis
+
+2. **QoQ (Quarter-over-Quarter)**:
+   - Compares current vs immediately previous quarter
+   - Shows short-term momentum
+   - Most volatile, sensitive to seasonal effects
+
+3. **YoY (Year-over-Year)**:
+   - Compares current vs same quarter last year
+   - Eliminates seasonality
+   - Standard for quarterly analysis
+
+**Annual Data**: Only has unsuffixed columns (always YoY comparison)
+
+**Impact Score Interpretation**:
+All impact scores sum to approximately the PBT growth percentage for their respective comparison type.
+
+Example for Q1 2024:
+- PBT_Growth_%_YoY = +20%
+- Top_Line_Impact_YoY = +16%
+- Cost_Cutting_Impact_YoY = +6%
+- Non_Recurring_Impact_YoY = -2%
+- Total = 20% ✓
 
 **Calculation Logic**:
 1. Calculate Core Earnings:
@@ -370,32 +591,32 @@ This document provides a comprehensive reference for all database tables created
 ### BrokerageMetrics
 **Purpose**: Long format brokerage financial data with KEYCODE mappings for securities firms
 **Update Frequency**: Quarterly with annual aggregates
-**Data Range**: 2017 - Present
-**Row Count**: ~292,800+ (30 brokers × 8 years × 5 periods × ~244 KEYCODEs)
+**Data Range**: 2017 - Present (including forecast years)
+**Row Count**: ~292,800+ actual + forecast (30 brokers × 8 years × 5 periods × ~250 KEYCODEs)
 
 **Key Columns**:
 | Column | Data Type | Nullable | Description | Example |
 |--------|-----------|----------|-------------|---------|
 | **TICKER** | NVARCHAR(20) | NO | Broker ticker or 'Sector' | 'SSI' or 'Sector' |
+| ORGANCODE | NVARCHAR(50) | YES | Organization code | 'SSI' |
 | **YEARREPORT** | INT | NO | Reporting year | 2024 |
 | **LENGTHREPORT** | INT | NO | 1-4 for Q1-Q4, 5 for annual | 3 |
-| **KEYCODE** | NVARCHAR(100) | NO | Metric identifier (BS.*, IS.*, Notes, Calculated) | 'BS.1' or '7.1.1.4. Bonds' |
+| **ACTUAL** | BIT | NO | True=Historical, False=Forecast | 1 |
 | QUARTER_LABEL | NVARCHAR(10) | YES | Formatted period label | '1Q24' or '2024' |
 | STARTDATE | DATE | YES | Period start date | '2024-07-01' |
 | ENDDATE | DATE | YES | Period end date | '2024-09-30' |
+| **KEYCODE** | NVARCHAR(100) | NO | Metric identifier (BS.*, IS.*, Notes, Calculated) | 'BS.1' or '7.1.1.4. Bonds' |
 | KEYCODE_NAME | NVARCHAR(200) | YES | Human-readable description | 'CURRENT ASSETS' |
 | VALUE | FLOAT | YES | Metric value in VND | 5000000000.0 |
 
-**Primary Key**: TICKER + YEARREPORT + LENGTHREPORT + KEYCODE
+**Primary Key**: TICKER + YEARREPORT + LENGTHREPORT + ACTUAL + KEYCODE
 
-**KEYCODE Categories** (244 total):
+**KEYCODE Categories** (111 total):
 
-1. **Balance Sheet (BS.*) - 169 items**
-   - Current Assets: BS.1 - BS.42
-   - Fixed Assets: BS.43 - BS.75
-   - Current Liabilities: BS.76 - BS.115
-   - Long-term Liabilities: BS.116 - BS.142
-   - Equity: BS.143 - BS.169
+1. **Balance Sheet (BS.*) - 31 items**
+   - Selected balance sheet items from BS.1 - BS.171
+   - **Note**: 138 BS.* items filtered out via `bs_skip.xlsx` (excluded from upload)
+   - Filtered items include intermediate calculations, duplicate rollups, and non-essential line items
 
 2. **Income Statement (IS.30) - 1 item**
    - IS.30: Provision for losses from mortgage assets
@@ -408,7 +629,8 @@ This document provides a comprehensive reference for all database tables created
    | Investor_shares_trading_value | Investor shares trading volume |
    | Investor_bond_trading_value | Investor bond trading volume |
 
-4. **fiin_notes (NOS119-465) - 47 items**
+4. **fiin_notes (NOS119-465) - 46 items**
+   - **Note**: 1 item excluded: "7.3.3. Investment Fund Certificates" (filtered via bs_skip.xlsx)
 
    **Cost of Financial Investment (7.x series)**:
    | KEYCODE | Description |
@@ -452,7 +674,9 @@ This document provides a comprehensive reference for all database tables created
    | 8.5.1.3. Fund | Long-term fund FV |
    | 8.5.1.4. Bonds | Long-term bond FV |
 
-5. **Calculated Metrics - 23 items**
+5. **Calculated Metrics - 29 items**
+
+   **Base Income & Profitability Metrics (23)**:
    | KEYCODE | Description | Formula/Source |
    |---------|-------------|----------------|
    | IS.1 | Operating Sales | IS.1 |
@@ -479,13 +703,24 @@ This document provides a comprehensive reference for all database tables created
    | Borrowing_Balance | Borrowing Balance | BS.95+100+122+127 |
    | Margin_Lending_book | Margin Balance | BS.8 |
 
+   **Ratio Metrics (6)**:
+   | KEYCODE | Description | Formula | Typical Range |
+   |---------|-------------|---------|---------------|
+   | NET_BROKERAGE_FEE | Net Brokerage Fee (bps) | (Net_Brokerage / Trading_Value) × 10000 | 5-15 bps |
+   | ROE | Return on Equity (annualized) | (NPAT / Equity) × 100 × 4 (if quarterly) | 10-25% |
+   | ROA | Return on Assets (annualized) | (NPAT / Assets) × 100 × 4 (if quarterly) | 1-5% |
+   | MARGIN_EQUITY_RATIO | Margin to Equity Ratio | (Margin_Balance / Equity) × 100 | 20-80% |
+   | INTEREST_RATE | Borrowing Interest Rate (annualized) | (Interest_Expense / Avg_Borrowing) × 4 (if quarterly) | 5-10% |
+   | MARGIN_LENDING_RATE | Margin Lending Rate (annualized) | (Margin_Income / Avg_Margin_Balance) × 100 × 4 (if quarterly) | 8-15% |
+
 **Data Format**: Long format (KEYCODE in rows)
 ```
-TICKER | YEARREPORT | LENGTHREPORT | QUARTER_LABEL | KEYCODE | KEYCODE_NAME | VALUE
--------|------------|--------------|---------------|---------|--------------|-------
-SSI    | 2024       | 1            | 1Q24          | BS.1    | CURRENT ASSETS | 5000000000
-SSI    | 2024       | 1            | 1Q24          | PBT     | PBT           | 500000000
-SSI    | 2024       | 1            | 1Q24          | 7.1.1.4. Bonds | 7.1.1.4. Bonds | 300000000
+TICKER | ORGANCODE | YEARREPORT | LENGTHREPORT | ACTUAL | QUARTER_LABEL | KEYCODE | KEYCODE_NAME | VALUE
+-------|-----------|------------|--------------|--------|---------------|---------|--------------|-------
+SSI    | SSI       | 2024       | 1            | 1      | 1Q24          | BS.1    | CURRENT ASSETS | 5000000000
+SSI    | SSI       | 2024       | 1            | 1      | 1Q24          | PBT     | PBT           | 500000000
+SSI    | SSI       | 2024       | 1            | 1      | 1Q24          | 7.1.1.4. Bonds | 7.1.1.4. Bonds | 300000000
+SSI    | SSI       | 2025       | 5            | 0      | 2025          | PBT     | PBT           | 550000000
 ```
 
 **Special TICKER Values**:
@@ -497,12 +732,18 @@ SSI    | 2024       | 1            | 1Q24          | 7.1.1.4. Bonds | 7.1.1.4. B
 - Annual: `YYYY` format (e.g., `2024`, `2025`)
 - Derived from: LENGTHREPORT < 5 → `{LENGTHREPORT}Q{YY}`, else `{YEARREPORT}`
 
+**ACTUAL Flag**:
+- **1 (True)**: Historical data from actual financial statements
+- **0 (False)**: Forecast data from analyst projections (LENGTHREPORT = 5, annual only)
+
 **Output Statistics**:
 - ~30 brokers tracked
-- 2017-2024 (8 years)
+- 2017-2024 (8 years) + forecast years (2025-2026)
 - 5 periods per year (Q1-Q4 + Annual)
-- ~244 KEYCODEs per broker-period
-- Total: ~292,800 rows
+- ~250 KEYCODEs per broker-period (244 base + 6 ratio metrics)
+- Actual data: ~292,800 rows
+- Forecast data: Variable (depends on coverage)
+- Total: ~350,000+ rows (actual + forecast + sector aggregates)
 
 **Data Quality Notes**:
 - NULL values removed during transformation
@@ -510,6 +751,10 @@ SSI    | 2024       | 1            | 1Q24          | 7.1.1.4. Bonds | 7.1.1.4. B
 - KEYCODE preserves hierarchical numbering (e.g., 7.1.1.4 vs 7.2.4) to avoid duplicates
 - All BS.*, IS.*, Notes columns transformed from wide to long format
 - Sector aggregates calculated by summing numeric columns across all brokers
+- **Forecast Data Filtering**: External broker forecasts excluded via SQL filters:
+  - Excluded: `KEYCODE LIKE '%.NPATMI'` (other brokers' NPATMI forecasts)
+  - Excluded: `KEYCODE LIKE '%.Target_Price'` (other brokers' price targets)
+  - Only internal company forecasts included in pipeline
 
 **Related Tables**:
 - MarketTurnover: Market statistics by year (derived from S_SPS_HOSEINDEX)
@@ -518,9 +763,10 @@ SSI    | 2024       | 1            | 1Q24          | 7.1.1.4. Bonds | 7.1.1.4. B
 
 ### MarketTurnover
 **Purpose**: HOSE market turnover statistics by year
-**Update Frequency**: Quarterly/Annual
+**Update Frequency**: Quarterly/Annual (optional - disabled by default)
 **Data Range**: 2017 - Present
 **Row Count**: ~8 years
+**Status**: **Optional** - Not calculated by default in pipeline
 
 | Column | Data Type | Nullable | Description | Example |
 |--------|-----------|----------|-------------|---------|
@@ -537,9 +783,52 @@ SSI    | 2024       | 1            | 1Q24          | 7.1.1.4. Bonds | 7.1.1.4. B
 - total_turnover = SUM(TOTALVALUE) per year
 - avg_daily_turnover = total_turnover / trading_days
 
+**Pipeline Configuration**:
+- **Default**: Market turnover calculation **disabled** (`include_market_turnover=False`)
+- **Enable**: Use `--market-turnover` flag when running brokerage pipeline
+- **Reason**: Reduces unnecessary database queries when turnover data not needed
+
 ---
 
 ## Reference Data Tables
+
+### Forecast
+**Purpose**: Master forecast data from IRIS system for all companies
+**Update Frequency**: Weekly
+**Data Range**: Current year + 2 years (e.g., 2025-2027)
+**Row Count**: Variable (depends on coverage and projection horizon)
+
+| Column | Data Type | Nullable | Description | Example |
+|--------|-----------|----------|-------------|---------|
+| **TICKER** | NVARCHAR(50) | NO | Stock symbol | 'VCB' |
+| **KEYCODE** | NVARCHAR(50) | NO | Forecast metric identifier | 'Customer_loan' |
+| **DATE** | INT | NO | Forecast year | 2025 |
+| KEYCODENAME | NVARCHAR(200) | YES | Human-readable metric name | 'Customer Loans' |
+| ORGANCODE | NVARCHAR(50) | YES | Organization code | 'VCB' |
+| VALUE | FLOAT | YES | Projected metric value | 1500000000000 |
+| RATING | NVARCHAR(20) | YES | Analyst rating | 'Buy', 'Hold', 'Sell' |
+| FORECASTDATE | DATETIME | YES | Date projection was made | '2025-01-15' |
+
+**Primary Key**: TICKER + KEYCODE + DATE
+
+**Source**: `SIL.W_F_IRIS_FORECAST` table (Azure Synapse)
+
+**KEYCODE Examples**:
+- Banking: Customer_loan, CASA, LDR, NPL
+- Financial Statement: Net_Revenue, EBITDA, NPAT
+- Balance Sheet: Total_Asset, Total_Equity
+
+**Usage**:
+- Banking forecast processing uses this table to derive BS.XX, IS.XX metrics via equation solver
+- Merged with historical data for forecasted BankingMetrics (ACTUAL=0)
+- Provides analyst projections for financial modeling
+
+**Data Quality Notes**:
+- Annual projections only (no quarterly forecasts)
+- Some metrics are high-level aggregates requiring formula decomposition
+- RATING field may be NULL for non-equity research forecasts
+
+---
 
 ### Sector_Map
 **Purpose**: Master reference for ticker classification and index membership
@@ -568,6 +857,176 @@ SSI    | 2024       | 1            | 1Q24          | 7.1.1.4. Bonds | 7.1.1.4. B
 - Resources: ~60 tickers
 
 **VNI Membership**: 37 tickers marked with 'Y'
+
+---
+
+## Economic Data Tables
+
+### Monthly_Income
+**Purpose**: Vietnam monthly income per salaried worker by geographic region
+**Update Frequency**: Quarterly (one-off upload, historical data)
+**Data Range**: 2015Q1 - 2025Q3
+**Row Count**: 43
+
+| Column | Data Type | Nullable | Description | Example |
+|--------|-----------|----------|-------------|---------|
+| **Year** | INT | NO | Calendar year | 2024 |
+| **Quarter** | INT | NO | Quarter number (1-4) | 3 |
+| Urban | FLOAT | YES | Monthly income in urban areas (VND mn) | 9.254 |
+| Rural | FLOAT | YES | Monthly income in rural areas (VND mn) | 6.597 |
+| Nationwide | FLOAT | YES | Monthly income nationwide average (VND mn) | 7.626 |
+
+**Primary Key**: Year + Quarter
+
+**Data Source**: Excel file (`data/monthly_income.xlsx`)
+
+**Unit of Measure**: VND million per month per salaried worker
+
+**Geographic Coverage**:
+- **Urban**: Metropolitan and city areas
+- **Rural**: Countryside and agricultural regions
+- **Nationwide**: Weighted average across all regions
+
+**Upload Method**:
+- One-off upload via `scripts/operational/upload_monthly_income.py`
+- Reads Excel file (skips rows 1-3, column A)
+- Extracts Year and Quarter from "Quarter ending" datetime column
+
+**Data Characteristics**:
+- Complete quarterly coverage from 2015Q1 onwards
+- Income values in millions of VND (e.g., 9.254 = 9,254,000 VND/month)
+- Rural income consistently lower than urban (typically 70-75% of urban)
+- Nationwide is weighted average, not simple mean
+- Shows steady growth trend: ~5 VND mn (2015) → ~10 VND mn (2025)
+
+**Query Example**:
+```sql
+-- Income growth trend by region
+SELECT Year, Quarter,
+       Urban, Rural, Nationwide,
+       (Urban - Rural) as Urban_Rural_Gap
+FROM Monthly_Income
+WHERE Year >= 2020
+ORDER BY Year, Quarter
+
+-- Year-over-year comparison
+SELECT
+    curr.Year,
+    curr.Quarter,
+    curr.Nationwide as Current_Income,
+    prev.Nationwide as YoY_Income,
+    ((curr.Nationwide - prev.Nationwide) / prev.Nationwide * 100) as YoY_Growth_Pct
+FROM Monthly_Income curr
+LEFT JOIN Monthly_Income prev
+    ON curr.Year = prev.Year + 1
+    AND curr.Quarter = prev.Quarter
+WHERE curr.Year >= 2016
+ORDER BY curr.Year, curr.Quarter
+```
+
+---
+
+### Container_volume
+**Purpose**: Monthly container throughput data by port, company, and region for logistics analysis
+**Update Frequency**: Monthly (via Excel file upload through portal)
+**Data Range**: 2020 - Present
+**Row Count**: ~1,750+ (growing monthly)
+
+| Column | Data Type | Nullable | Description | Example |
+|--------|-----------|----------|-------------|---------|
+| **Date** | DATE | NO | Month date (first day of month) | '2025-08-01' |
+| **Region** | NVARCHAR(50) | NO | Geographic region | 'Northern', 'Central', 'Southern' |
+| **Company** | NVARCHAR(50) | NO | Operating company code | 'PHP', 'SNP', 'VSC' |
+| **Port** | NVARCHAR(100) | NO | Port name | 'Hai Phong (Chùa Vẽ+Tân Vũ)' |
+| Total throughput | FLOAT | YES | Container volume (TEU or similar unit) | 121727.0 |
+
+**Primary Key**: Date + Region + Company + Port (Composite)
+
+**Data Source**: Excel file uploaded via Container Volume Portal (🚢)
+
+**Upload Method**:
+- Batch upload via `writeoff_portal/portal_container_volume.py`
+- Users upload Excel file with required columns
+- System validates structure, detects duplicates, shows new records for confirmation
+- Automatic duplicate detection prevents re-insertion of existing data
+
+**Geographic Coverage**:
+- **Northern**: Ports in northern Vietnam (Hai Phong area)
+- **Central**: Ports in central Vietnam (Da Nang, Quy Nhon)
+- **Southern**: Ports in southern Vietnam (Ho Chi Minh City area, Cai Mep-Thi Vai)
+
+**Data Characteristics**:
+- Complete monthly coverage from 2020 onwards
+- Multiple ports operated by various companies in each region
+- Throughput values represent container volume (typically in TEUs)
+- Northern region typically has 10-12 port entries per month
+- Central region typically has 1-2 port entries per month
+- Southern region typically has 15-20 port entries per month
+- Total monthly records: ~30 entries
+
+**Portal Access**:
+- Managed through **Container Volume Portal** in writeoff_portal application
+- User-based access control via `user_permissions` configuration
+- Excel file upload with real-time validation
+- Shows latest month data automatically
+- Prevents duplicate uploads with smart detection
+
+**Query Examples**:
+```sql
+-- Latest month summary by region
+SELECT
+    Date,
+    Region,
+    COUNT(*) as PortCount,
+    SUM([Total throughput]) as TotalThroughput
+FROM Container_volume
+WHERE Date = (SELECT MAX(Date) FROM Container_volume)
+GROUP BY Date, Region
+ORDER BY Region
+
+-- Year-over-year throughput comparison
+SELECT
+    curr.Region,
+    curr.Date as CurrentMonth,
+    SUM(curr.[Total throughput]) as CurrentThroughput,
+    SUM(prev.[Total throughput]) as YoYThroughput,
+    ((SUM(curr.[Total throughput]) - SUM(prev.[Total throughput]))
+        / SUM(prev.[Total throughput]) * 100) as YoY_Growth_Pct
+FROM Container_volume curr
+LEFT JOIN Container_volume prev
+    ON curr.Region = prev.Region
+    AND curr.Company = prev.Company
+    AND curr.Port = prev.Port
+    AND DATEADD(YEAR, 1, prev.Date) = curr.Date
+WHERE curr.Date >= '2024-01-01'
+GROUP BY curr.Region, curr.Date
+ORDER BY curr.Date, curr.Region
+
+-- Company market share by region
+SELECT
+    Date,
+    Region,
+    Company,
+    SUM([Total throughput]) as CompanyThroughput,
+    SUM(SUM([Total throughput])) OVER (PARTITION BY Date, Region) as RegionTotal,
+    (SUM([Total throughput]) / SUM(SUM([Total throughput])) OVER (PARTITION BY Date, Region) * 100) as MarketShare_Pct
+FROM Container_volume
+WHERE Date >= '2025-01-01'
+GROUP BY Date, Region, Company
+ORDER BY Date, Region, MarketShare_Pct DESC
+
+-- Port performance trend (monthly)
+SELECT
+    Date,
+    Port,
+    [Total throughput],
+    LAG([Total throughput], 1) OVER (PARTITION BY Port ORDER BY Date) as PrevMonth,
+    (([Total throughput] - LAG([Total throughput], 1) OVER (PARTITION BY Port ORDER BY Date))
+        / LAG([Total throughput], 1) OVER (PARTITION BY Port ORDER BY Date) * 100) as MoM_Growth_Pct
+FROM Container_volume
+WHERE Company = 'VSC'
+ORDER BY Date DESC, [Total throughput] DESC
+```
 
 ---
 
@@ -636,9 +1095,16 @@ Target Database (parallel upload)
 - Updates when new analyst projections available
 - Processed through equation solver for complex formulas
 
+### Monthly Updates
+- **Container_volume**: Excel file upload via Container Volume Portal
+  - User-initiated batch upload through writeoff_portal application
+  - Automatic duplicate detection and validation
+  - Typically updated once per month with latest throughput data
+
 ### On-Demand Updates
 - **Sector_Map**: When new listings or reclassifications occur
 - **Forecast Data**: Can be updated as new projections become available
+- **Monthly_Income**: One-off historical data upload (rarely updated)
 
 ---
 
@@ -735,14 +1201,28 @@ ORDER BY bm.PBT DESC
 
 ### 7. Brokerage metrics - key performance indicators
 ```sql
--- Get PBT and key income components for major brokers
+-- Get PBT and key income components for major brokers (actual data)
 SELECT TICKER, QUARTER_LABEL, KEYCODE_NAME, VALUE
 FROM BrokerageMetrics
 WHERE TICKER IN ('SSI', 'VND', 'HCM', 'VCI', 'MBS')
   AND YEARREPORT = 2024
   AND LENGTHREPORT = 1
+  AND ACTUAL = 1  -- Historical data only
   AND KEYCODE IN ('PBT', 'Net_Fee_Income', 'Net_Capital_Income', 'Total_Operating_Income')
 ORDER BY TICKER, KEYCODE
+
+-- Compare actual vs forecast for a broker
+SELECT
+    YEARREPORT,
+    CASE WHEN ACTUAL = 1 THEN 'Actual' ELSE 'Forecast' END as DataType,
+    KEYCODE_NAME,
+    VALUE
+FROM BrokerageMetrics
+WHERE TICKER = 'SSI'
+  AND LENGTHREPORT = 5  -- Annual data
+  AND YEARREPORT IN (2024, 2025)
+  AND KEYCODE IN ('PBT', 'ROE', 'ROA')
+ORDER BY KEYCODE, YEARREPORT, ACTUAL DESC
 ```
 
 ### 8. Brokerage investment portfolio breakdown
@@ -756,6 +1236,7 @@ FROM BrokerageMetrics
 WHERE TICKER = 'SSI'
   AND YEARREPORT = 2024
   AND LENGTHREPORT = 1
+  AND ACTUAL = 1  -- Historical data
   AND (KEYCODE LIKE '7.%' OR KEYCODE LIKE '8.%')  -- Cost and market value
 ORDER BY KEYCODE
 ```
@@ -764,18 +1245,19 @@ ORDER BY KEYCODE
 ```sql
 -- Compare individual brokers vs sector average
 WITH SectorData AS (
-    SELECT YEARREPORT, LENGTHREPORT, KEYCODE, VALUE as SectorValue
+    SELECT YEARREPORT, LENGTHREPORT, ACTUAL, KEYCODE, VALUE as SectorValue
     FROM BrokerageMetrics
     WHERE TICKER = 'Sector'
 ),
 BrokerData AS (
-    SELECT TICKER, YEARREPORT, LENGTHREPORT, KEYCODE, VALUE as BrokerValue
+    SELECT TICKER, YEARREPORT, LENGTHREPORT, ACTUAL, KEYCODE, VALUE as BrokerValue
     FROM BrokerageMetrics
     WHERE TICKER = 'SSI' AND LENGTHREPORT = 5  -- Annual data
 )
 SELECT
     b.TICKER,
     b.YEARREPORT,
+    CASE WHEN b.ACTUAL = 1 THEN 'Actual' ELSE 'Forecast' END as DataType,
     b.KEYCODE,
     b.BrokerValue,
     s.SectorValue,
@@ -784,9 +1266,10 @@ FROM BrokerData b
 JOIN SectorData s
     ON b.YEARREPORT = s.YEARREPORT
     AND b.LENGTHREPORT = s.LENGTHREPORT
+    AND b.ACTUAL = s.ACTUAL  -- Match actual vs forecast
     AND b.KEYCODE = s.KEYCODE
 WHERE b.KEYCODE IN ('PBT', 'Total_Operating_Income', 'Net_Fee_Income')
-ORDER BY b.YEARREPORT DESC, b.KEYCODE
+ORDER BY b.YEARREPORT DESC, b.ACTUAL DESC, b.KEYCODE
 ```
 
 ---
@@ -886,5 +1369,9 @@ For questions about data definitions, calculations, or access:
 | Sept 2024 | 1.0 | Initial schema documentation |
 | Jan 2025 | 2.0 | Added Banking_Drivers and Bank_Writeoff tables |
 | Jan 2025 | 2.1 | Added BrokerageMetrics and MarketTurnover tables (Brokerage Analytics) |
+| Oct 2025 | 2.2 | Added Forecast table (IRIS forecast data) |
+| Oct 2025 | 2.3 | Added Monthly_Income table (Economic Data) |
+| Oct 2025 | 2.4 | Added Container_volume table (Logistics Data) - Monthly container throughput by port |
+| Oct 2025 | 2.5 | **Updated BrokerageMetrics schema**: Added ACTUAL column, ORGANCODE column, 6 new ratio metrics (ROE, ROA, NET_BROKERAGE_FEE, MARGIN_EQUITY_RATIO, INTEREST_RATE, MARGIN_LENDING_RATE), forecast data integration, updated primary key to include ACTUAL flag, total KEYCODEs now 250 (244 base + 6 ratios) |
 
-Last Updated: January 7, 2025
+Last Updated: October 15, 2025
