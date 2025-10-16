@@ -208,6 +208,7 @@ def display_income_statement(df, ticker, periods, display_mode):
         ('Net_investment_income', 'Net Investment Income'),
         ('Net_Margin_lending_Income', 'Margin Lending Income'),
         ('MARGIN_LENDING_RATE', 'Margin Lending Rate (%)'),
+        ('MARGIN_LENDING_SPREAD', 'Margin Lending Spread (%)'),
         ('Net_Capital_Income', 'Capital Income'),
         ('Total_Operating_Income', 'Total Operating Income'),
         ('SGA', 'SG&A'),
@@ -238,7 +239,7 @@ def display_income_statement(df, ticker, periods, display_mode):
                 if metric_code in ['ROE', 'ROA']:
                     # These are already percentages (e.g., 15.5 = 15.5%)
                     row[label] = f"{value:.2f}%" if value != 0 else "-"
-                elif metric_code in ['INTEREST_RATE', 'MARGIN_LENDING_RATE']:
+                elif metric_code in ['INTEREST_RATE', 'MARGIN_LENDING_RATE', 'MARGIN_LENDING_SPREAD']:
                     # Rates are stored as decimal, convert to percentage
                     row[label] = f"{value * 100:.2f}%" if value != 0 else "-"
                 elif metric_code == 'NET_BROKERAGE_FEE':
