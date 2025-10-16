@@ -37,7 +37,7 @@ def _serialize_dataframe(df: pd.DataFrame, max_rows: int = 2000) -> List[Dict[st
 def _normalize_ticker_list(tickers: Optional[List[str]]) -> List[str]:
     if not tickers:
         try:
-            return brokerage_data.get_available_tickers()
+            return get_brokerage_universe()
         except Exception:
             return []
     return sorted({t.strip().upper() for t in tickers if isinstance(t, str) and t.strip()})
@@ -127,6 +127,9 @@ class BrokerageMCP:
         self.tool_specs: List[Dict[str, Any]] = []
         self._cache: Dict[str, CachedResult] = {}
         self._register_tools()
+
+        # Preload brokerage universe once to keep responses consistent and bounded
+        self._brokerage_universe = get_brokerage_universe()
 
     def _cache_key(self, name: str, arguments: Dict[str, Any]) -> str:
         serialized = json.dumps(arguments, sort_keys=True, default=str)
@@ -349,7 +352,7 @@ class BrokerageMCP:
             },
         )
         def _tool(tickers: Optional[List[str]] = None) -> Dict[str, Any]:
-            available = brokerage_data.get_available_tickers()
+            available = get_brokerage_universe()
             if not tickers:
                 return {"tickers": available, "count": len(available)}
 

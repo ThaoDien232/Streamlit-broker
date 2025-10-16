@@ -1,14 +1,20 @@
 """Interactive brokerage analytics chatbot powered by MCP-style tools."""
 
+import importlib
 import json
 import os
-from typing import Any, Dict, List
+import re
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import streamlit as st
+from dotenv import load_dotenv
 
-from utils.brokerage_mcp import BrokerageMCP
+import utils.brokerage_mcp as brokerage_mcp_module
 from utils.openai_commentary import get_openai_client
 
+
+load_dotenv()
 
 st.set_page_config(page_title="Brokerage GPT", page_icon="🧠", layout="wide")
 
@@ -25,102 +31,355 @@ SYSTEM_PROMPT = (
 )
 
 
+def _default_model_name() -> str:
+    env_model = os.getenv("OPENAI_MODEL")
+    if env_model:
+        return env_model
+    try:
+        model = st.secrets["openai"].get("model")
+        if model:
+            return model
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        model = st.secrets.get("OPENAI_MODEL")
+        if model:
+            return str(model)
+    except Exception:  # noqa: BLE001
+        pass
+    return "gpt-5-mini"
+
+
+def calculate_cost(input_tokens: int, output_tokens: int, model: str) -> float:
+    pricing = {
+        "gpt-5": {"input": 0.03, "output": 0.06},
+        "gpt-5-mini": {"input": 0.0015, "output": 0.002},
+        "gpt-4": {"input": 0.03, "output": 0.06},
+        "gpt-3.5-turbo": {"input": 0.0015, "output": 0.002},
+    }
+    model_pricing = pricing.get(model, pricing["gpt-4"])
+    input_cost = (input_tokens / 1000) * model_pricing["input"]
+    output_cost = (output_tokens / 1000) * model_pricing["output"]
+    return input_cost + output_cost
+
+
+def _cache_get(key: str) -> Optional[Dict[str, Any]]:
+    entry = st.session_state.brokerage_tool_cache.get(key)
+    if not entry:
+        return None
+    age = (datetime.utcnow() - entry["timestamp"]).total_seconds()
+    if age > st.session_state.brokerage_tool_cache_ttl:
+        return None
+    return entry["result"]
+
+
+def _cache_set(key: str, result: Dict[str, Any]) -> None:
+    st.session_state.brokerage_tool_cache[key] = {
+        "result": result,
+        "timestamp": datetime.utcnow(),
+    }
+
+
+def compact_tool_result_for_llm(result: Dict[str, Any], max_rows: Optional[int] = None) -> Dict[str, Any]:
+    try:
+        limit = max_rows or int(os.getenv("LLM_TOOL_MAX_ROWS", "200"))
+    except Exception:  # noqa: BLE001
+        limit = 200
+    if not isinstance(result, dict):
+        return {"data": result}
+    payload = json.loads(json.dumps(result, default=str))
+    data = payload.get("data")
+    if isinstance(data, dict):
+        rows = data.get("rows")
+        if isinstance(rows, list) and len(rows) > limit:
+            try:
+                head_n = max(5, min(20, int(os.getenv("LLM_TOOL_HEAD_ROWS", "10"))))
+                tail_n = max(0, min(10, int(os.getenv("LLM_TOOL_TAIL_ROWS", "5"))))
+            except Exception:  # noqa: BLE001
+                head_n = 10
+                tail_n = 5
+            payload["data_head"] = rows[:head_n]
+            payload["data_tail"] = rows[-tail_n:] if tail_n else []
+            cleaned = {k: v for k, v in data.items() if k != "rows"}
+            cleaned["rows"] = []
+            payload["data"] = cleaned
+    return payload
+
+
+def compress_assistant_response(response: str, tool_calls: List[str], user_message: str) -> Dict[str, Any]:
+    compressed: Dict[str, Any] = {
+        "tickers": [],
+        "periods": [],
+        "metrics": {},
+        "tools": tool_calls[:5],
+        "summary": "",
+    }
+    tickers = re.findall(r"\b[A-Z]{3,5}\b", f"{response} {user_message}")
+    compressed["tickers"] = sorted({t for t in tickers})[:10]
+    periods = re.findall(r"\b\d{4}-Q\d\b|\bQ\d\s*\d{4}\b|\b\dQ\d{2}\b|\b20\d{2}\b", response)
+    compressed["periods"] = sorted({p for p in periods})[:5]
+    roe_match = re.search(r"ROE\s*([0-9.]+)%", response)
+    if roe_match:
+        compressed["metrics"]["ROE"] = f"{roe_match.group(1)}%"
+    pe_match = re.search(r"PE\s*([0-9.]+)", response)
+    if pe_match:
+        compressed["metrics"]["PE"] = pe_match.group(1)
+    if compressed["tickers"] and compressed["periods"]:
+        compressed["summary"] = f"{compressed['tickers'][0]} {compressed['periods'][0]}"
+    elif compressed["tickers"]:
+        compressed["summary"] = f"Focused on {compressed['tickers'][0]}"
+    else:
+        compressed["summary"] = "Brokerage insight"
+    return compressed
+
+
+def reconstruct_context(history: List[Dict[str, Any]]) -> str:
+    if not history:
+        return ""
+    parts: List[str] = []
+    for item in history[-3:]:
+        if item.get("role") == "user":
+            content = item.get("content", "")
+            snippet = f"{content[:120]}…" if len(content) > 120 else content
+            parts.append(f"User asked: {snippet}")
+        elif item.get("role") == "assistant_compressed":
+            data = item.get("data", {})
+            segments: List[str] = []
+            tickers = data.get("tickers")
+            periods = data.get("periods")
+            if tickers:
+                segments.append(f"Discussed {', '.join(tickers[:3])}")
+            if periods:
+                segments.append(f"for {', '.join(periods[:2])}")
+            if segments:
+                parts.append(" ".join(segments))
+    return " | ".join(parts)
+
+
+def _ensure_openai_client() -> None:
+    if "brokerage_openai_client" in st.session_state:
+        return
+    try:
+        st.session_state.brokerage_openai_client = get_openai_client()
+        st.session_state.brokerage_openai_error = None
+    except Exception as exc:  # noqa: BLE001
+        st.session_state.brokerage_openai_client = None
+        st.session_state.brokerage_openai_error = str(exc)
+
+
+def _ensure_tool_system(force_reload: bool = False) -> None:
+    global brokerage_mcp_module
+    needs_init = "brokerage_tool_system" not in st.session_state or force_reload
+    if not needs_init:
+        return
+    try:
+        if st.session_state.brokerage_developer_mode or force_reload:
+            brokerage_mcp_module = importlib.reload(brokerage_mcp_module)
+        st.session_state.brokerage_tool_system = brokerage_mcp_module.BrokerageMCP()
+        st.session_state.brokerage_tool_system_error = None
+    except Exception as exc:  # noqa: BLE001
+        st.session_state.brokerage_tool_system = None
+        st.session_state.brokerage_tool_system_error = str(exc)
+
+
 def _init_session() -> None:
-    if "brokerage_chat_history" not in st.session_state:
-        st.session_state.brokerage_chat_history = []
+    if "brokerage_messages" not in st.session_state:
+        st.session_state.brokerage_messages = []
+    if "brokerage_display_messages" not in st.session_state:
+        st.session_state.brokerage_display_messages = []
     if "brokerage_tool_executions" not in st.session_state:
         st.session_state.brokerage_tool_executions = []
-    if "brokerage_mcp" not in st.session_state:
-        st.session_state.brokerage_mcp = BrokerageMCP()
-
-
-def _get_model_name() -> str:
-    model = os.getenv("OPENAI_MODEL")
-    if not model:
-        try:
-            model = st.secrets["openai"].get("model", "gpt-4o-mini")
-        except Exception:  # noqa: BLE001
-            model = "gpt-4o-mini"
-    return model
-
-
-def _append_history(role: str, content: str) -> None:
-    st.session_state.brokerage_chat_history.append({"role": role, "content": content})
-
-
-def _append_tool_log(entry: Dict[str, Any]) -> None:
-    st.session_state.brokerage_tool_executions.append(entry)
+    if "brokerage_tool_cache" not in st.session_state:
+        st.session_state.brokerage_tool_cache = {}
+    if "brokerage_compressed_history" not in st.session_state:
+        st.session_state.brokerage_compressed_history = []
+    if "brokerage_selected_model" not in st.session_state:
+        st.session_state.brokerage_selected_model = _default_model_name()
+    if "brokerage_developer_mode" not in st.session_state:
+        st.session_state.brokerage_developer_mode = False
+    if "brokerage_tool_cache_ttl" not in st.session_state:
+        st.session_state.brokerage_tool_cache_ttl = int(os.getenv("UI_TOOL_CACHE_TTL", "300"))
+    if "brokerage_usage" not in st.session_state:
+        st.session_state.brokerage_usage = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "estimated_cost": 0.0,
+        }
+    _ensure_openai_client()
+    _ensure_tool_system(force_reload=st.session_state.brokerage_developer_mode)
 
 
 def _render_history() -> None:
-    for message in st.session_state.brokerage_chat_history:
+    for message in st.session_state.brokerage_display_messages:
         with st.chat_message(message["role"]):
             st.write(message["content"])
 
 
-def _handle_tool_calls(
-    mcp: BrokerageMCP,
-    response_message,
-    messages: List[Dict[str, Any]],
-) -> None:
-    tool_calls = response_message.tool_calls or []
-    for call in tool_calls:
-        tool_name = call.function.name
-        try:
-            arguments = json.loads(call.function.arguments or "{}")
-        except json.JSONDecodeError:
-            arguments = {}
-        result = mcp.execute_tool(tool_name, arguments)
-        payload = json.dumps(result, ensure_ascii=False)
-        messages.append({"role": "tool", "tool_call_id": call.id, "content": payload})
-
-        log_entry = {
-            "tool": tool_name,
-            "arguments": arguments,
-            "status": result.get("status"),
-            "cached": result.get("cached"),
-        }
-        if "error" in result:
-            log_entry["error"] = result["error"]
-        elif result.get("status") == "success":
-            data_preview = result.get("data")
-            if isinstance(data_preview, dict):
-                log_entry["data_keys"] = list(data_preview.keys())[:5]
-
-        _append_tool_log(log_entry)
-
-
-def _run_chat_cycle(prompt: str) -> str:
-    client = get_openai_client()
-    mcp: BrokerageMCP = st.session_state.brokerage_mcp
-    model_name = _get_model_name()
-
-    messages: List[Dict[str, Any]] = (
-        [{"role": "system", "content": SYSTEM_PROMPT}] + st.session_state.brokerage_chat_history
+def _update_usage_totals(usage: Any, model: str) -> None:
+    if usage is None:
+        return
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", 0) or prompt_tokens + completion_tokens
+    st.session_state.brokerage_usage["prompt_tokens"] += prompt_tokens
+    st.session_state.brokerage_usage["completion_tokens"] += completion_tokens
+    st.session_state.brokerage_usage["total_tokens"] += total_tokens
+    st.session_state.brokerage_usage["estimated_cost"] += calculate_cost(
+        prompt_tokens,
+        completion_tokens,
+        model,
     )
-    messages.append({"role": "user", "content": prompt})
 
-    while True:
-        completion = client.chat.completions.create(
-            model=model_name,
+
+def chat_with_brokerage_streaming(user_message: str) -> str:
+    client = st.session_state.brokerage_openai_client
+    tool_system = st.session_state.brokerage_tool_system
+    if not client or not tool_system:
+        return "Tooling or OpenAI client is unavailable."
+    messages: List[Dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    context = reconstruct_context(st.session_state.brokerage_compressed_history)
+    if context:
+        messages.append({"role": "system", "content": f"Recent context: {context}"})
+    messages.extend(st.session_state.brokerage_messages)
+    typing_container = st.empty()
+    response_container = st.empty()
+    tool_status_container = st.container()
+    typing_container.markdown(
+        "<div style='background-color:#DDDDD6;padding:8px 16px;border-radius:8px;display:inline-block;font-size:14px;color:#333;'>Thinking…</div>",
+        unsafe_allow_html=True,
+    )
+    accumulated_response = ""
+    tool_calls_made: List[str] = []
+    max_rounds = 20
+    rounds = 0
+    while rounds < max_rounds:
+        rounds += 1
+        stream = client.chat.completions.create(
+            model=st.session_state.brokerage_selected_model,
             messages=messages,
-            tools=mcp.tool_specs,
+            tools=tool_system.tool_specs,
+            tool_choice="auto",
+            stream=True,
+            stream_options={"include_usage": True},
         )
-
-        message = completion.choices[0].message
-
-        assistant_entry: Dict[str, Any] = {"role": message.role}
-        assistant_entry["content"] = message.content or ""
-        if message.tool_calls:
-            assistant_entry["tool_calls"] = [call.model_dump() for call in message.tool_calls]
-
-        messages.append(assistant_entry)
-
-        if message.tool_calls:
-            _handle_tool_calls(mcp, message, messages)
+        current_tool_calls: List[Dict[str, Any]] = []
+        assistant_content = ""
+        is_tool_call = False
+        for chunk in stream:
+            if hasattr(chunk, "usage") and chunk.usage is not None:
+                _update_usage_totals(chunk.usage, st.session_state.brokerage_selected_model)
+                continue
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if delta.tool_calls:
+                is_tool_call = True
+                for tool_call in delta.tool_calls:
+                    while len(current_tool_calls) <= tool_call.index:
+                        current_tool_calls.append({"id": "", "function": {"name": "", "arguments": ""}})
+                    if tool_call.id:
+                        current_tool_calls[tool_call.index]["id"] = tool_call.id
+                    if tool_call.function.name:
+                        current_tool_calls[tool_call.index]["function"]["name"] = tool_call.function.name
+                    if tool_call.function.arguments:
+                        current_tool_calls[tool_call.index]["function"]["arguments"] += tool_call.function.arguments
+            if delta.content and not is_tool_call:
+                if not assistant_content:
+                    typing_container.empty()
+                assistant_content += delta.content
+                accumulated_response += delta.content
+                response_container.markdown(f"{accumulated_response}▌")
+        if assistant_content:
+            response_container.markdown(accumulated_response)
+        if current_tool_calls:
+            tool_names = [call["function"].get("name") for call in current_tool_calls if call["function"].get("name")]
+            tool_calls_made.extend(tool_names)
+            assistant_payload = {
+                "role": "assistant",
+                "content": assistant_content or None,
+                "tool_calls": [
+                    {
+                        "id": call["id"],
+                        "type": "function",
+                        "function": call["function"],
+                    }
+                    for call in current_tool_calls
+                ],
+            }
+            messages.append(assistant_payload)
+            st.session_state.brokerage_messages.append(assistant_payload)
+            status_lines: List[str] = []
+            for call in current_tool_calls:
+                tool_name = call["function"].get("name") or ""
+                raw_args = call["function"].get("arguments") or "{}"
+                try:
+                    arguments = json.loads(raw_args)
+                except json.JSONDecodeError:
+                    arguments = {}
+                cache_key = f"{tool_name}:{json.dumps(arguments, sort_keys=True)}"
+                cached = _cache_get(cache_key)
+                if cached is None:
+                    result = tool_system.execute_tool(tool_name, arguments)
+                    _cache_set(cache_key, result)
+                    cached_ui = False
+                else:
+                    result = cached
+                    cached_ui = True
+                log_entry: Dict[str, Any] = {
+                    "tool": tool_name,
+                    "arguments": arguments,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "status": result.get("status"),
+                    "cached_tool": result.get("cached"),
+                    "cached_ui": cached_ui,
+                }
+                if result.get("error"):
+                    log_entry["error"] = result["error"]
+                data_block = result.get("data")
+                if isinstance(data_block, dict):
+                    rows = data_block.get("rows")
+                    if isinstance(rows, list):
+                        log_entry["rows"] = len(rows)
+                    log_entry["data_keys"] = list(data_block.keys())[:5]
+                st.session_state.brokerage_tool_executions.append(log_entry)
+                status_text = (
+                    f"✓ {tool_name}" if result.get("status") == "success" else f"✗ {tool_name}: {result.get('error', 'failed')}"
+                )
+                status_lines.append(status_text)
+                tool_message = {
+                    "role": "tool",
+                    "tool_call_id": call["id"],
+                    "content": json.dumps(compact_tool_result_for_llm(result), ensure_ascii=False, default=str),
+                }
+                messages.append(tool_message)
+                st.session_state.brokerage_messages.append(tool_message)
+            with tool_status_container:
+                for line in status_lines:
+                    st.caption(line)
+            accumulated_response = ""
             continue
-
-        return message.content or ""
+        typing_container.empty()
+        final_text = accumulated_response.strip() or ""
+        if not final_text:
+            final_text = "No direct response returned."
+        assistant_entry = {"role": "assistant", "content": final_text}
+        messages.append(assistant_entry)
+        st.session_state.brokerage_messages.append(assistant_entry)
+        st.session_state.brokerage_compressed_history.append(
+            {
+                "role": "assistant_compressed",
+                "data": compress_assistant_response(final_text, tool_calls_made, user_message),
+            }
+        )
+        if len(st.session_state.brokerage_compressed_history) > 20:
+            st.session_state.brokerage_compressed_history = st.session_state.brokerage_compressed_history[-20:]
+        return final_text
+    typing_container.empty()
+    fallback_text = accumulated_response.strip() or "Unable to complete the request."
+    assistant_entry = {"role": "assistant", "content": fallback_text}
+    st.session_state.brokerage_messages.append(assistant_entry)
+    return fallback_text
 
 
 def main() -> None:
@@ -129,59 +388,127 @@ def main() -> None:
     st.title("🧠 Brokerage Analyst Chatbot")
     st.caption("Ask anything about Vietnamese brokerage firms, financials, or valuations.")
 
-    with st.sidebar:
-        st.subheader("Session")
-        if st.button("Clear conversation"):
-            st.session_state.brokerage_chat_history = []
-            st.session_state.brokerage_tool_executions = []
-            st.experimental_rerun()
+    if st.session_state.brokerage_openai_client is None:
+        st.error("OpenAI API key not configured.")
+        st.info("Add OPENAI_API_KEY via environment or Streamlit secrets.")
+        return
+    if st.session_state.brokerage_tool_system is None:
+        st.error("Tool system failed to initialise.")
+        if st.session_state.get("brokerage_tool_system_error"):
+            st.warning(st.session_state.brokerage_tool_system_error)
+        return
 
+    with st.sidebar:
+        st.header("Configuration")
+        dev_toggle = st.toggle(
+            "Developer mode (reload tools)",
+            value=st.session_state.brokerage_developer_mode,
+            help="Reload brokerage MCP module on every run.",
+        )
+        if dev_toggle != st.session_state.brokerage_developer_mode:
+            st.session_state.brokerage_developer_mode = dev_toggle
+            _ensure_tool_system(force_reload=True)
+            st.experimental_rerun()
+        model_options = ["gpt-5", "gpt-5-mini"]
+        if st.session_state.brokerage_selected_model not in model_options:
+            model_options.insert(0, st.session_state.brokerage_selected_model)
+        selected_model = st.selectbox(
+            "Select model",
+            options=model_options,
+            index=model_options.index(st.session_state.brokerage_selected_model),
+        )
+        if selected_model != st.session_state.brokerage_selected_model:
+            st.session_state.brokerage_selected_model = selected_model
+        if st.button("Clear conversation"):
+            st.session_state.brokerage_messages = []
+            st.session_state.brokerage_display_messages = []
+            st.session_state.brokerage_tool_executions = []
+            st.session_state.brokerage_tool_cache = {}
+            st.session_state.brokerage_compressed_history = []
+            st.session_state.brokerage_usage = {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "estimated_cost": 0.0,
+            }
+            st.experimental_rerun()
         st.divider()
         st.subheader("Tools")
-        st.json({spec["function"]["name"]: spec["function"]["description"] for spec in st.session_state.brokerage_mcp.tool_specs})
+        tool_specs = {
+            spec["function"]["name"]: spec["function"].get("description", "")
+            for spec in st.session_state.brokerage_tool_system.tool_specs
+        }
+        st.json(tool_specs)
+        st.divider()
+        st.subheader("Usage")
+        usage = st.session_state.brokerage_usage
+        st.metric("Prompt tokens", usage["prompt_tokens"])
+        st.metric("Completion tokens", usage["completion_tokens"])
+        st.metric("Estimated cost (USD)", f"{usage['estimated_cost']:.4f}")
+        st.divider()
+        if st.button("Clear tool history"):
+            st.session_state.brokerage_tool_executions = []
+            st.experimental_rerun()
+        if st.session_state.brokerage_tool_executions:
+            st.download_button(
+                "Download tool history",
+                json.dumps(st.session_state.brokerage_tool_executions, indent=2, default=str),
+                "brokerage_tool_history.json",
+                "application/json",
+            )
 
-        if st.checkbox("Show tool execution log"):
-            st.json(st.session_state.brokerage_tool_executions)
+    st.info(
+        "**Guidance:** Be specific about metrics or valuation focus. Available dimensions include historical metrics, forecasts, valuations, stock performance, commentary, and coverage gaps."
+    )
 
     _render_history()
 
     if st.session_state.brokerage_tool_executions:
-        with st.expander("Tool execution log", expanded=False):
-            for entry in reversed(st.session_state.brokerage_tool_executions[-20:]):
+        with st.expander(
+            f"Tool execution history ({len(st.session_state.brokerage_tool_executions)} records)",
+            expanded=False,
+        ):
+            for entry in reversed(st.session_state.brokerage_tool_executions[-12:]):
                 status = entry.get("status", "?")
-                status_icon = "✅" if status == "success" else "⚠️" if status else "ℹ️"
-                cached = " (cached)" if entry.get("cached") else ""
-                st.markdown(
-                    f"{status_icon} **{entry.get('tool')}**{cached}\n\n"
-                    f"• Status: `{status}`\n"
-                    f"• Arguments: `{entry.get('arguments')}`"
-                )
+                icon = "✅" if status == "success" else "⚠️" if status else "ℹ️"
+                cached_flags = []
+                if entry.get("cached_tool"):
+                    cached_flags.append("tool-cache")
+                if entry.get("cached_ui"):
+                    cached_flags.append("ui-cache")
+                suffix = f" ({', '.join(cached_flags)})" if cached_flags else ""
+                st.markdown(f"{icon} **{entry.get('tool')}**{suffix}")
+                st.markdown(f"• Status: `{status}`")
+                st.markdown(f"• Arguments: `{entry.get('arguments')}`")
+                if entry.get("rows") is not None:
+                    st.markdown(f"• Rows: `{entry['rows']}`")
+                if entry.get("data_keys"):
+                    st.markdown(f"• Data keys: `{entry['data_keys']}`")
                 if entry.get("error"):
                     st.markdown(f"• Error: `{entry['error']}`")
-                elif entry.get("data_keys"):
-                    st.markdown(f"• Data keys: `{entry['data_keys']}`")
+                st.markdown(f"• Timestamp: `{entry.get('timestamp')}`")
                 st.markdown("---")
 
     query = st.chat_input("Ask about brokers, metrics, or valuations…")
     if not query:
         return
 
-    _append_history("user", query)
+    user_entry = {"role": "user", "content": query}
+    st.session_state.brokerage_messages.append(user_entry)
+    st.session_state.brokerage_display_messages.append(user_entry)
+    st.session_state.brokerage_compressed_history.append({"role": "user", "content": query})
+    if len(st.session_state.brokerage_compressed_history) > 20:
+        st.session_state.brokerage_compressed_history = st.session_state.brokerage_compressed_history[-20:]
+
     with st.chat_message("user"):
         st.write(query)
 
     with st.chat_message("assistant"):
         with st.spinner("Analyzing…"):
-            try:
-                response_text = _run_chat_cycle(query)
-            except Exception as exc:  # noqa: BLE001
-                response_text = (
-                    "I couldn't complete that request because the AI backend reported an error: "
-                    f"{exc}."
-                )
+            response_text = chat_with_brokerage_streaming(query)
         st.write(response_text)
 
-    _append_history("assistant", response_text)
+    st.session_state.brokerage_display_messages.append({"role": "assistant", "content": response_text})
 
 
 if __name__ == "__main__":
