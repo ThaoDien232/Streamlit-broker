@@ -73,13 +73,21 @@ def _handle_tool_calls(
         result = mcp.execute_tool(tool_name, arguments)
         payload = json.dumps(result, ensure_ascii=False)
         messages.append({"role": "tool", "tool_call_id": call.id, "content": payload})
-        _append_tool_log(
-            {
-                "tool": tool_name,
-                "arguments": arguments,
-                "result": result,
-            }
-        )
+
+        log_entry = {
+            "tool": tool_name,
+            "arguments": arguments,
+            "status": result.get("status"),
+            "cached": result.get("cached"),
+        }
+        if "error" in result:
+            log_entry["error"] = result["error"]
+        elif result.get("status") == "success":
+            data_preview = result.get("data")
+            if isinstance(data_preview, dict):
+                log_entry["data_keys"] = list(data_preview.keys())[:5]
+
+        _append_tool_log(log_entry)
 
 
 def _run_chat_cycle(prompt: str) -> str:
@@ -136,6 +144,23 @@ def main() -> None:
             st.json(st.session_state.brokerage_tool_executions)
 
     _render_history()
+
+    if st.session_state.brokerage_tool_executions:
+        with st.expander("Tool execution log", expanded=False):
+            for entry in reversed(st.session_state.brokerage_tool_executions[-20:]):
+                status = entry.get("status", "?")
+                status_icon = "✅" if status == "success" else "⚠️" if status else "ℹ️"
+                cached = " (cached)" if entry.get("cached") else ""
+                st.markdown(
+                    f"{status_icon} **{entry.get('tool')}**{cached}\n\n"
+                    f"• Status: `{status}`\n"
+                    f"• Arguments: `{entry.get('arguments')}`"
+                )
+                if entry.get("error"):
+                    st.markdown(f"• Error: `{entry['error']}`")
+                elif entry.get("data_keys"):
+                    st.markdown(f"• Data keys: `{entry['data_keys']}`")
+                st.markdown("---")
 
     query = st.chat_input("Ask about brokers, metrics, or valuations…")
     if not query:
