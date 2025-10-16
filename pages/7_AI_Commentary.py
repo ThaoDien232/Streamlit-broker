@@ -797,34 +797,40 @@ with st.sidebar:
     st.header("🐛 Debug Tools")
     if st.button("Show Available Keycodes"):
         try:
-            from utils.brokerage_data import get_database_connection
+            from utils.db import run_query
 
-            conn = get_database_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT DISTINCT KEYCODE FROM dbo.BrokerageMetrics ORDER BY KEYCODE")
-            keycodes = [row[0] for row in cursor.fetchall()]
-            cursor.close()
-            conn.close()
+            # Query distinct keycodes from database
+            query = """
+            SELECT DISTINCT KEYCODE
+            FROM dbo.BrokerageMetrics
+            ORDER BY KEYCODE
+            """
 
-            st.success(f"Found {len(keycodes)} distinct keycodes")
+            df = run_query(query)
 
-            # Display in expandable section
-            with st.expander("View All Keycodes", expanded=True):
-                # Display in columns for better readability
-                col1, col2, col3 = st.columns(3)
-                third = len(keycodes) // 3
+            if not df.empty:
+                keycodes = df['KEYCODE'].tolist()
+                st.success(f"Found {len(keycodes)} distinct keycodes")
 
-                with col1:
-                    for keycode in keycodes[:third]:
-                        st.text(keycode)
+                # Display in expandable section
+                with st.expander("View All Keycodes", expanded=True):
+                    # Display in columns for better readability
+                    col1, col2, col3 = st.columns(3)
+                    third = len(keycodes) // 3
 
-                with col2:
-                    for keycode in keycodes[third:2*third]:
-                        st.text(keycode)
+                    with col1:
+                        for keycode in keycodes[:third]:
+                            st.text(keycode)
 
-                with col3:
-                    for keycode in keycodes[2*third:]:
-                        st.text(keycode)
+                    with col2:
+                        for keycode in keycodes[third:2*third]:
+                            st.text(keycode)
+
+                    with col3:
+                        for keycode in keycodes[2*third:]:
+                            st.text(keycode)
+            else:
+                st.warning("No keycodes found in database")
 
         except Exception as e:
             st.error(f"Error fetching keycodes: {e}")
