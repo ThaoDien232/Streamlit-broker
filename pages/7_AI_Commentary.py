@@ -204,6 +204,10 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
         'Margin Lending Rate',
         'Margin Lending Spread',
         'Investment Income',
+        'MTM Equities',
+        'Non-MTM Equities',
+        'Bonds',
+        'CDs/Deposits',
         'Other Incomes',
         'Total Operating Income',
         'SG&A',
@@ -387,6 +391,10 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 'IB Income': 'Net_IB_Income',
                 'Margin Income': 'Net_Margin_lending_Income',  # Correct METRIC_CODE for margin lending income
                 'Investment Income': 'Net_investment_income',
+                'MTM Equities': 'mtm_equities_market_value',
+                'Non-MTM Equities': 'not_mtm_equities_market_value',
+                'Bonds': 'bonds_market_value',
+                'CDs/Deposits': 'cds_deposits_market_value',
                 'Other Incomes': 'Net_Other_Income',
                 'Total Operating Income': 'Total_Operating_Income',
                 'PBT': 'PBT',  # KEYCODE in database
