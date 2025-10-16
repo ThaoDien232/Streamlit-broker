@@ -196,12 +196,7 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
 
     # Validate inputs
     if filtered_df.empty or not selected_brokers:
-        st.warning("❌ DEBUG: filtered_df is empty or no brokers selected")
         return None
-
-    # DEBUG: Show what METRIC_CODEs are available
-    available_metrics = filtered_df['METRIC_CODE'].unique().tolist()
-    st.info(f"🔍 DEBUG: Available METRIC_CODEs in filtered_df: {available_metrics}")
 
     # TOI = Fee Income + Capital Income
     # Fee Income = Net Brokerage + Net IB + Net Other Operating
@@ -216,8 +211,6 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
         'Other Operating Income': 'Net_other_operating_income'
     }
 
-    st.info(f"🔍 DEBUG: Looking for TOI components: {list(toi_components.values())}")
-
     # Collect data for each broker
     all_data = []
 
@@ -227,10 +220,7 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
                                (filtered_df['METRIC_CODE'] == 'Total_Operating_Income')].copy()
 
         if toi_data.empty:
-            st.warning(f"❌ DEBUG: No TOI data found for broker {broker}")
             continue
-        else:
-            st.success(f"✅ DEBUG: Found {len(toi_data)} TOI records for {broker}")
 
         toi_data = toi_data.sort_values(['YEARREPORT', 'LENGTHREPORT'])
 
@@ -252,13 +242,11 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
                 (filtered_df['LENGTHREPORT'] == quarter)
             ]
 
-            components_found = []
             for component_name, component_code in toi_components.items():
                 component_row = period_data[period_data['METRIC_CODE'] == component_code]
 
                 if not component_row.empty:
                     component_value = component_row.iloc[0]['VALUE']
-                    components_found.append(component_name)
 
                     # Skip if component_value is None or NaN
                     if pd.isna(component_value):
@@ -276,13 +264,8 @@ def create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type):
                         'Quarter': quarter
                     })
 
-            st.info(f"🔍 DEBUG: {broker} {quarter_label} - Found components: {components_found}")
-
     if not all_data:
-        st.error("❌ DEBUG: No component data found! all_data is empty")
         return None
-    else:
-        st.success(f"✅ DEBUG: Successfully collected {len(all_data)} data points for TOI structure")
 
     df_structure = pd.DataFrame(all_data)
 
