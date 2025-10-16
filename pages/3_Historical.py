@@ -412,7 +412,7 @@ def display_balance_sheet(df, ticker, periods, display_mode):
 
 def display_investment_book(df, broker, periods):
     """Display Simplified Investment Book showing 4 asset groups with market values across quarters"""
-    st.subheader("📊 Investment Book - Simplified View")
+    st.subheader("Investment Book")
 
     # Only show for quarterly data (investment book not meaningful for annual aggregates)
     quarterly_periods = [p for p in periods if p['LENGTHREPORT'] != 5]
@@ -493,40 +493,6 @@ def display_investment_book(df, broker, periods):
             investment_df.style.apply(highlight_total, axis=1),
             use_container_width=True, 
             hide_index=True
-        )
-
-        # Add summary statistics
-        col1, col2, col3 = st.columns(3)
-        
-        # Get latest period data for summary
-        latest_period = display_periods[0]
-        latest_year = latest_period['YEARREPORT']
-        latest_quarter = latest_period['LENGTHREPORT']
-        latest_data = get_investment_data(df, broker, latest_year, latest_quarter)
-        
-        with col1:
-            total_investments = sum(latest_data.values()) / 1_000_000_000
-            st.metric("Total Investments", f"{total_investments:,.1f}B VND")
-        
-        with col2:
-            # Find largest category
-            if latest_data:
-                largest_category = max(latest_data.items(), key=lambda x: x[1])
-                st.metric("Largest Category", f"{largest_category[0]}")
-        
-        with col3:
-            # Count non-zero categories
-            active_categories = sum(1 for value in latest_data.values() if value > 0)
-            st.metric("Active Categories", active_categories)
-
-        # Add download button
-        csv = investment_df.to_csv(index=False)
-        st.download_button(
-            label="📥 Download Investment Book",
-            data=csv,
-            file_name=f"simplified_investment_book_{broker}.csv",
-            mime="text/csv",
-            key=f"download_inv_{broker}"
         )
 
 def main():
