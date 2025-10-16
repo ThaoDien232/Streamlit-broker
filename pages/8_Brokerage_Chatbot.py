@@ -230,7 +230,7 @@ def _update_usage_totals(usage: Any, model: str) -> None:
     )
 
 
-def chat_with_brokerage_streaming(user_message: str) -> str:
+def chat_with_brokerage(user_message: str) -> str:
     client = st.session_state.brokerage_openai_client
     tool_system = st.session_state.brokerage_tool_system
     if not client or not tool_system:
@@ -240,30 +240,20 @@ def chat_with_brokerage_streaming(user_message: str) -> str:
     if context:
         messages.append({"role": "system", "content": f"Recent context: {context}"})
     messages.extend(st.session_state.brokerage_messages)
-    typing_container = st.empty()
-    response_container = st.empty()
     tool_status_container = st.container()
-    typing_container.markdown(
-        "<div style='background-color:#DDDDD6;padding:8px 16px;border-radius:8px;display:inline-block;font-size:14px;color:#333;'>Thinking…</div>",
-        unsafe_allow_html=True,
-    )
-    accumulated_response = ""
     tool_calls_made: List[str] = []
     max_rounds = 20
     rounds = 0
     while rounds < max_rounds:
         rounds += 1
         try:
-            stream = client.chat.completions.create(
+            completion = client.chat.completions.create(
                 model=st.session_state.brokerage_selected_model,
                 messages=messages,
                 tools=tool_system.tool_specs,
                 tool_choice="auto",
-                stream=True,
-                stream_options={"include_usage": True},
             )
         except Exception as exc:  # noqa: BLE001
-            typing_container.empty()
             err_name = exc.__class__.__name__
             err_msg = getattr(exc, "message", None) or str(exc)
             sanitized = err_msg if err_msg else "unknown error"
@@ -296,60 +286,40 @@ def chat_with_brokerage_streaming(user_message: str) -> str:
                 }
             )
             return fallback
-        current_tool_calls: List[Dict[str, Any]] = []
-        assistant_content = ""
-        is_tool_call = False
-        for chunk in stream:
-            if hasattr(chunk, "usage") and chunk.usage is not None:
-                _update_usage_totals(chunk.usage, st.session_state.brokerage_selected_model)
-                continue
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
-            if delta.tool_calls:
-                is_tool_call = True
-                for tool_call in delta.tool_calls:
-                    while len(current_tool_calls) <= tool_call.index:
-                        current_tool_calls.append({"id": "", "function": {"name": "", "arguments": ""}})
-                    if tool_call.id:
-                        current_tool_calls[tool_call.index]["id"] = tool_call.id
-                    if tool_call.function.name:
-                        current_tool_calls[tool_call.index]["function"]["name"] = tool_call.function.name
-                    if tool_call.function.arguments:
-                        current_tool_calls[tool_call.index]["function"]["arguments"] += tool_call.function.arguments
-            if delta.content and not is_tool_call:
-                if not assistant_content:
-                    typing_container.empty()
-                assistant_content += delta.content
-                accumulated_response += delta.content
-                response_container.markdown(f"{accumulated_response}▌")
-        if assistant_content:
-            response_container.markdown(accumulated_response)
-        if current_tool_calls:
-            tool_names = [call["function"].get("name") for call in current_tool_calls if call["function"].get("name")]
-            tool_calls_made.extend(tool_names)
-            assistant_payload = {
-                "role": "assistant",
-                "content": assistant_content or None,
-                "tool_calls": [
-                    {
-                        "id": call["id"],
-                        "type": "function",
-                        "function": call["function"],
-                    }
-                    for call in current_tool_calls
-                ],
-            }
-            messages.append(assistant_payload)
-            st.session_state.brokerage_messages.append(assistant_payload)
+
+        _update_usage_totals(getattr(completion, "usage", None), st.session_state.brokerage_selected_model)
+
+        message = completion.choices[0].message
+        assistant_content = message.content or ""
+        tool_calls = message.tool_calls or []
+
+        assistant_payload: Dict[str, Any] = {"role": "assistant", "content": assistant_content or None}
+        if tool_calls:
+            assistant_payload["tool_calls"] = [
+                {
+                    "id": call.id,
+                    "type": "function",
+                    "function": {
+                        "name": call.function.name,
+                        "arguments": call.function.arguments,
+                    },
+                }
+                for call in tool_calls
+            ]
+
+        messages.append(assistant_payload)
+        st.session_state.brokerage_messages.append(assistant_payload)
+
+        if tool_calls:
             status_lines: List[str] = []
-            for call in current_tool_calls:
-                tool_name = call["function"].get("name") or ""
-                raw_args = call["function"].get("arguments") or "{}"
+            for call in tool_calls:
+                tool_name = call.function.name or ""
+                raw_args = call.function.arguments or "{}"
                 try:
                     arguments = json.loads(raw_args)
                 except json.JSONDecodeError:
                     arguments = {}
+                tool_calls_made.append(tool_name)
                 cache_key = f"{tool_name}:{json.dumps(arguments, sort_keys=True)}"
                 cached = _cache_get(cache_key)
                 if cached is None:
@@ -382,7 +352,7 @@ def chat_with_brokerage_streaming(user_message: str) -> str:
                 status_lines.append(status_text)
                 tool_message = {
                     "role": "tool",
-                    "tool_call_id": call["id"],
+                    "tool_call_id": call.id,
                     "content": json.dumps(compact_tool_result_for_llm(result), ensure_ascii=False, default=str),
                 }
                 messages.append(tool_message)
@@ -390,15 +360,9 @@ def chat_with_brokerage_streaming(user_message: str) -> str:
             with tool_status_container:
                 for line in status_lines:
                     st.caption(line)
-            accumulated_response = ""
             continue
-        typing_container.empty()
-        final_text = accumulated_response.strip() or ""
-        if not final_text:
-            final_text = "No direct response returned."
-        assistant_entry = {"role": "assistant", "content": final_text}
-        messages.append(assistant_entry)
-        st.session_state.brokerage_messages.append(assistant_entry)
+
+        final_text = assistant_content.strip() or "No direct response returned."
         st.session_state.brokerage_compressed_history.append(
             {
                 "role": "assistant_compressed",
@@ -408,8 +372,8 @@ def chat_with_brokerage_streaming(user_message: str) -> str:
         if len(st.session_state.brokerage_compressed_history) > 20:
             st.session_state.brokerage_compressed_history = st.session_state.brokerage_compressed_history[-20:]
         return final_text
-    typing_container.empty()
-    fallback_text = accumulated_response.strip() or "Unable to complete the request."
+
+    fallback_text = "Unable to complete the request."
     assistant_entry = {"role": "assistant", "content": fallback_text}
     st.session_state.brokerage_messages.append(assistant_entry)
     return fallback_text
@@ -538,7 +502,7 @@ def main() -> None:
 
     with st.chat_message("assistant"):
         with st.spinner("Analyzing…"):
-            response_text = chat_with_brokerage_streaming(query)
+            response_text = chat_with_brokerage(query)
         st.write(response_text)
 
     st.session_state.brokerage_display_messages.append({"role": "assistant", "content": response_text})
