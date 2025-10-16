@@ -168,6 +168,21 @@ class BrokerageMCP:
 
     def _register_tool(self, name: str, description: str, parameters: Dict[str, Any]):
         def decorator(func: Callable[..., Dict[str, Any]]):
+            cleaned_properties: Dict[str, Any] = {}
+            required_fields: List[str] = []
+            for key, schema in parameters.items():
+                schema_copy = dict(schema)
+                if schema_copy.pop("required", False):
+                    required_fields.append(key)
+                cleaned_properties[key] = schema_copy
+
+            param_schema: Dict[str, Any] = {
+                "type": "object",
+                "properties": cleaned_properties,
+            }
+            if required_fields:
+                param_schema["required"] = required_fields
+
             self._tools[name] = func
             self.tool_specs.append(
                 {
@@ -175,11 +190,7 @@ class BrokerageMCP:
                     "function": {
                         "name": name,
                         "description": description,
-                        "parameters": {
-                            "type": "object",
-                            "properties": parameters,
-                            "required": [key for key, val in parameters.items() if val.get("required")],
-                        },
+                        "parameters": param_schema,
                     },
                 }
             )
