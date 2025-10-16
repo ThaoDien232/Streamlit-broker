@@ -56,7 +56,7 @@ def _render_history() -> None:
 def _handle_tool_calls(
     mcp: BrokerageMCP,
     response_message,
-    messages: List[Dict[str, str]],
+    messages: List[Dict[str, Any]],
 ) -> None:
     tool_calls = response_message.tool_calls or []
     for call in tool_calls:
@@ -67,13 +67,7 @@ def _handle_tool_calls(
             arguments = {}
         result = mcp.execute_tool(tool_name, arguments)
         payload = json.dumps(result, ensure_ascii=False)
-        messages.append(
-            {
-                "role": "tool",
-                "tool_call_id": call.id,
-                "content": payload,
-            }
-        )
+        messages.append({"role": "tool", "tool_call_id": call.id, "content": payload})
         _append_tool_log(
             {
                 "tool": tool_name,
@@ -93,13 +87,10 @@ def _run_chat_cycle(prompt: str) -> str:
     )
     messages.append({"role": "user", "content": prompt})
 
-    completion = client.chat.completions.create(
-        model=model_name,
-        messages=messages,
-        tools=mcp.tool_specs,
-    )
+    completion = client.chat.completions.create(model=model_name, messages=messages, tools=mcp.tool_specs)
 
     message = completion.choices[0].message
+    messages.append(message.model_dump())
 
     if message.tool_calls:
         _handle_tool_calls(mcp, message, messages)
@@ -159,4 +150,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
