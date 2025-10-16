@@ -232,16 +232,30 @@ class BrokerageMCP:
                 ORDER BY YEARREPORT DESC
             """
             recent_quarters_query = """
-                SELECT DISTINCT TOP 8 QUARTER_LABEL
-                FROM dbo.BrokerageMetrics
-                WHERE ACTUAL = 1 AND LENGTHREPORT BETWEEN 1 AND 4 AND QUARTER_LABEL IS NOT NULL
-                ORDER BY YEARREPORT DESC, LENGTHREPORT DESC
+                SELECT QUARTER_LABEL
+                FROM (
+                    SELECT QUARTER_LABEL,
+                           ROW_NUMBER() OVER (ORDER BY YEARREPORT DESC, LENGTHREPORT DESC) AS rn
+                    FROM dbo.BrokerageMetrics
+                    WHERE ACTUAL = 1
+                      AND LENGTHREPORT BETWEEN 1 AND 4
+                      AND QUARTER_LABEL IS NOT NULL
+                    GROUP BY QUARTER_LABEL, YEARREPORT, LENGTHREPORT
+                ) ranked
+                WHERE rn <= 8
+                ORDER BY rn
             """
             recent_years_query = """
-                SELECT DISTINCT TOP 5 YEARREPORT
-                FROM dbo.BrokerageMetrics
-                WHERE ACTUAL = 1 AND LENGTHREPORT = 5
-                ORDER BY YEARREPORT DESC
+                SELECT YEARREPORT
+                FROM (
+                    SELECT YEARREPORT,
+                           ROW_NUMBER() OVER (ORDER BY YEARREPORT DESC) AS rn
+                    FROM dbo.BrokerageMetrics
+                    WHERE ACTUAL = 1 AND LENGTHREPORT = 5
+                    GROUP BY YEARREPORT
+                ) ranked
+                WHERE rn <= 5
+                ORDER BY rn
             """
             forecast_years_query = """
                 SELECT DISTINCT YEARREPORT
