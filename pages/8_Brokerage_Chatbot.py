@@ -16,6 +16,7 @@ st.set_page_config(page_title="Brokerage GPT", page_icon="🧠", layout="wide")
 SYSTEM_PROMPT = (
     "You are an expert brokerage analyst assisting with Vietnamese securities firms. "
     "You must rely on the provided tools for all factual data, metrics, valuations, and commentary. "
+    "Use get_data_availability first to learn the latest completed quarter overall and per ticker (see latest_quarters_by_ticker). "
     "Choose the tool that best fits the request: get_data_availability for coverage questions, "
     "get_broker_info for universes, query_historical_data for financial metrics, query_forecast_data for outlook, "
     "get_valuation_analysis for cheap/expensive comparisons, get_stock_performance for price moves, and get_commentary for narratives. "

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -230,6 +231,18 @@ class BrokerageMCP:
                 WHERE ACTUAL = 1 AND LENGTHREPORT = 5
                 ORDER BY YEARREPORT DESC
             """
+            recent_quarters_query = """
+                SELECT DISTINCT TOP 8 QUARTER_LABEL
+                FROM dbo.BrokerageMetrics
+                WHERE ACTUAL = 1 AND LENGTHREPORT BETWEEN 1 AND 4 AND QUARTER_LABEL IS NOT NULL
+                ORDER BY YEARREPORT DESC, LENGTHREPORT DESC
+            """
+            recent_years_query = """
+                SELECT DISTINCT TOP 5 YEARREPORT
+                FROM dbo.BrokerageMetrics
+                WHERE ACTUAL = 1 AND LENGTHREPORT = 5
+                ORDER BY YEARREPORT DESC
+            """
             forecast_years_query = """
                 SELECT DISTINCT YEARREPORT
                 FROM dbo.BrokerageMetrics
@@ -237,9 +250,31 @@ class BrokerageMCP:
                 ORDER BY YEARREPORT
             """
 
+            latest_per_ticker_query = """
+                WITH ranked AS (
+                    SELECT
+                        TICKER,
+                        YEARREPORT,
+                        LENGTHREPORT,
+                        QUARTER_LABEL,
+                        ROW_NUMBER() OVER (PARTITION BY TICKER ORDER BY YEARREPORT DESC, LENGTHREPORT DESC) AS rn
+                    FROM dbo.BrokerageMetrics
+                    WHERE ACTUAL = 1 AND LENGTHREPORT BETWEEN 1 AND 4
+                      AND TICKER NOT IN ({excluded})
+                )
+                SELECT TICKER, YEARREPORT, LENGTHREPORT, QUARTER_LABEL
+                FROM ranked
+                WHERE rn = 1
+            """
+
             latest = run_query(latest_actual_query)
             annual_years = run_query(annual_years_query)
+            recent_quarters_df = run_query(recent_quarters_query)
+            recent_years_df = run_query(recent_years_query)
             forecast_years = run_query(forecast_years_query)
+
+            excluded_list = ','.join([f"'{t}'" for t in brokerage_data.EXCLUDED_TICKERS])
+            per_ticker_df = run_query(latest_per_ticker_query.format(excluded=excluded_list))
 
             latest_period = None
             if not latest.empty:
@@ -250,14 +285,38 @@ class BrokerageMCP:
                     "label": row.get("QUARTER_LABEL"),
                 }
 
+            recent_quarters = []
+            if not recent_quarters_df.empty:
+                recent_quarters = list(recent_quarters_df["QUARTER_LABEL"].astype(str))
+
+            recent_years = []
+            if not recent_years_df.empty:
+                recent_years = [str(int(year)) for year in recent_years_df["YEARREPORT"]]
+
             data = {
+                "status": "success",
+                "current_date": datetime.utcnow().strftime("%Y-%m-%d"),
                 "latest_quarter": latest_period,
+                "latest_year": recent_years[0] if recent_years else None,
+                "recent_quarters": recent_quarters,
+                "recent_years": recent_years,
                 "available_annual_years": annual_years["YEARREPORT"].fillna(0).astype(int).tolist()
                 if not annual_years.empty
                 else [],
                 "forecast_years": forecast_years["YEARREPORT"].fillna(0).astype(int).tolist()
                 if not forecast_years.empty
                 else [],
+                "latest_quarters_by_ticker": []
+                if per_ticker_df.empty
+                else [
+                    {
+                        "ticker": row["TICKER"],
+                        "year": int(row["YEARREPORT"]),
+                        "quarter": int(row["LENGTHREPORT"]),
+                        "label": row.get("QUARTER_LABEL"),
+                    }
+                    for _, row in per_ticker_df.iterrows()
+                ],
             }
 
             return data
