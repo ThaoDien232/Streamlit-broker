@@ -538,6 +538,13 @@ def display_investment_book(df, broker, periods):
                 st.write("❌ No data found for this period")
         
         period_data = get_investment_data(df, broker, year, quarter)
+        
+        # DEBUG: Show what get_investment_data returns for 3Q25
+        if quarter_label == '3Q25':
+            st.write(f"🔍 **DEBUG: get_investment_data result for 3Q25:**")
+            for category, value in period_data.items():
+                st.write(f"  - {category}: {value:,.0f}")
+        
         if any(value > 0 for value in period_data.values()):
             has_investment_data = True
             break
@@ -573,6 +580,16 @@ def display_investment_book(df, broker, periods):
 
         if has_data:
             investment_rows.append(row)
+            # DEBUG: Show what rows are being added
+            if '3Q25' in row:
+                st.write(f"🔍 **DEBUG: Adding row for {category}**: {row}")
+
+    # DEBUG: Show final investment_rows
+    st.write(f"🔍 **DEBUG: Total investment rows created: {len(investment_rows)}**")
+    if investment_rows:
+        st.write("📋 **DEBUG: Investment rows summary:**")
+        for i, row in enumerate(investment_rows):
+            st.write(f"  Row {i+1}: {row['Asset Group']} - has 3Q25: {'3Q25' in row}")
 
     # Add total row
     total_row = {'Asset Group': 'TOTAL INVESTMENTS'}
