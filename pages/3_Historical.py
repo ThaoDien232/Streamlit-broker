@@ -481,13 +481,14 @@ def display_investment_book(df, broker, periods):
         return
 
     # Get last 6 quarters (or all available if less than 6)
-    display_periods = quarterly_periods[:6]
+    # Use all quarterly periods, same as other metrics
+    display_periods = quarterly_periods
 
     # DEBUG: Show what periods are being used for display
     st.write(f"🔍 **DEBUG: Period selection for Investment Book**")
     st.write(f"📊 Total quarterly periods available: {len(quarterly_periods)}")
     st.write(f"📋 All quarterly periods: {[p.get('QUARTER_LABEL', 'Unknown') for p in quarterly_periods]}")
-    st.write(f"🎯 Display periods (first 6): {[p.get('QUARTER_LABEL', 'Unknown') for p in display_periods]}")
+    st.write(f"🎯 Display periods (all): {[p.get('QUARTER_LABEL', 'Unknown') for p in display_periods]}")
     
     # Check if 3Q25 is in display_periods
     q3_25_in_display = any(p.get('QUARTER_LABEL') == '3Q25' for p in display_periods)
