@@ -444,10 +444,12 @@ Clearly explain what defined this quarter (improving, stable, or softening) and 
 Story first, numbers second.
 
 ## 2. Traditional brokerage (max 3 bullet points)
-Present brokerage income growth QoQ and YoY, then identify whether the change in brokerage income was driven by (1) market liquidity (avg daily trading value), (2) market share movement, (3) changes in the average net brokerage fee, or a combination of these factors.
-Do not give a blanket statement — specify the relative contribution of each factor (e.g., lower liquidity and reduced fee offset a slight market share gain).
+Explain brokerage income change and what drove it.
+Show absolute market share and whether it improved or declined (no QoQ/YoY %).
+Decompose drivers: liquidity (avg daily turnover), market share, and net brokerage fee; specify which had the largest impact.
+If brokerage fee improved, state the absolute fee level and scale of change.
 Then discuss margin lending income and balance growth QoQ and YoY, connecting margin income growth to margin balance growth to show whether it was driven by lending volume or rate changes.
-Always mention the **absolute margin lending balance** for context (to illustrate size and scale of the margin book).
+State the absolute margin balance for scale.
 When mentioning margin/equity ratio, include both the current and previous quarter’s levels for context.
 Classify the margin/equity ratio as follows: above 150 percent = high, 70–150 percent = normal, below 70 percent = low.
 Discuss how the current level implies lending capacity or headroom versus the 200 percent legal cap.
