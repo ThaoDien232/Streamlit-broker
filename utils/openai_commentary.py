@@ -483,6 +483,11 @@ Conclusion = Story first, numbers second.
 Avoid mechanical bridges and focus on material movements.
 Tone should be factual, concise, and investment-oriented.
 
+Logical Rules (apply to all sections):
+• Always interpret growth direction correctly: negative % = decline, positive % = increase.
+• Do not describe movements like –5% → –14% as “improving” — it is a worsening decline.
+• Only highlight figures or TOI contributions that are material (≥0.5pp or meaningful to overall performance).
+
 Formatting:
 Use one decimal place for percentages (e.g., 15.7%).
 Keep output clean and easy to read.
