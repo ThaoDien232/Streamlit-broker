@@ -432,6 +432,52 @@ def display_investment_book(df, broker, periods):
     for period in display_periods:
         year = period['YEARREPORT']
         quarter = period['LENGTHREPORT']
+        quarter_label = period['QUARTER_LABEL']
+        
+        # DEBUG: Check specifically for 3Q25 data
+        if quarter_label == '3Q25':
+            st.write(f"🔍 **DEBUG: Checking 3Q25 investment data for {broker}**")
+            
+            # Check what raw data exists for this period
+            period_raw_data = df[
+                (df['TICKER'] == broker) &
+                (df['YEARREPORT'] == year) &
+                (df['LENGTHREPORT'] == quarter)
+            ].copy()
+            
+            st.write(f"📊 Total records for {broker} 3Q25: {len(period_raw_data)}")
+            
+            if len(period_raw_data) > 0:
+                statement_types = period_raw_data['STATEMENT_TYPE'].value_counts()
+                st.write(f"📋 Statement types: {statement_types.to_dict()}")
+                
+                # Check for investment-specific METRIC_CODEs
+                investment_codes = [
+                    'mtm_equities_market_value',
+                    'not_mtm_equities_market_value', 
+                    'bonds_market_value',
+                    'cds_deposits_market_value'
+                ]
+                
+                st.write("🔍 Investment METRIC_CODEs in 3Q25 data:")
+                for code in investment_codes:
+                    count = len(period_raw_data[period_raw_data['METRIC_CODE'] == code])
+                    if count > 0:
+                        value = period_raw_data[period_raw_data['METRIC_CODE'] == code]['VALUE'].iloc[0]
+                        st.write(f"  ✅ {code}: {count} records, value: {value:,.0f}")
+                    else:
+                        st.write(f"  ❌ {code}: 0 records")
+                
+                # Show sample METRIC_CODEs that do exist
+                unique_codes = period_raw_data['METRIC_CODE'].unique()
+                st.write(f"📝 Sample METRIC_CODEs available ({len(unique_codes)} total):")
+                for code in sorted(unique_codes)[:10]:
+                    st.write(f"  - {code}")
+                if len(unique_codes) > 10:
+                    st.write(f"  ... and {len(unique_codes) - 10} more")
+            else:
+                st.write("❌ No data found for this period")
+        
         period_data = get_investment_data(df, broker, year, quarter)
         if any(value > 0 for value in period_data.values()):
             has_investment_data = True
@@ -455,6 +501,10 @@ def display_investment_book(df, broker, periods):
 
             period_data = get_investment_data(df, broker, year, quarter)
             value = period_data.get(category, 0)
+            
+            # DEBUG: Show investment values for 3Q25
+            if label == '3Q25':
+                st.write(f"🔍 **DEBUG: {category} for 3Q25**: {value:,.0f} VND")
 
             if value != 0:
                 row[label] = format_vnd_billions(value)
