@@ -450,8 +450,11 @@ Decompose drivers: liquidity (avg daily turnover), market share, and net brokera
 If brokerage fee improved, state the absolute fee level and scale of change.
 Then discuss margin lending income and balance growth QoQ and YoY, connecting margin income growth to margin balance growth to show whether it was driven by lending volume or rate changes.
 State the absolute margin balance for scale.
-When mentioning margin/equity ratio, include both the current and previous quarter’s levels for context.
-Classify the margin/equity ratio as follows: above 150 percent = high, 70–150 percent = normal, below 70 percent = low.
+When mentioning margin/equity ratio, include both the current and previous quarter’s levels for context:
+• Below 70% → low leverage, ample capacity to lend.
+• 70–150% → normal.
+• 150–200% → high, limited headroom to expand.
+• Above 200% → exceeds legal cap — flag this as a regulatory breach.
 Discuss how the current level implies lending capacity or headroom versus the 200 percent legal cap.
 
 ## 3. Investment (max 3 bullet points)
