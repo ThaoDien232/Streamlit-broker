@@ -433,65 +433,52 @@ The "% of TOI" column shows what percentage each income stream represents of Tot
 Your answer must follow this structure exactly. Do not add or remove sections.
 
 ## 1. Overall (max 5 bullet points)
-Write these bullets as a story-driven investor takeaway.
-Focus on what kind of quarter this was, state the absolute quarter PBT, what drove it, and how sustainable it looks.
-Use the TOI driver table to show which income streams contributed most to TOI growth and which detracted. 
-For example: "Margin lending income added +19pp to TOI growth, offset by -15pp from weaker brokerage."
-Compare both QoQ and YoY performance — note if the quarter showed low or flat QoQ growth but high YoY growth, or vice versa, and interpret what that implies for momentum.
-Apply this grading:
-0–15% QoQ TOI growth = normal quarter; >15% QoQ growth = strong/good quarter; <-10% = weak quarter.
-Clearly explain what defined this quarter (improving, stable, or softening) and whether the revenue momentum looks sustainable or driven by short-term factors.
-Story first, numbers second.
+Summarize what kind of quarter this was and how sustainable it looks.
+State absolute PBT and TOI, and describe which income streams (brokerage, margin, investment, IB) were the main TOI drivers or drags.
+Base this on the TOI driver table but do not quote pp contributions — only mention material drivers.
+Compare QoQ and YoY trends, noting if momentum differs between short-term (QoQ) and long-term (YoY).
+Grade quarterly strength: 0–15% QoQ TOI = normal, >15% = strong, <–10% = weak.
+Conclude whether the quarter was improving, stable, or softening, and if performance looks sustainable or one-off.
 
 ## 2. Traditional brokerage (max 3 bullet points)
 Explain brokerage income change and what drove it.
-Show absolute market share and whether it improved or declined (no QoQ/YoY %).
-Decompose drivers: liquidity (avg daily turnover), market share, and net brokerage fee; specify which had the largest impact.
-If brokerage fee improved, state the absolute fee level and scale of change.
-Then discuss margin lending income and balance growth QoQ and YoY, connecting margin income growth to margin balance growth to show whether it was driven by lending volume or rate changes.
-State the absolute margin balance for scale.
-When mentioning margin/equity ratio, include both the current and previous quarter’s levels for context:
-• Below 70% → low leverage, ample capacity to lend.
-• 70–150% → normal.
-• 150–200% → high, limited headroom to expand.
-• Above 200% → exceeds legal cap — flag this as a regulatory breach.
-Discuss how the current level implies lending capacity or headroom versus the 200 percent legal cap.
+Show absolute market share and whether it improved or declined (ignore QoQ/YoY %).
+Break down drivers: liquidity (avg daily trading value), market share, and net brokerage fee — specify which mattered most.
+If fee improved, show the absolute fee level and scale of change.
+For margin lending, discuss income and balance growth, linking income change to lending volume vs. rate.
+Include absolute margin balance for scale.
+Interpret margin/equity ratio (current vs. previous quarter):
+<70% = low leverage; 70–150% = normal; 150–200% = high/limited capacity; >200% = exceeds legal cap → flag as regulatory breach.
 
 ## 3. Investment (max 3 bullet points)
-Present investment income growth QoQ and YoY and connect it to the composition and any change in the investment book.
-Separate accounting categories (FVTPL, AFS, HTM) from underlying asset types (listed equities, unlisted equities, bonds, funds, deposits/CDs).
-Explain which asset types dominate each category and how that structure impacts income stability.
-A broker holding mainly bonds or CDs/deposits typically shows stable income but may leave upside on the table in a market uptrend.
-A broker with high marked-to-market equity exposure (especially listed FVTPL equities) tends to have volatile but potentially higher income when markets rally.
-If the broker holds notable listed equities, include top holdings and explain their influence on investment income.
-Comment on whether recent changes in the mix (e.g., shifting between CDs, bonds, and equities) suggest a more conservative or aggressive investment posture.
+Discuss investment income growth QoQ and YoY in context of portfolio mix.
+Distinguish accounting groups (FVTPL, AFS, HTM) from underlying assets (equities, bonds, funds, CDs/deposits).
+Explain which assets dominate and what that implies for income stability.
+Bonds/CDs → stable but low-upside; equities → volatile but high-upside.
+If large listed equity exposure, name top holdings and their effect.
+Note if mix shifts imply a conservative or aggressive stance.
 
 ## 4. IB (max 2 bullet points)
-Discuss IB income only if QoQ growth exceeds 30%, showing QoQ and YoY trends and explaining whether growth came from deal volume or large mandates
+Cover IB only if QoQ growth >30%.
+Summarize QoQ and YoY trends and whether growth came from deal recovery or major mandates.
 
 ## 5. Cost control (max 3 bullet points)
-Present SG&A growth QoQ and YoY and discuss the CIR trend.
-Discuss interest expense growth QoQ and YoY, interest rate changes, and borrowing balance growth.
-Analyze whether higher borrowing or interest expenses are proportionate to faster margin lending expansion.
-Introduce and assess the margin lending spread — defined as the difference between the average margin lending rate and the average funding cost (interest expense rate).
-If this spread remains stable or increases, higher borrowing balance and interest expense are part of normal operations rather than a risk signal.
-Only highlight funding pressure if the spread is narrowing or if the rising cost meaningfully compresses profitability.
+Show SG&A growth QoQ and YoY and discuss CIR trend.
+Explain interest expense, rate, and borrowing balance growth, and whether they align with margin lending expansion.
+Assess margin lending spread = margin rate – funding cost.
+If spread stable/rising, higher borrowing is normal; only flag risk if spread narrows or profitability compresses.
+Summarize if costs are offset by revenue momentum or hurting earnings.
 
-Writing Approach Rules:
-Each bullet across all sections must weave number + meaning in one line.
-Conclusion = Story first, numbers second.
-Avoid mechanical bridges and focus on material movements.
-Tone should be factual, concise, and investment-oriented.
+Writing Rules:
+Each bullet = number + meaning in one line.
+Story first, numbers second; avoid mechanical bridges.
+Tone = factual, concise, investor-style. Use one decimal for percentages.
 
 Logical Rules (apply to all sections):
-• Always interpret growth direction correctly: negative % = decline, positive % = increase.
-• Do not describe movements like –5% → –14% as “improving” — it is a worsening decline.
-• Only highlight figures or TOI contributions that are material (≥0.5pp or meaningful to overall performance).
+• Interpret direction correctly: negative = decline, positive = growth.
+• Don’t call –5% → –14% an improvement; it’s a worsening decline.
+• Only highlight material drivers (≥0.5pp or clearly meaningful).
 
-Formatting:
-Use one decimal place for percentages (e.g., 15.7%).
-Keep output clean and easy to read.
-"""
 
     # If we have cached commentary and not forcing regeneration, return it now
     if cached_commentary is not None:
