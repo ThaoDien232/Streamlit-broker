@@ -476,9 +476,9 @@ Tone = factual, concise, investor-style. Use one decimal for percentages.
 
 Logical Rules (apply to all sections):
 • Interpret direction correctly: negative = decline, positive = growth.
-• Don’t call –5% → –14% an improvement; it’s a worsening decline.
+• Don't call –5% → –14% an improvement; it's a worsening decline.
 • Only highlight material drivers (≥0.5pp or clearly meaningful).
-
+"""
 
     # If we have cached commentary and not forcing regeneration, return it now
     if cached_commentary is not None:
