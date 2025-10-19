@@ -537,16 +537,18 @@ def fetch_market_share(ticker, quarter_label):
         st.write(f"🐛 DEBUG - fetch_market_share called with ticker: '{ticker}', quarter: '{quarter_label}'")
         
         # Mapping from our ticker codes to HSX API brokerage codes
+        # Most tickers match directly, but some need mapping
         ticker_to_brokerage_code = {
             'VCI': 'Vietcap',
             'HCM': 'HSC',
             'VND': 'VNDS',
             'FTS': 'FPTS'
+            # TCBS should match directly as 'TCBS' in API response
         }
 
         # Get the brokerage code for API lookup, default to ticker if not in mapping
         api_ticker = ticker_to_brokerage_code.get(ticker, ticker)
-        st.write(f"🐛 DEBUG - Mapped ticker '{ticker}' to API ticker: '{api_ticker}'")
+        st.write(f"🐛 DEBUG - Input ticker: '{ticker}' → Looking for API ticker: '{api_ticker}'")
 
         # Parse quarter (e.g., "1Q24" -> year=2024, quarter=1)
         quarter_num = int(quarter_label[0])
