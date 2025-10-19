@@ -32,6 +32,14 @@ from utils.openai_commentary import (
 )
 from utils.brokerage_codes import get_brokerage_code, BROKERAGE_CODE_MAP
 
+def get_display_ticker(data_ticker):
+    """Convert data ticker (TCBS) to display ticker (TCX) for UI consistency"""
+    # Find the display code that maps to this data ticker
+    for display_code, data_code in BROKERAGE_CODE_MAP.items():
+        if data_code == data_ticker:
+            return display_code
+    return data_ticker  # Return original if no mapping found
+
 @st.cache_data(ttl=1800)  # Cache for 30 minutes
 def load_ticker_data(ticker: str, quarter_label: str):
     """Load brokerage financial data for specific ticker and quarter (with lookback)"""
@@ -682,8 +690,10 @@ def create_summary_tables(ticker, quarter_label, ticker_data):
             market_rank_values.append('N/A')
 
     if market_data['Quarter']:
-        market_data['Market Share'] = market_share_values
-        market_data['Rank'] = market_rank_values
+        # Translate ticker for display consistency (TCBS -> TCX)
+        display_ticker = get_display_ticker(ticker)
+        market_data[f'{display_ticker} Market Share'] = market_share_values
+        market_data[f'{display_ticker} Rank'] = market_rank_values
         market_share_table = pd.DataFrame(market_data)
 
     # Build prop holdings table for last 6 quarters (top 5 holdings per quarter)
@@ -761,8 +771,8 @@ st.subheader("Generate Quarterly Commentary")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    # Create display names using brokerage mapping
-    ticker_display_names = [get_brokerage_code(ticker) for ticker in available_tickers]
+    # Create display names using the global get_display_ticker function
+    ticker_display_names = [get_display_ticker(ticker) for ticker in available_tickers]
     
     selected_ticker_index = st.selectbox(
         "Select Broker:",
@@ -775,7 +785,7 @@ with col1:
     # Get the actual ticker code for data queries
     selected_ticker = available_tickers[selected_ticker_index]
     # Get the display name for UI
-    selected_ticker_display = get_brokerage_code(selected_ticker)
+    selected_ticker_display = get_display_ticker(selected_ticker)
 
 with col2:
     # Get quarters available for the selected ticker (lightweight query)
