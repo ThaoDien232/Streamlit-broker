@@ -795,8 +795,12 @@ st.subheader("Generate Quarterly Commentary")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
+    # DEBUG: Check available tickers
+    st.write(f"🐛 DEBUG - available_tickers: {available_tickers}")
+    
     # Create display names using the global get_display_ticker function
     ticker_display_names = [get_display_ticker(ticker) for ticker in available_tickers]
+    st.write(f"🐛 DEBUG - ticker_display_names: {ticker_display_names}")
     
     selected_ticker_index = st.selectbox(
         "Select Broker:",
@@ -810,6 +814,9 @@ with col1:
     selected_ticker = available_tickers[selected_ticker_index]
     # Get the display name for UI
     selected_ticker_display = get_display_ticker(selected_ticker)
+    st.write(f"🐛 DEBUG - selected_ticker_index: {selected_ticker_index}")
+    st.write(f"🐛 DEBUG - selected_ticker (data): {selected_ticker}")
+    st.write(f"🐛 DEBUG - selected_ticker_display (UI): {selected_ticker_display}")
 
 with col2:
     # Get quarters available for the selected ticker (lightweight query)
