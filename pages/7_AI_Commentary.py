@@ -30,6 +30,7 @@ from utils.openai_commentary import (
     get_available_quarters,
     get_broker_data
 )
+from utils.brokerage_codes import get_brokerage_code, BROKERAGE_CODE_MAP
 
 @st.cache_data(ttl=1800)  # Cache for 30 minutes
 def load_ticker_data(ticker: str, quarter_label: str):
@@ -760,12 +761,21 @@ st.subheader("Generate Quarterly Commentary")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    selected_ticker = st.selectbox(
+    # Create display names using brokerage mapping
+    ticker_display_names = [get_brokerage_code(ticker) for ticker in available_tickers]
+    
+    selected_ticker_index = st.selectbox(
         "Select Broker:",
-        available_tickers,
+        range(len(available_tickers)),
+        format_func=lambda x: ticker_display_names[x],
         index=available_tickers.index('SSI') if 'SSI' in available_tickers else 0,
         help="Choose a broker to analyze"
     )
+    
+    # Get the actual ticker code for data queries
+    selected_ticker = available_tickers[selected_ticker_index]
+    # Get the display name for UI
+    selected_ticker_display = get_brokerage_code(selected_ticker)
 
 with col2:
     # Get quarters available for the selected ticker (lightweight query)
@@ -779,7 +789,7 @@ with col2:
             help="Choose the quarter to analyze or generate commentary for"
         )
     else:
-        st.error(f"No quarterly data found for {selected_ticker}")
+        st.error(f"No quarterly data found for {selected_ticker_display}")
         selected_quarter = None
 
 with col3:
@@ -804,7 +814,7 @@ if selected_ticker and selected_quarter:
         ticker_data = load_ticker_data(selected_ticker, selected_quarter)
 
         if ticker_data.empty:
-            st.error(f"No financial data found for {selected_ticker} - {selected_quarter}")
+            st.error(f"No financial data found for {selected_ticker_display} - {selected_quarter}")
             st.stop()
 
         # Step 1: Filter ticker data (already filtered, just format)
@@ -826,7 +836,7 @@ if selected_ticker and selected_quarter:
         market_share_table, prop_holdings_table, investment_composition_table = create_summary_tables(selected_ticker, selected_quarter, ticker_data)
 
         # Display the data processing results
-        st.subheader(f"Financial Analysis: {selected_ticker} - {selected_quarter}")
+        st.subheader(f"Financial Analysis: {selected_ticker_display} - {selected_quarter}")
 
         # Display TOI drivers analysis
         st.write("**TOI Drivers Analysis:**")
@@ -983,12 +993,12 @@ if selected_ticker and selected_quarter:
                         generated_date = pd.to_datetime(latest_cached['GENERATED_DATE']).strftime('%Y-%m-%d %H:%M')
                         st.info(f"💾 Cached analysis available (Generated: {generated_date}). Click 'Generate Analysis' to view or 'View All Cached' to browse all.")
                     else:
-                        st.info(f"💡 No cached analysis found for {selected_ticker} - {selected_quarter}. Click 'Generate Analysis' to create one.")
+                        st.info(f"💡 No cached analysis found for {selected_ticker_display} - {selected_quarter}. Click 'Generate Analysis' to create one.")
                 except Exception as e:
                     st.warning(f"Could not check cache: {e}")
 
         else:
-            st.warning(f"Could not calculate metrics for {selected_ticker} in {selected_quarter}")
+            st.warning(f"Could not calculate metrics for {selected_ticker_display} in {selected_quarter}")
 
     except Exception as e:
         st.error(f"Error processing data: {e}")
@@ -1027,7 +1037,7 @@ with col3:
             has_cache_entry = False
 
         if has_cache_entry:
-            if st.button("🗑️ Clear This Cache", help=f"Delete cached analysis for {selected_ticker} - {selected_quarter}"):
+            if st.button("🗑️ Clear This Cache", help=f"Delete cached analysis for {selected_ticker_display} - {selected_quarter}"):
                 try:
                     cache_df = pd.read_csv(cache_file)
                     # Remove entries for this specific ticker and quarter
@@ -1037,7 +1047,7 @@ with col3:
                     )]
                     # Save back to file
                     cache_df.to_csv(cache_file, index=False)
-                    st.success(f"✅ Cleared cache for {selected_ticker} - {selected_quarter}")
+                    st.success(f"✅ Cleared cache for {selected_ticker_display} - {selected_quarter}")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error clearing cache: {e}")
@@ -1049,7 +1059,7 @@ if generate_button and selected_ticker and selected_quarter:
         ticker_data = load_ticker_data(selected_ticker, selected_quarter)
 
         if ticker_data.empty:
-            st.error(f"No financial data available for {selected_ticker} in {selected_quarter}")
+            st.error(f"No financial data available for {selected_ticker_display} in {selected_quarter}")
         else:
             # Prepare analysis data
             ticker_data, pivot_data = filter_ticker_data(ticker_data, selected_ticker)
@@ -1058,9 +1068,9 @@ if generate_button and selected_ticker and selected_quarter:
             market_share_table, prop_holdings_table, investment_composition_table = create_summary_tables(selected_ticker, selected_quarter, ticker_data)
 
             if analysis_table.empty:
-                st.error(f"No financial data available for {selected_ticker} in {selected_quarter}")
+                st.error(f"No financial data available for {selected_ticker_display} in {selected_quarter}")
             else:
-                with st.spinner(f"🤖 Generating AI commentary for {selected_ticker} - {selected_quarter}..."):
+                with st.spinner(f"🤖 Generating AI commentary for {selected_ticker_display} - {selected_quarter}..."):
                     try:
                         # Convert analysis table to string for OpenAI
                         analysis_text = analysis_table.to_string(index=False)
@@ -1096,7 +1106,7 @@ if generate_button and selected_ticker and selected_quarter:
                             st.success("Analysis generated successfully!")
 
                             # Display the generated commentary
-                            st.subheader(f"AI Analysis: {selected_ticker} - {selected_quarter}")
+                            st.subheader(f"AI Analysis: {selected_ticker_display} - {selected_quarter}")
 
                             # Format the commentary to ensure bullets are on separate lines and headers are normal size
                             formatted_commentary = commentary.replace('• ', '\n• ').strip()
