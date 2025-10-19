@@ -533,22 +533,18 @@ def get_calc_metric_value(df, ticker, year, quarter, metric_code):
 def fetch_market_share(ticker, quarter_label):
     """Fetch market share for a specific broker and quarter from HSX API"""
     try:
-        # DEBUG: Print input parameters
-        st.write(f"🐛 DEBUG - fetch_market_share called with ticker: '{ticker}', quarter: '{quarter_label}'")
-        
         # Mapping from our ticker codes to HSX API brokerage codes
         # Most tickers match directly, but some need mapping
         ticker_to_brokerage_code = {
             'VCI': 'Vietcap',
             'HCM': 'HSC',
             'VND': 'VNDS',
-            'FTS': 'FPTS'
-            # TCBS should match directly as 'TCBS' in API response
+            'FTS': 'FPTS',
+            'TCX': 'TCBS'  # Map TCX to TCBS for HSX API
         }
 
         # Get the brokerage code for API lookup, default to ticker if not in mapping
         api_ticker = ticker_to_brokerage_code.get(ticker, ticker)
-        st.write(f"🐛 DEBUG - Input ticker: '{ticker}' → Looking for API ticker: '{api_ticker}'")
 
         # Parse quarter (e.g., "1Q24" -> year=2024, quarter=1)
         quarter_num = int(quarter_label[0])
@@ -568,30 +564,20 @@ def fetch_market_share(ticker, quarter_label):
         response.raise_for_status()
 
         data = response.json()
-        st.write(f"🐛 DEBUG - API response success: {data.get('success', False)}")
 
         if data.get('success') and 'data' in data:
             brokerage_data = data['data'].get('brokerageStock', [])
-            st.write(f"🐛 DEBUG - Found {len(brokerage_data)} brokers in API response")
-            
-            # Debug: Show all available broker names
-            broker_names = [item.get('shortenName', '') for item in brokerage_data]
-            st.write(f"🐛 DEBUG - Available broker names: {broker_names}")
 
             for item in brokerage_data:
                 if item.get('shortenName', '') == api_ticker:
-                    result = {
+                    return {
                         'market_share': item.get('percentage', 0),
                         'rank': brokerage_data.index(item) + 1
                     }
-                    st.write(f"🐛 DEBUG - Found match for '{api_ticker}': {result}")
-                    return result
 
-        st.write(f"🐛 DEBUG - No match found for '{api_ticker}', returning 0")
         return {'market_share': 0, 'rank': None}
 
     except Exception as e:
-        st.write(f"🐛 DEBUG - Exception in fetch_market_share: {str(e)}")
         return {'market_share': 0, 'rank': None}
 
 @st.cache_data(ttl=1800)
@@ -695,9 +681,6 @@ def create_summary_tables(ticker, quarter_label, ticker_data):
     market_share_values = []
     market_rank_values = []
 
-    st.write(f"🐛 DEBUG - Creating market share table for ticker: '{ticker}'")
-    st.write(f"🐛 DEBUG - Processing quarters: {last_6_quarters}")
-    
     for quarter in last_6_quarters:
         market_share_data = fetch_market_share(ticker, quarter)
         market_data['Quarter'].append(quarter)
@@ -709,16 +692,10 @@ def create_summary_tables(ticker, quarter_label, ticker_data):
             market_rank_values.append('N/A')
 
     if market_data['Quarter']:
-        # Translate ticker for display consistency (TCBS -> TCX)
-        display_ticker = get_display_ticker(ticker)
-        st.write(f"🐛 DEBUG - Translating ticker '{ticker}' to display ticker: '{display_ticker}'")
-        market_data[f'{display_ticker} Market Share'] = market_share_values
-        market_data[f'{display_ticker} Rank'] = market_rank_values
+        # Use the original ticker for display (TCX stays as TCX)
+        market_data[f'{ticker} Market Share'] = market_share_values
+        market_data[f'{ticker} Rank'] = market_rank_values
         market_share_table = pd.DataFrame(market_data)
-        st.write(f"🐛 DEBUG - Created market share table with columns: {list(market_share_table.columns)}")
-        st.write(f"🐛 DEBUG - Market share values: {market_share_values}")
-    else:
-        st.write("🐛 DEBUG - No quarters found, market share table will be empty")
 
     # Build prop holdings table for last 6 quarters (top 5 holdings per quarter)
     # Get prop holdings for current quarter only (showing evolution across quarters would be too complex)
@@ -795,12 +772,8 @@ st.subheader("Generate Quarterly Commentary")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    # DEBUG: Check available tickers
-    st.write(f"🐛 DEBUG - available_tickers: {available_tickers}")
-    
     # Create display names using the global get_display_ticker function
     ticker_display_names = [get_display_ticker(ticker) for ticker in available_tickers]
-    st.write(f"🐛 DEBUG - ticker_display_names: {ticker_display_names}")
     
     selected_ticker_index = st.selectbox(
         "Select Broker:",
@@ -814,9 +787,6 @@ with col1:
     selected_ticker = available_tickers[selected_ticker_index]
     # Get the display name for UI
     selected_ticker_display = get_display_ticker(selected_ticker)
-    st.write(f"🐛 DEBUG - selected_ticker_index: {selected_ticker_index}")
-    st.write(f"🐛 DEBUG - selected_ticker (data): {selected_ticker}")
-    st.write(f"🐛 DEBUG - selected_ticker_display (UI): {selected_ticker_display}")
 
 with col2:
     # Get quarters available for the selected ticker (lightweight query)
