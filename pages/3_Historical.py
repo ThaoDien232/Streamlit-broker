@@ -733,6 +733,13 @@ from utils.brokerage_data import get_available_tickers, get_ticker_quarters_list
 
 available_tickers = get_available_tickers()
 
+# Broker groups for organized display
+broker_groups = {
+    'Top Tier': ['SSI', 'VCI', 'VND', 'HCM', 'TCBS', 'VPBS', 'VPS'],
+    'Mid Tier': ['MBS', 'VIX', 'SHS', 'BSI', 'FTS'],
+    'Regional': ['DSE', 'VDS', 'LPBS', 'Kafi', 'ACBS', 'OCBS', 'HDBS'],
+}
+
 def sort_quarters_chronologically(quarters):
     """Sort quarters in chronological order (1Q19, 2Q19, 3Q19, 4Q19, 1Q20, etc.)"""
     def quarter_key(quarter):
@@ -756,21 +763,60 @@ st.subheader("Select Broker and Quarter")
 col1, col2 = st.columns(2)
 
 with col1:
-    # Create display names using the global get_display_ticker function
-    ticker_display_names = [get_display_ticker(ticker) for ticker in available_tickers]
+    # Create grouped broker options
+    broker_options = []
+    broker_mapping = {}  # Map display string to actual ticker code
 
-    selected_ticker_index = st.selectbox(
+    for group_name, tickers in broker_groups.items():
+        # Add group header
+        broker_options.append(f"──── {group_name} ────")
+        broker_mapping[f"──── {group_name} ────"] = None  # Header has no ticker
+
+        # Add brokers in this group
+        for ticker in tickers:
+            if ticker in available_tickers:
+                display_name = get_display_ticker(ticker)
+                broker_options.append(f"  {display_name}")
+                broker_mapping[f"  {display_name}"] = ticker
+
+    # Add any brokers not in groups
+    ungrouped = [t for t in available_tickers if not any(t in group for group in broker_groups.values())]
+    if ungrouped:
+        broker_options.append("──── Others ────")
+        broker_mapping["──── Others ────"] = None
+        for ticker in ungrouped:
+            display_name = get_display_ticker(ticker)
+            broker_options.append(f"  {display_name}")
+            broker_mapping[f"  {display_name}"] = ticker
+
+    # Find default selection (SSI)
+    default_ticker = 'SSI'
+    default_display = f"  {get_display_ticker(default_ticker)}"
+    default_index = broker_options.index(default_display) if default_display in broker_options else 0
+
+    # Skip headers in selection
+    while default_index < len(broker_options) and broker_mapping[broker_options[default_index]] is None:
+        default_index += 1
+
+    selected_broker_display = st.selectbox(
         "Select Broker:",
-        range(len(available_tickers)),
-        format_func=lambda x: ticker_display_names[x],
-        index=available_tickers.index('SSI') if 'SSI' in available_tickers else 0,
+        options=broker_options,
+        index=default_index,
         help="Choose a broker to analyze"
     )
 
-    # Get the actual ticker code for data queries
-    selected_ticker = available_tickers[selected_ticker_index]
+    # Get the actual ticker code
+    selected_ticker = broker_mapping.get(selected_broker_display)
+
+    # If a header was selected, default to first valid broker
+    if selected_ticker is None:
+        for opt in broker_options:
+            if broker_mapping[opt] is not None:
+                selected_ticker = broker_mapping[opt]
+                break
+
     # Get the display name for UI
-    selected_ticker_display = get_display_ticker(selected_ticker)
+    selected_ticker_display = get_display_ticker(selected_ticker) if selected_ticker else "Unknown"
 
 with col2:
     # Get quarters available for the selected ticker (lightweight query)
