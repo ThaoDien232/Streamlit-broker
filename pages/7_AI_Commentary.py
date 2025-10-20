@@ -968,7 +968,7 @@ with col1:
 
 with col2:
     # Bulk generation button
-    bulk_generate_button = st.button("🚀 Bulk Generate", help="Generate commentary for all brokers with data in selected quarter")
+    bulk_generate_button = st.button("Bulk Generate", help="Generate commentary for all brokers with data in selected quarter")
     if bulk_generate_button:
         st.session_state.show_cache = False
 
