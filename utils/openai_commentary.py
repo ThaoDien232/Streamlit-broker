@@ -478,6 +478,7 @@ Writing rules:
 Each bullet should blend data and interpretation in a single, well-developed sentence.  
 Lead with insight and follow with numbers; avoid mechanical or list-like phrasing.  
 Maintain a factual, neutral, and professional investor tone.
+Do not expand or define common financial abbreviations (e.g., CIR, TOI, SG&A, IB, PBT, ROE, ROA).
 
 Logical rules (apply to all sections):  
 • Interpret direction correctly — negative = decline, positive = growth.  
