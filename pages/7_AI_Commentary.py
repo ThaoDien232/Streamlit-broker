@@ -1069,6 +1069,10 @@ if generate_button and selected_ticker and selected_quarter:
 
                             st.caption(f"Generated with {model_choice} on {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
+                            # Add refresh button to update cache counter
+                            if st.button("🔄 Refresh Page to Update Cache"):
+                                st.rerun()
+
                             # Display the full prompt sent to OpenAI
                             with st.expander("📝 View Full Prompt Sent to OpenAI"):
                                 st.markdown("### System Message:")
