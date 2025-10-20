@@ -823,22 +823,38 @@ if selected_ticker and selected_quarter:
                 # Display the full analysis table
                 if not analysis_table.empty:
                     # Format the dataframe for display
-                    def format_value(val):
-                        """Format numeric values for display"""
+                    def format_value(val, metric_name):
+                        """Format numeric values for display based on metric type"""
                         if pd.isna(val) or val == 0:
                             return "-"
                         elif isinstance(val, (int, float)):
-                            if abs(val) < 1:  # For percentages and small decimals
-                                return f"{val:.2f}"
-                            else:  # For billions VND
+                            # Special formatting for different metric types
+                            if metric_name == 'Net Brokerage Fee':
+                                # Net Brokerage Fee is in bps
+                                return f"{val:.2f} bps"
+                            elif metric_name in ['Brokerage Market Share', 'Margin/Equity %',
+                                                'Margin Lending Rate', 'Margin Lending Spread',
+                                                'CIR', 'Interest Rate', 'ROE']:
+                                # Percentage metrics - add % symbol
+                                return f"{val:.2f}%"
+                            elif metric_name in ['Market Liquidity (Avg Daily)', 'Trading Value']:
+                                # Already in billions
                                 return f"{val:,.1f}"
+                            else:
+                                # Convert to billions for all other financial metrics (VND values)
+                                val_billions = val / 1_000_000_000
+                                return f"{val_billions:,.1f}"
                         return val
 
                     # Apply formatting to numeric columns (skip 'Metric' column and growth columns)
                     display_df = analysis_table.copy()
                     for col in display_df.columns:
                         if col not in ['Metric', 'QoQ Growth %', 'YoY Growth %']:
-                            display_df[col] = display_df[col].apply(format_value)
+                            # Apply formatting with metric name context
+                            display_df[col] = [
+                                format_value(val, metric)
+                                for val, metric in zip(display_df[col], display_df['Metric'])
+                            ]
 
                     # Format growth columns with +/- sign and % symbol
                     if 'QoQ Growth %' in display_df.columns:
