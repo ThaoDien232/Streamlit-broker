@@ -461,7 +461,9 @@ Distinguish accounting groups (FVTPL, AFS, HTM) from underlying assets (equities
 Explain which assets dominate and what that implies for income stability.
 Bonds/CDs → stable but low-upside; equities → volatile but high-upside.
 If large listed equity exposure, name top holdings and their effect.
-Note if mix shifts imply a conservative or aggressive stance.
+Compare the current portfolio mix with the previous quarter to highlight any notable shifts — for example, a higher share of bonds or deposits indicates a more conservative stance, while increased equity exposure suggests a move toward higher risk and volatility.  
+If listed equity exposure is meaningful, cite the top holdings and how they influenced results.  
+Conclude with whether the overall mix signals a stable, more cautious positioning or a pivot toward greater market sensitivity.
 
 ## 4. IB (max 2 bullet points)
 Cover IB only if QoQ growth >30%.
