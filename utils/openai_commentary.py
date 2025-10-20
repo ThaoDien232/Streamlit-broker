@@ -447,8 +447,13 @@ Break down drivers: liquidity (avg daily trading value), market share, and net b
 If fee improved, show the absolute fee level and scale of change.
 For margin lending, discuss income and balance growth, linking income change to lending volume vs. rate.
 Include absolute margin balance for scale.
-Interpret margin/equity ratio (current vs. previous quarter):
-<70% = low leverage; 70–150% = normal; 150–200% = high/limited capacity; >200% = exceeds legal cap → flag as regulatory breach.
+When interpreting the margin/equity ratio, use this exact logic:
+• Below 70% → low level, ample room to expand margin lending.
+• 70–150% → normal level, operating comfortably within the cap.
+• 150–200% → high level, limited remaining capacity before hitting the 200% legal cap.
+• Above 200% → exceeds the legal cap — clearly state that this breaches the regulatory limit.
+Always compare the current level to the previous quarter and comment on available headroom versus the 200% cap.
+Do not refer to this ratio as “leverage.”
 
 ## 3. Investment (max 3 bullet points)
 Discuss investment income growth QoQ and YoY in context of portfolio mix.
