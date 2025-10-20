@@ -758,7 +758,7 @@ cache_exists = os.path.exists(cache_file)
 
 if cache_exists:
     try:
-        cache_df = pd.read_csv(cache_file)
+        cache_df = pd.read_csv(cache_file, quoting=1)  # QUOTE_ALL for proper reading
         total_cached = len(cache_df)
         unique_tickers = cache_df['TICKER'].nunique()
         st.sidebar.success(f"Cache: {total_cached} commentaries for {unique_tickers} brokers")
@@ -976,7 +976,7 @@ with col3:
     if cache_exists and selected_ticker and selected_quarter:
         # Check if there's a cached entry for this specific ticker/quarter
         try:
-            cache_df = pd.read_csv(cache_file)
+            cache_df = pd.read_csv(cache_file, quoting=1)  # QUOTE_ALL for proper reading
             has_cache_entry = not cache_df[
                 (cache_df['TICKER'] == selected_ticker) &
                 (cache_df['QUARTER'] == selected_quarter)
@@ -987,14 +987,14 @@ with col3:
         if has_cache_entry:
             if st.button("🗑️ Clear This Cache", help=f"Delete cached analysis for {selected_ticker_display} - {selected_quarter}"):
                 try:
-                    cache_df = pd.read_csv(cache_file)
+                    cache_df = pd.read_csv(cache_file, quoting=1)  # QUOTE_ALL for proper reading
                     # Remove entries for this specific ticker and quarter
                     cache_df = cache_df[~(
                         (cache_df['TICKER'] == selected_ticker) &
                         (cache_df['QUARTER'] == selected_quarter)
                     )]
-                    # Save back to file
-                    cache_df.to_csv(cache_file, index=False)
+                    # Save back to file with proper quoting
+                    cache_df.to_csv(cache_file, index=False, quoting=1)  # QUOTE_ALL to preserve multiline content
                     st.success(f"✅ Cleared cache for {selected_ticker_display} - {selected_quarter}")
                     st.rerun()
                 except Exception as e:
@@ -1096,7 +1096,7 @@ if st.session_state.show_cache and cache_exists:
         st.rerun()
 
     try:
-        cache_df = pd.read_csv(cache_file)
+        cache_df = pd.read_csv(cache_file, quoting=1)  # QUOTE_ALL for proper reading
         cache_df['GENERATED_DATE'] = pd.to_datetime(cache_df['GENERATED_DATE']).dt.strftime('%Y-%m-%d %H:%M')
 
         # Sort by date descending for most recent first
