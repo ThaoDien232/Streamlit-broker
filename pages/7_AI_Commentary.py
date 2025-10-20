@@ -849,72 +849,9 @@ if selected_ticker and selected_quarter:
         # Display the data processing results
         st.subheader(f"Financial Analysis: {selected_ticker_display} - {selected_quarter}")
 
-        # Display TOI drivers analysis
-        st.write("**TOI Drivers Analysis:**")
-        try:
-            from utils.toi_drivers import calculate_toi_drivers
-
-            # Create tabs for QoQ and YoY
-            tab_qoq, tab_yoy = st.tabs(["Quarter-over-Quarter", "Year-over-Year"])
-
-            with tab_qoq:
-                drivers_qoq = calculate_toi_drivers(selected_ticker, selected_quarter, 'QoQ')
-
-                if not drivers_qoq.empty:
-                    # Format the dataframe for display
-                    display_df = drivers_qoq.copy()
-                    for idx, row in display_df.iterrows():
-                        # Skip section headers (they have empty string values)
-                        if row['Current'] == '':
-                            continue
-                        # Format numeric values
-                        display_df.at[idx, 'Current'] = f"{row['Current']:.1f}B"
-                        display_df.at[idx, 'Prior'] = f"{row['Prior']:.1f}B"
-                        display_df.at[idx, 'Change'] = f"{row['Change']:+.1f}B"
-                        display_df.at[idx, 'Impact (pp)'] = f"{row['Impact (pp)']:+.1f}pp"
-                        if '% of TOI' in display_df.columns and row['% of TOI'] != '':
-                            display_df.at[idx, '% of TOI'] = f"{row['% of TOI']:.1f}%"
-
-                    st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-                    # Show summary metrics
-                    growth_pct = drivers_qoq.attrs.get('growth_pct', 0)
-                    prior_q = drivers_qoq.attrs.get('prior_quarter', '')
-                    st.info(f"TOI Growth: **{growth_pct:+.1f}%** vs {prior_q}")
-                else:
-                    st.warning("Insufficient data for QoQ analysis (need at least 2 quarters)")
-
-            with tab_yoy:
-                drivers_yoy = calculate_toi_drivers(selected_ticker, selected_quarter, 'YoY')
-
-                if not drivers_yoy.empty:
-                    # Format the dataframe for display
-                    display_df = drivers_yoy.copy()
-                    for idx, row in display_df.iterrows():
-                        # Skip section headers (they have empty string values)
-                        if row['Current'] == '':
-                            continue
-                        # Format numeric values
-                        display_df.at[idx, 'Current'] = f"{row['Current']:.1f}B"
-                        display_df.at[idx, 'Prior'] = f"{row['Prior']:.1f}B"
-                        display_df.at[idx, 'Change'] = f"{row['Change']:+.1f}B"
-                        display_df.at[idx, 'Impact (pp)'] = f"{row['Impact (pp)']:+.1f}pp"
-                        if '% of TOI' in display_df.columns and row['% of TOI'] != '':
-                            display_df.at[idx, '% of TOI'] = f"{row['% of TOI']:.1f}%"
-
-                    st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-                    # Show summary metrics
-                    growth_pct = drivers_yoy.attrs.get('growth_pct', 0)
-                    prior_q = drivers_yoy.attrs.get('prior_quarter', '')
-                    st.info(f"TOI Growth: **{growth_pct:+.1f}%** vs {prior_q}")
-                else:
-                    st.warning("Insufficient data for YoY analysis (need at least 5 quarters)")
-
-        except Exception as e:
-            import traceback
-            st.error(f"Error calculating TOI drivers: {e}")
-            st.code(traceback.format_exc())
+        # TOI drivers calculation (hidden from display, but still feeds into OpenAI)
+        # Calculation happens here but display is commented out
+        # The data will still be available for the AI commentary generation below
 
         # Show calculated metrics
         if not calculated_metrics.empty and not analysis_table.empty:
