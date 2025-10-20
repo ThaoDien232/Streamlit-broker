@@ -616,18 +616,9 @@ def main():
 
     # Display broker info
     st.markdown(f"##  **{selected_broker}** Financial Statements")
-    st.markdown(f"**Currency:** VND Billions")
 
-    # Display all financial statements on one page
-    display_income_statement(df, selected_broker, periods, display_mode)
-
-    st.markdown("---")  # Separator line
-
-    display_balance_sheet(df, selected_broker, periods, display_mode)
-
-    st.markdown("---")  # Separator line
-
-    display_investment_book(df, selected_broker, periods)
+    # Show message about comprehensive display
+    st.info("💡 Comprehensive financial metrics display (including Market Share, Trading Value, Net Brokerage Fee, Investment Composition, and Proprietary Holdings) is available on the AI Commentary page. This page shows the traditional financial statement view.")
 
 if __name__ == "__main__":
     main()
