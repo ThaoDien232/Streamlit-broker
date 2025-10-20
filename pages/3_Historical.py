@@ -717,8 +717,7 @@ def create_summary_tables(ticker, quarter_label, ticker_data):
     return market_share_table, prop_holdings_table, investment_composition_table
 
 # Title and description
-st.title("📊 Historical Financial Analysis")
-st.markdown("Comprehensive financial metrics including market share, trading value, investment composition, and proprietary holdings")
+st.title("Historical Financial Analysis")
 
 # Manual refresh control
 with st.sidebar:
@@ -881,14 +880,14 @@ if selected_ticker and selected_quarter:
 
                 with col1:
                     num_quarters = len(investment_composition_table.columns) - 1 if not investment_composition_table.empty else 6  # Subtract 1 for 'Investment Type' column
-                    st.markdown(f"#### Investment Book Composition - Last {num_quarters} Quarters")
+                    st.markdown(f"#### Investment Book Composition")
                     if not investment_composition_table.empty:
                         st.dataframe(investment_composition_table, use_container_width=True, hide_index=True)
                     else:
                         st.info(f"No investment holdings data for {selected_ticker_display}")
 
                 with col2:
-                    st.markdown(f"#### Proprietary Holdings - Last {len(prop_holdings_table.columns) if not prop_holdings_table.empty else 6} Quarters")
+                    st.markdown(f"#### Proprietary Holdings")
                     if not prop_holdings_table.empty:
                         # Format the prop holdings table for display (values are already in billions)
                         prop_display = prop_holdings_table.copy()
@@ -905,7 +904,7 @@ if selected_ticker and selected_quarter:
 
                 # Display market share table
                 if not market_share_table.empty:
-                    st.markdown("#### 📊 Market Share Evolution (Last 6 Quarters)")
+                    st.markdown("#### Market Share Evolution")
                     st.dataframe(market_share_table, use_container_width=True, hide_index=True)
                 else:
                     st.info(f"Market share data not available for {selected_ticker_display}")
@@ -920,4 +919,3 @@ if selected_ticker and selected_quarter:
         st.stop()
 
 st.markdown("---")
-st.caption("💡 **Note:** This page displays comprehensive financial metrics. For AI-powered commentary generation, visit the AI Commentary page.")
