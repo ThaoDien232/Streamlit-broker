@@ -449,7 +449,7 @@ For margin lending, discuss income and balance growth, linking income change to 
 Include absolute margin balance for scale.
 When interpreting the margin/equity ratio, use this exact logic:
 • Below 70% → low level, ample room to expand margin lending.
-• 70–150% → normal level, operating comfortably within the cap.
+• 70–150% → **normal** level, operating comfortably within the cap.
 • 150–200% → high level, limited remaining capacity before hitting the 200% legal cap.
 • Above 200% → exceeds the legal cap — clearly state that this breaches the regulatory limit.
 Always compare the current level to the previous quarter and comment on available headroom versus the 200% cap.
