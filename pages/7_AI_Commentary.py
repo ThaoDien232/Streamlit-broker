@@ -959,7 +959,7 @@ if 'show_cache' not in st.session_state:
     st.session_state.show_cache = False
 
 # Generation controls
-col1, col2, col3 = st.columns([1, 1, 1])
+col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
 
 with col1:
     generate_button = st.button("Generate Analysis", type="primary")
@@ -967,11 +967,17 @@ with col1:
         st.session_state.show_cache = False  # Hide cache when generating
 
 with col2:
+    # Bulk generation button
+    bulk_generate_button = st.button("🚀 Bulk Generate", help="Generate commentary for all brokers with data in selected quarter")
+    if bulk_generate_button:
+        st.session_state.show_cache = False
+
+with col3:
     if cache_exists:
         if st.button("View All Cached"):
             st.session_state.show_cache = True  # Toggle cache view
 
-with col3:
+with col4:
     # Clear cache button - only for current ticker/quarter
     if cache_exists and selected_ticker and selected_quarter:
         # Check if there's a cached entry for this specific ticker/quarter
@@ -1089,6 +1095,134 @@ if generate_button and selected_ticker and selected_quarter:
 
     except Exception as e:
         st.error(f"Error preparing data for analysis: {e}")
+
+# Bulk generation for all brokers with data in selected quarter
+if bulk_generate_button and selected_quarter:
+    st.subheader(f"🚀 Bulk Generate Commentaries for {selected_quarter}")
+
+    from utils.brokerage_data import get_available_tickers
+
+    # Get all available tickers
+    all_tickers = get_available_tickers()
+
+    # Filter to only tickers with data in the selected quarter
+    from utils.brokerage_data import get_ticker_quarters_list
+    tickers_with_data = []
+    for ticker in all_tickers:
+        quarters = get_ticker_quarters_list(ticker, start_year=2017)
+        if selected_quarter in quarters:
+            tickers_with_data.append(ticker)
+
+    if not tickers_with_data:
+        st.warning(f"No brokers have data for {selected_quarter}")
+    else:
+        st.info(f"Found {len(tickers_with_data)} brokers with data in {selected_quarter}: {', '.join([get_display_ticker(t) for t in tickers_with_data])}")
+
+        # Check which ones already have cached commentary
+        cached_tickers = []
+        uncached_tickers = []
+
+        if cache_exists:
+            cache_df = pd.read_csv(cache_file, quoting=1)
+            for ticker in tickers_with_data:
+                if not cache_df[(cache_df['TICKER'] == ticker) & (cache_df['QUARTER'] == selected_quarter)].empty:
+                    cached_tickers.append(ticker)
+                else:
+                    uncached_tickers.append(ticker)
+        else:
+            uncached_tickers = tickers_with_data
+
+        st.write(f"**Status:**")
+        st.write(f"- ✅ Already cached: {len(cached_tickers)} brokers")
+        st.write(f"- 🆕 Need generation: {len(uncached_tickers)} brokers")
+
+        if uncached_tickers:
+            # Show estimated cost and time
+            estimated_tokens = len(uncached_tickers) * 800  # Rough estimate
+            estimated_cost = estimated_tokens / 1000 * 0.03  # GPT-4 pricing estimate
+            estimated_time = len(uncached_tickers) * 15  # ~15 seconds per broker
+
+            st.warning(f"⚠️ **Estimated:** ~{estimated_time} seconds, ~${estimated_cost:.2f} API cost for {len(uncached_tickers)} new analyses")
+
+            if st.button(f"✅ Confirm: Generate {len(uncached_tickers)} Commentaries", type="primary"):
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+
+                results = {
+                    'success': [],
+                    'failed': [],
+                    'cached': []
+                }
+
+                for idx, ticker in enumerate(uncached_tickers):
+                    status_text.text(f"Processing {get_display_ticker(ticker)} ({idx+1}/{len(uncached_tickers)})...")
+
+                    try:
+                        # Load data for this ticker
+                        ticker_data = load_ticker_data(ticker, selected_quarter)
+
+                        if ticker_data.empty:
+                            results['failed'].append(f"{get_display_ticker(ticker)}: No data")
+                            continue
+
+                        # Prepare analysis
+                        ticker_data_filtered, pivot_data = filter_ticker_data(ticker_data, ticker)
+                        calculated_metrics = calculate_financial_metrics(ticker_data_filtered, selected_quarter, ticker)
+                        analysis_table = create_analysis_table(ticker_data_filtered, calculated_metrics, selected_quarter)
+                        market_share_table, prop_holdings_table, investment_composition_table = create_summary_tables(ticker, selected_quarter, ticker_data_filtered)
+
+                        # Calculate TOI drivers
+                        from utils.toi_drivers import calculate_toi_drivers
+                        drivers_qoq = calculate_toi_drivers(ticker, selected_quarter, 'QoQ')
+                        drivers_yoy = calculate_toi_drivers(ticker, selected_quarter, 'YoY')
+
+                        # Generate commentary
+                        commentary = generate_commentary(
+                            ticker=ticker,
+                            year_quarter=selected_quarter,
+                            df=ticker_data_filtered,
+                            model=model_choice,
+                            force_regenerate=False,  # Respect cache
+                            analysis_table=analysis_table,
+                            market_share_table=market_share_table,
+                            prop_holdings_table=prop_holdings_table,
+                            investment_composition_table=investment_composition_table,
+                            toi_drivers_qoq=drivers_qoq,
+                            toi_drivers_yoy=drivers_yoy,
+                            return_prompt=False
+                        )
+
+                        if commentary.startswith("Error"):
+                            results['failed'].append(f"{get_display_ticker(ticker)}: {commentary[:50]}...")
+                        else:
+                            results['success'].append(get_display_ticker(ticker))
+
+                    except Exception as e:
+                        results['failed'].append(f"{get_display_ticker(ticker)}: {str(e)[:50]}...")
+
+                    # Update progress
+                    progress_bar.progress((idx + 1) / len(uncached_tickers))
+
+                status_text.empty()
+                progress_bar.empty()
+
+                # Show results summary
+                st.success(f"✅ Bulk generation complete!")
+                st.write(f"**Results:**")
+                st.write(f"- ✅ Successfully generated: {len(results['success'])} commentaries")
+                if results['success']:
+                    st.write(f"  - {', '.join(results['success'])}")
+
+                if results['failed']:
+                    st.write(f"- ❌ Failed: {len(results['failed'])} brokers")
+                    for failure in results['failed']:
+                        st.write(f"  - {failure}")
+
+                # Reload page to update cache display
+                if st.button("🔄 Refresh Page to View Results"):
+                    st.rerun()
+        else:
+            st.success(f"✅ All {len(tickers_with_data)} brokers already have cached commentaries for {selected_quarter}!")
 
 # View cached commentaries (using session state to persist view)
 if st.session_state.show_cache and cache_exists:
