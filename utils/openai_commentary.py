@@ -432,13 +432,13 @@ The "% of TOI" column shows what percentage each income stream represents of Tot
     prompt += """
 Your answer must follow this structure exactly. Do not add or remove sections.
 
+
 ## 1. Overall (max 5 bullet points)
-Summarize what kind of quarter this was and how sustainable it looks.
-State absolute PBT and TOI, and describe which income streams (brokerage, margin, investment, IB) were the main TOI drivers or drags.
-Base this on the TOI driver table but do not quote pp contributions — only mention material drivers.
-Compare QoQ and YoY trends, noting if momentum differs between short-term (QoQ) and long-term (YoY).
-Grade quarterly strength: 0–15% QoQ TOI = normal, >15% = strong, <–10% = weak.
-Conclude whether the quarter was improving, stable, or softening, and if performance looks sustainable or one-off.
+Provide a clear narrative of how the quarter unfolded and how sustainable the results appear.  
+State the absolute PBT and TOI, and identify which income streams — brokerage, margin, investment, or IB — were the main contributors or detractors to TOI.  
+Use the TOI driver table internally to determine which drivers are material, but do not cite the pp values directly.  
+Compare both QoQ and YoY trends and interpret the direction correctly, describing the quarter as strong, stable, or soft in line with internal thresholds.  
+Conclude with a cohesive view of what defined the quarter and whether current revenue momentum seems sustainable or driven by short-term factors.
 
 ## 2. Traditional brokerage (max 3 bullet points)
 Explain brokerage income change and what drove it.
@@ -469,15 +469,18 @@ Assess margin lending spread = margin rate – funding cost.
 If spread stable/rising, higher borrowing is normal; only flag risk if spread narrows or profitability compresses.
 Summarize if costs are offset by revenue momentum or hurting earnings.
 
-Writing Rules:
-Each bullet = number + meaning in one line.
-Story first, numbers second; avoid mechanical bridges.
-Tone = factual, concise, investor-style. Use one decimal for percentages.
+Writing rules:  
+Each bullet should blend data and interpretation in a single, well-developed sentence.  
+Lead with insight and follow with numbers; avoid mechanical or list-like phrasing.  
+Maintain a factual, neutral, and professional investor tone.
 
-Logical Rules (apply to all sections):
-• Interpret direction correctly: negative = decline, positive = growth.
-• Don't call –5% → –14% an improvement; it's a worsening decline.
-• Only highlight material drivers (≥0.5pp or clearly meaningful).
+Logical rules (apply to all sections):  
+• Interpret direction correctly — negative = decline, positive = growth.  
+• Do not describe a change from –5% to –14% as an improvement; it is a deeper contraction.  
+• Discuss only material items (≥0.5pp contribution or clearly meaningful to performance).  
+
+Formatting:  
+Use one decimal place for percentages (e.g., 15.7%). Keep layout clean and consistent.
 """
 
     # If we have cached commentary and not forcing regeneration, return it now
