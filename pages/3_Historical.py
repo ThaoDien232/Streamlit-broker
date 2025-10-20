@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import requests
 from utils.brokerage_data import load_brokerage_metrics, get_available_tickers, get_available_quarters
 from utils.investment_book import get_investment_data, format_investment_book, get_category_total
 

@@ -846,91 +846,11 @@ if selected_ticker and selected_quarter:
         # Step 4: Create summary tables with market share, prop book, and investment composition data
         market_share_table, prop_holdings_table, investment_composition_table = create_summary_tables(selected_ticker, selected_quarter, ticker_data)
 
-        # Display the data processing results
-        st.subheader(f"Financial Analysis: {selected_ticker_display} - {selected_quarter}")
+        # All financial metrics displays have been moved to the Historical page (pages/3_Historical.py)
+        # This page now focuses solely on AI commentary generation
 
-        # TOI drivers calculation (hidden from display, but still feeds into OpenAI)
-        # Calculation happens here but display is commented out
-        # The data will still be available for the AI commentary generation below
-
-        # Show calculated metrics
-        if not calculated_metrics.empty and not analysis_table.empty:
-            # Format numbers for display
-            def format_number(value, metric_name):
-                if pd.isna(value) or value == 'N/A':
-                    return "N/A"
-                try:
-                    value = float(value)
-                    # Percentages - already calculated as percentages (e.g., 15.5 means 15.5%)
-                    if metric_name in ['ROE', 'ROA', 'Margin/Equity %', 'CIR', 'Interest Rate', 'Brokerage Market Share', 'Margin Lending Rate', 'Margin Lending Spread']:
-                        return f"{value:.2f}%"
-                    # Basis points
-                    elif metric_name == 'Net Brokerage Fee':
-                        return f"{value:.2f} bps"
-                    # Trading Value already in billions
-                    elif metric_name == 'Trading Value':
-                        return f"{value:,.1f}B VND"
-                    # Other financial metrics in billions VND with thousand separators
-                    elif abs(value) >= 1e9:
-                        return f"{value/1e9:,.1f}B VND"
-                    elif abs(value) >= 1e6:
-                        return f"{value/1e6:,.1f}M VND"
-                    else:
-                        return f"{value:,.0f} VND"
-                except:
-                    return str(value)
-
-            def format_growth(value):
-                if pd.isna(value) or value == 'N/A':
-                    return "N/A"
-                try:
-                    value = float(value)
-                    return f"{value:+.1f}%"
-                except:
-                    return str(value)
-
-            # Display analysis table
-            st.write("**Financial Metrics Summary (Last 6 Quarters):**")
-            display_table = analysis_table.copy()
-
-            # Format the values based on metric type
-            # New table structure: Metric | Q1 | Q2 | Q3 | Q4 | Q5 | Q6 | QoQ Growth % | YoY Growth %
-            for idx, row in display_table.iterrows():
-                metric_name = row['Metric']
-
-                # Format all quarter columns (skip 'Metric' and growth columns)
-                for col in display_table.columns:
-                    if col not in ['Metric', 'QoQ Growth %', 'YoY Growth %']:
-                        # This is a quarter column, format as number
-                        if pd.notna(row[col]) and row[col] != 'N/A':
-                            display_table.at[idx, col] = format_number(row[col], metric_name)
-
-                # Format growth columns
-                if 'QoQ Growth %' in display_table.columns and pd.notna(row.get('QoQ Growth %')) and row.get('QoQ Growth %') != 'N/A':
-                    display_table.at[idx, 'QoQ Growth %'] = format_growth(row['QoQ Growth %'])
-
-                if 'YoY Growth %' in display_table.columns and pd.notna(row.get('YoY Growth %')) and row.get('YoY Growth %') != 'N/A':
-                    display_table.at[idx, 'YoY Growth %'] = format_growth(row['YoY Growth %'])
-
-            st.dataframe(display_table, use_container_width=True, hide_index=True)
-
-            # Display market share table
-            if not market_share_table.empty:
-                st.write("**Market Share:**")
-                st.dataframe(market_share_table, use_container_width=True, hide_index=True)
-
-            # Display investment composition table
-            if not investment_composition_table.empty:
-                st.write("**Investment Book Composition:**")
-                st.dataframe(investment_composition_table, use_container_width=True, hide_index=True)
-
-            # Display prop holdings table
-            if not prop_holdings_table.empty:
-                st.write("**Top Proprietary Holdings:**")
-                st.dataframe(prop_holdings_table, use_container_width=True, hide_index=True)
-
-            # Check if cached analysis exists (just show status, don't display)
-            if cache_exists:
+        # Check if cached analysis exists (just show status, don't display)
+        if not calculated_metrics.empty and not analysis_table.empty and cache_exists:
                 try:
                     cached_analysis = cache_df[
                         (cache_df['TICKER'] == selected_ticker) &
