@@ -8,7 +8,6 @@ import streamlit as st
 # Page configuration
 st.set_page_config(
     page_title="Historical Financial Analysis",
-    page_icon="📊",
     layout="wide"
 )
 
@@ -573,19 +572,19 @@ def fetch_market_share(ticker, quarter_label):
         return {'market_share': 0, 'rank': None}
 
 @st.cache_data(ttl=1800)
-def get_top_prop_holdings(ticker, quarter_label):
-    """Get top 5 proprietary trading holdings from Prop book.xlsx"""
+def get_all_prop_holdings_last_quarters(ticker, quarters_list):
+    """Get ALL proprietary trading holdings from Prop book.xlsx for last 6 quarters"""
     try:
         prop_df = pd.read_excel('sql/Prop book.xlsx')
 
-        # Filter for the specific broker and quarter
+        # Filter for the specific broker and quarters in the list
         broker_data = prop_df[
             (prop_df['Broker'] == ticker) &
-            (prop_df['Quarter'] == quarter_label)
+            (prop_df['Quarter'].isin(quarters_list))
         ]
 
         if broker_data.empty:
-            return []
+            return pd.DataFrame()
 
         # Exclude PBT and Other entries
         broker_data = broker_data[~broker_data['Ticker'].isin(['PBT', 'Other AFS', 'Other FVTPL', 'Others'])]
@@ -603,13 +602,29 @@ def get_top_prop_holdings(ticker, quarter_label):
 
         broker_data['Type'] = broker_data.apply(get_holding_type, axis=1)
 
-        # Get top 5 holdings by total value
-        top_holdings = broker_data.nlargest(5, 'Total_Value')[['Ticker', 'Total_Value', 'Type']].to_dict('records')
+        # Create a pivot table with Ticker as rows and Quarters as columns
+        # Show total value for each ticker in each quarter
+        holdings_pivot = broker_data.pivot_table(
+            index='Ticker',
+            columns='Quarter',
+            values='Total_Value',
+            aggfunc='sum',
+            fill_value=0
+        )
 
-        return top_holdings
+        # Sort columns chronologically
+        sorted_quarters = sort_quarters_chronologically(holdings_pivot.columns.tolist())
+        holdings_pivot = holdings_pivot[sorted_quarters]
+
+        # Sort rows by the most recent quarter value (descending)
+        if len(sorted_quarters) > 0:
+            most_recent_quarter = sorted_quarters[-1]
+            holdings_pivot = holdings_pivot.sort_values(by=most_recent_quarter, ascending=False)
+
+        return holdings_pivot
 
     except Exception as e:
-        return []
+        return pd.DataFrame()
 
 def get_investment_composition(ticker_data, ticker, quarter_label):
     """Get investment book composition with simplified 4-category structure for selected quarter"""
@@ -689,22 +704,8 @@ def create_summary_tables(ticker, quarter_label, ticker_data):
         market_data[f'{ticker} Rank'] = market_rank_values
         market_share_table = pd.DataFrame(market_data)
 
-    # Build prop holdings table for last 6 quarters (top 5 holdings per quarter)
-    # Get prop holdings for current quarter only (showing evolution across quarters would be too complex)
-    prop_holdings = get_top_prop_holdings(ticker, quarter_label)
-
-    prop_holdings_table = pd.DataFrame()
-    if prop_holdings:
-        holdings_data = {
-            'Ticker': [],
-            'Value (B VND)': [],
-            'Type': []
-        }
-        for holding in prop_holdings:
-            holdings_data['Ticker'].append(holding['Ticker'])
-            holdings_data['Value (B VND)'].append(f"{holding['Total_Value']:.1f}")
-            holdings_data['Type'].append(holding['Type'])
-        prop_holdings_table = pd.DataFrame(holdings_data)
+    # Build prop holdings table for last 6 quarters - ALL holdings across all quarters
+    prop_holdings_table = get_all_prop_holdings_last_quarters(ticker, last_6_quarters)
 
     # Build investment composition table for current quarter
     investment_composition_table = get_investment_composition(ticker_data, ticker, quarter_label)
@@ -814,11 +815,11 @@ if selected_ticker and selected_quarter:
         # Display the comprehensive financial tables
         if not calculated_metrics.empty and not analysis_table.empty:
             # Display Financial Metrics with tabs for better organization
-            tab1, tab2, tab3 = st.tabs(["📊 Comprehensive Metrics", "📈 Market Position", "💼 Investment & Proprietary Holdings"])
+            tab1, tab2 = st.tabs(["Comprehensive Metrics", "Market Share"])
 
             with tab1:
-                st.subheader(f"Comprehensive Financial Metrics - Last 6 Quarters")
-                st.markdown("*All values in billions VND unless otherwise noted*")
+                st.subheader(f"Financial Metrics")
+                st.markdown("*Units: VNDbn unless otherwise noted*")
 
                 # Display the full analysis table
                 if not analysis_table.empty:
@@ -868,54 +869,10 @@ if selected_ticker and selected_quarter:
 
                     st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-                    # Add metric explanations
-                    with st.expander("ℹ️ Metric Definitions"):
-                        st.markdown("""
-                        **Income Statement Metrics:**
-                        - **Net Brokerage Income**: Revenue from brokerage services
-                        - **Net Brokerage Fee (bps)**: Average fee rate in basis points
-                        - **Trading Value**: Total value traded by clients (Billions VND)
-                        - **IB Income**: Investment banking income
-                        - **Margin Income**: Interest income from margin lending
-                        - **Margin Balance**: Total margin loan book
-                        - **Margin/Equity %**: Margin book as % of equity
-                        - **Margin Lending Rate**: Annualized margin lending rate
-                        - **Margin Lending Spread**: Spread over funding cost
-                        - **Investment Income**: Income from proprietary investments
-                        - **Total Operating Income**: Sum of all operating revenues
-                        - **SG&A**: Selling, General & Administrative expenses
-                        - **CIR (Cost-to-Income Ratio)**: Operating efficiency metric
-                        - **Interest Expense**: Interest on borrowings
-                        - **Borrowing Balance**: Total debt
-                        - **Interest Rate**: Average borrowing cost (annualized)
-                        - **PBT**: Profit Before Tax
-                        - **NPAT**: Net Profit After Tax
-                        - **ROE**: Return on Equity (annualized for quarterly data)
+                # Add Investment Book and Prop Holdings after the metrics table
+                st.markdown("---")
 
-                        **Market Metrics:**
-                        - **Market Liquidity (Avg Daily)**: Average daily market turnover (Billions VND)
-                        - **Brokerage Market Share**: Broker's share of total market trading
-
-                        **Investment Book Composition:**
-                        - **MTM Equities**: Mark-to-market equity holdings (FVTPL)
-                        - **Non-MTM Equities**: Available-for-sale equity holdings (AFS)
-                        - **Bonds**: Fixed income securities
-                        - **CDs/Deposits**: Cash deposits and certificates of deposit
-                        """)
-                else:
-                    st.info("No comprehensive metrics available for the selected period.")
-
-            with tab2:
-                st.subheader("Market Share & Trading Activity")
-
-                # Display market share table
-                if not market_share_table.empty:
-                    st.markdown("#### 📊 Market Share Evolution (Last 6 Quarters)")
-                    st.dataframe(market_share_table, use_container_width=True, hide_index=True)
-                else:
-                    st.info(f"Market share data not available for {selected_ticker_display}")
-
-            with tab3:
+                # Investment Book Composition and Proprietary Holdings side by side
                 col1, col2 = st.columns(2)
 
                 with col1:
@@ -926,11 +883,27 @@ if selected_ticker and selected_quarter:
                         st.info(f"No investment holdings data for {selected_ticker_display} in {selected_quarter}")
 
                 with col2:
-                    st.markdown(f"#### 🏆 Top 5 Proprietary Holdings - {selected_quarter}")
+                    st.markdown(f"#### 🏆 Proprietary Holdings - Last {len(prop_holdings_table.columns) if not prop_holdings_table.empty else 6} Quarters")
                     if not prop_holdings_table.empty:
-                        st.dataframe(prop_holdings_table, use_container_width=True, hide_index=True)
+                        # Format the prop holdings table for display (values are already in billions)
+                        prop_display = prop_holdings_table.copy()
+                        for col_name in prop_display.columns:
+                            prop_display[col_name] = prop_display[col_name].apply(
+                                lambda x: f"{x:,.1f}" if x > 0 else "-"
+                            )
+                        st.dataframe(prop_display, use_container_width=True)
                     else:
-                        st.info(f"No proprietary holdings data for {selected_ticker_display} in {selected_quarter}")
+                        st.info(f"No proprietary holdings data for {selected_ticker_display}")
+
+            with tab2:
+                st.subheader("Market Share & Trading Activity")
+
+                # Display market share table
+                if not market_share_table.empty:
+                    st.markdown("#### 📊 Market Share Evolution (Last 6 Quarters)")
+                    st.dataframe(market_share_table, use_container_width=True, hide_index=True)
+                else:
+                    st.info(f"Market share data not available for {selected_ticker_display}")
 
         else:
             st.warning(f"Could not calculate metrics for {selected_ticker_display} in {selected_quarter}")
