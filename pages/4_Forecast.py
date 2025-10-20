@@ -1064,7 +1064,7 @@ margin_balance_input = margin_cols[0].number_input(
 margin_rate_input = margin_cols[1].number_input(
     f"{target_label} Margin Lending Rate (%)",
     value=float(round(margin_rate_default, 2)),
-    min_value=0.0,
+    min_value=-100.0,
     step=0.1,
     format="%.2f",
     key="margin_rate_input",
