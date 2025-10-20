@@ -190,7 +190,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
     # Load market liquidity data
     market_liquidity_df = load_market_liquidity_data()
 
-    # Display metrics we want to show
+    # Display metrics we want to show (excluding investment book items - they're displayed separately)
     display_metrics = [
         'Net Brokerage Income',
         'Market Liquidity (Avg Daily)',
@@ -204,10 +204,6 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
         'Margin Lending Rate',
         'Margin Lending Spread',
         'Investment Income',
-        'MTM Equities',
-        'Non-MTM Equities',
-        'Bonds',
-        'CDs/Deposits',
         'Other Incomes',
         'Total Operating Income',
         'SG&A',
@@ -626,47 +622,55 @@ def get_all_prop_holdings_last_quarters(ticker, quarters_list):
     except Exception as e:
         return pd.DataFrame()
 
-def get_investment_composition(ticker_data, ticker, quarter_label):
-    """Get investment book composition with simplified 4-category structure for selected quarter"""
+def get_investment_composition_last_quarters(ticker_data, ticker, quarters_list):
+    """Get investment book composition with simplified 4-category structure for last 6 quarters"""
     from utils.investment_book import get_investment_data
 
-    # Parse quarter to get year and quarter number
-    try:
-        quarter_num = int(quarter_label[0])
-        year_str = quarter_label[-2:]
-        year = 2000 + int(year_str) if int(year_str) < 50 else 1900 + int(year_str)
-    except:
+    if not quarters_list:
         return pd.DataFrame()
 
-    # Get investment data for this quarter
-    investment_data = get_investment_data(ticker_data, ticker, year, quarter_num)
+    # Categories to display
+    categories = ['MTM Equities', 'Non-MTM Equities', 'Bonds', 'CDs/Deposits']
 
-    if not investment_data or not any(value > 0 for value in investment_data.values()):
-        return pd.DataFrame()
+    # Build data structure: Investment Type as rows, Quarters as columns
+    composition_data = {'Investment Type': categories + ['Total Investments']}
 
-    # Build simplified composition with 4 categories
-    composition = []
-    total_value = sum(investment_data.values())
+    for quarter_label in quarters_list:
+        # Parse quarter to get year and quarter number
+        try:
+            quarter_num = int(quarter_label[0])
+            year_str = quarter_label[-2:]
+            year = 2000 + int(year_str) if int(year_str) < 50 else 1900 + int(year_str)
+        except:
+            # Add empty column if parsing fails
+            composition_data[quarter_label] = ['-'] * len(composition_data['Investment Type'])
+            continue
 
-    for category in ['MTM Equities', 'Non-MTM Equities', 'Bonds', 'CDs/Deposits']:
-        value = investment_data.get(category, 0)
+        # Get investment data for this quarter
+        investment_data = get_investment_data(ticker_data, ticker, year, quarter_num)
 
-        if value > 0:
-            composition.append({
-                'Investment Type': category,
-                'Value (B VND)': f"{value / 1_000_000_000:,.1f}",
-                'Composition %': f"{(value / total_value * 100):.1f}%"
-            })
+        if not investment_data or not any(value > 0 for value in investment_data.values()):
+            # Add empty column if no data
+            composition_data[quarter_label] = ['-'] * len(composition_data['Investment Type'])
+            continue
 
-    # Add total row
-    if composition:
-        composition.append({
-            'Investment Type': 'Total Investments',
-            'Value (B VND)': f"{total_value / 1_000_000_000:,.1f}",
-            'Composition %': '100.0%'
-        })
+        # Calculate values for each category
+        quarter_values = []
+        total_value = sum(investment_data.values())
 
-    return pd.DataFrame(composition)
+        for category in categories:
+            value = investment_data.get(category, 0)
+            if value > 0:
+                quarter_values.append(f"{value / 1_000_000_000:,.1f}")
+            else:
+                quarter_values.append('-')
+
+        # Add total
+        quarter_values.append(f"{total_value / 1_000_000_000:,.1f}")
+
+        composition_data[quarter_label] = quarter_values
+
+    return pd.DataFrame(composition_data)
 
 def create_summary_tables(ticker, quarter_label, ticker_data):
     """Step 4: Create separate tables for market share and prop book data - Last 6 Quarters"""
@@ -707,8 +711,8 @@ def create_summary_tables(ticker, quarter_label, ticker_data):
     # Build prop holdings table for last 6 quarters - ALL holdings across all quarters
     prop_holdings_table = get_all_prop_holdings_last_quarters(ticker, last_6_quarters)
 
-    # Build investment composition table for current quarter
-    investment_composition_table = get_investment_composition(ticker_data, ticker, quarter_label)
+    # Build investment composition table for last 6 quarters
+    investment_composition_table = get_investment_composition_last_quarters(ticker_data, ticker, last_6_quarters)
 
     return market_share_table, prop_holdings_table, investment_composition_table
 
@@ -876,14 +880,15 @@ if selected_ticker and selected_quarter:
                 col1, col2 = st.columns(2)
 
                 with col1:
-                    st.markdown(f"#### 💼 Investment Book Composition - {selected_quarter}")
+                    num_quarters = len(investment_composition_table.columns) - 1 if not investment_composition_table.empty else 6  # Subtract 1 for 'Investment Type' column
+                    st.markdown(f"#### Investment Book Composition - Last {num_quarters} Quarters")
                     if not investment_composition_table.empty:
                         st.dataframe(investment_composition_table, use_container_width=True, hide_index=True)
                     else:
-                        st.info(f"No investment holdings data for {selected_ticker_display} in {selected_quarter}")
+                        st.info(f"No investment holdings data for {selected_ticker_display}")
 
                 with col2:
-                    st.markdown(f"#### 🏆 Proprietary Holdings - Last {len(prop_holdings_table.columns) if not prop_holdings_table.empty else 6} Quarters")
+                    st.markdown(f"#### Proprietary Holdings - Last {len(prop_holdings_table.columns) if not prop_holdings_table.empty else 6} Quarters")
                     if not prop_holdings_table.empty:
                         # Format the prop holdings table for display (values are already in billions)
                         prop_display = prop_holdings_table.copy()
