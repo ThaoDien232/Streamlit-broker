@@ -420,9 +420,12 @@ selected_brokers = st.sidebar.multiselect(
 )
 
 # Fixed default charts (always displayed)
-fixed_charts = ['Total_Operating_Income', 'PBT', 'ROE', 'MARGIN_LENDING_RATE', 'INTEREST_RATE', 'NET_BROKERAGE_FEE']
+# Note: TOI structure chart is always shown, but TOI bar chart can be added optionally
+fixed_charts_structure = ['Total_Operating_Income_Structure']  # Placeholder for structure chart
+fixed_charts = ['PBT', 'ROE', 'MARGIN_LENDING_RATE', 'INTEREST_RATE', 'NET_BROKERAGE_FEE']
 
 # Additional metrics selection - NOW ALWAYS AVAILABLE
+# Include TOI as an option so users can add the bar chart version
 additional_metrics = st.sidebar.multiselect(
     "Add charts:",
     options=[m for m in allowed_metrics if m not in fixed_charts],
@@ -431,8 +434,8 @@ additional_metrics = st.sidebar.multiselect(
     key="chart_metrics"
 )
 
-# Combine fixed and additional metrics
-selected_metrics = fixed_charts + additional_metrics
+# Combine: Always show TOI structure first, then fixed charts, then additional
+selected_metrics = ['Total_Operating_Income'] + fixed_charts + additional_metrics
 
 # Year selection - default to 2023, 2024, 2025
 available_years_filtered = [year for year in available_years if 2021 <= year <= 2025]
@@ -489,20 +492,26 @@ with tab1:
 
         if not filtered_df.empty:
 
-            # Display charts - handle TOI structure specially
+            # Display charts
             chart_idx = 0
+            toi_structure_shown = False  # Track if we've shown the structure chart
+
             for metric in selected_metrics:
-                # Special handling for TOI Structure chart
-                if metric == 'Total_Operating_Income':
+                # Special handling for TOI Structure chart (show once as full-width)
+                if metric == 'Total_Operating_Income' and not toi_structure_shown:
                     st.subheader("Total Operating Income Structure")
                     toi_fig = create_toi_structure_chart(filtered_df, selected_brokers, timeframe_type)
                     if toi_fig:
                         st.plotly_chart(toi_fig, use_container_width=True)
                     else:
                         st.warning("No data available for TOI structure chart.")
+                    toi_structure_shown = True
                     continue
 
-                # Standard charts (PBT, ROE, and additional metrics)
+                # If TOI appears again (from additional metrics), render as regular bar chart
+                # Continue to standard chart rendering below
+
+                # Standard charts (PBT, ROE, TOI bar chart if selected, and other additional metrics)
                 # Display 2 charts per row
                 if chart_idx % 2 == 0:
                     col1, col2 = st.columns(2)
