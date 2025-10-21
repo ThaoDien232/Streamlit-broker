@@ -992,34 +992,48 @@ if selected_ticker and selected_quarter:
                     st.info(f"Market share data not available for {selected_ticker_display}")
 
             with tab3:
-                st.subheader(f"Cross-Broker Comparison - {selected_quarter}")
+                st.subheader(f"Cross-Broker Comparison")
                 st.markdown("*Compare financial metrics across multiple brokers for the selected quarter*")
 
-                # Broker selection - multiselect with tier organization
-                st.markdown("#### Select Brokers to Compare")
+                # Broker and quarter selection side by side
+                col_broker, col_quarter = st.columns(2)
 
-                # Create broker list ordered by tier (same as main page)
-                comparison_ordered_tickers = []
-                for group_name, tickers in broker_groups.items():
-                    for ticker in tickers:
-                        if ticker in available_tickers:
-                            comparison_ordered_tickers.append(ticker)
+                with col_broker:
+                    st.markdown("#### Select Brokers to Compare")
 
-                # Add any brokers not in groups at the end
-                ungrouped = [t for t in available_tickers if not any(t in group for group in broker_groups.values())]
-                comparison_ordered_tickers.extend(ungrouped)
+                    # Create broker list ordered by tier (same as main page)
+                    comparison_ordered_tickers = []
+                    for group_name, tickers in broker_groups.items():
+                        for ticker in tickers:
+                            if ticker in available_tickers:
+                                comparison_ordered_tickers.append(ticker)
 
-                # Create display names mapping
-                ticker_display_map = {ticker: get_display_ticker(ticker) for ticker in comparison_ordered_tickers}
+                    # Add any brokers not in groups at the end
+                    ungrouped = [t for t in available_tickers if not any(t in group for group in broker_groups.values())]
+                    comparison_ordered_tickers.extend(ungrouped)
 
-                # Multiselect for brokers
-                selected_brokers = st.multiselect(
-                    "Choose brokers:",
-                    options=comparison_ordered_tickers,
-                    format_func=lambda x: ticker_display_map[x],
-                    default=[selected_ticker],
-                    help="Select one or more brokers to compare"
-                )
+                    # Create display names mapping
+                    ticker_display_map = {ticker: get_display_ticker(ticker) for ticker in comparison_ordered_tickers}
+
+                    # Multiselect for brokers
+                    selected_brokers = st.multiselect(
+                        "Choose brokers:",
+                        options=comparison_ordered_tickers,
+                        format_func=lambda x: ticker_display_map[x],
+                        default=[selected_ticker],
+                        help="Select one or more brokers to compare"
+                    )
+
+                with col_quarter:
+                    st.markdown("#### Select Quarter")
+                    # Use the same quarter list as the main page
+                    comparison_quarter = st.selectbox(
+                        "Choose quarter:",
+                        ticker_quarters,
+                        index=ticker_quarters.index(selected_quarter) if selected_quarter in ticker_quarters else 0,
+                        help="Choose the quarter for comparison",
+                        key="comparison_quarter_selector"
+                    )
 
                 # Metric selection
                 st.markdown("---")
@@ -1060,13 +1074,13 @@ if selected_ticker and selected_quarter:
                     comparison_data = []
 
                     for ticker in selected_brokers:
-                        ticker_comparison_data = load_ticker_data(ticker, selected_quarter)
+                        ticker_comparison_data = load_ticker_data(ticker, comparison_quarter)
 
                         if not ticker_comparison_data.empty:
                             # Parse quarter
                             try:
-                                quarter_num = int(selected_quarter[0])
-                                year_str = selected_quarter[-2:]
+                                quarter_num = int(comparison_quarter[0])
+                                year_str = comparison_quarter[-2:]
                                 year = 2000 + int(year_str) if int(year_str) < 50 else 1900 + int(year_str)
                             except:
                                 continue
@@ -1079,7 +1093,7 @@ if selected_ticker and selected_quarter:
                                 # Special handling for Brokerage Market Share
                                 if metric_name == 'Brokerage Market Share':
                                     # Try HSX API first
-                                    hsx_data = fetch_market_share(ticker, selected_quarter)
+                                    hsx_data = fetch_market_share(ticker, comparison_quarter)
                                     if hsx_data['market_share'] > 0:
                                         broker_metrics[metric_name] = hsx_data['market_share']
                                     else:
