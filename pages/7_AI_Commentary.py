@@ -151,13 +151,10 @@ def main() -> None:
     st.subheader(f"{selected_display_ticker} — {selected_quarter}")
     st.caption(f"Generated at: {format_generated_at(generated_at)}")
 
-    st.text_area(
-        "Commentary",
-        value=commentary_text,
-        height=400,
-        disabled=True,
-        label_visibility="collapsed",
-    )
+    st.markdown("### Commentary")
+    formatted_commentary = str(commentary_text).replace("\r\n", "\n")
+    formatted_commentary = formatted_commentary.replace("\n", "  \n")
+    st.markdown(formatted_commentary)
 
     st.divider()
 
