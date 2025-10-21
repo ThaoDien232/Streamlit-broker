@@ -14,7 +14,6 @@ st.set_page_config(
 import pandas as pd
 import toml
 import requests
-import plotly.graph_objects as go
 
 # Load theme from config.toml
 theme_config = toml.load("utils/config.toml")
