@@ -686,21 +686,66 @@ def create_summary_tables(ticker, quarter_label, ticker_data):
     # Get last 6 quarters including current (or fewer if not available)
     last_6_quarters = quarters[max(0, current_idx - 5):current_idx + 1]
 
-    # Build market share table for last 6 quarters
+    # Build market share table for last 6 quarters (both HSX API and calculated)
     market_share_table = pd.DataFrame()
     market_data = {'Quarter': []}
     market_share_values = []
     market_rank_values = []
+    market_liquidity_df = load_market_liquidity_data()
 
     for quarter in last_6_quarters:
-        market_share_data = fetch_market_share(ticker, quarter)
+        # Parse quarter to get year and quarter_num
+        try:
+            quarter_num = int(quarter[0])
+            year_str = quarter[-2:]
+            year = 2000 + int(year_str) if int(year_str) < 50 else 1900 + int(year_str)
+        except:
+            market_data['Quarter'].append(quarter)
+            market_share_values.append('N/A')
+            market_rank_values.append('N/A')
+            continue
+
         market_data['Quarter'].append(quarter)
+
+        # Try HSX API first
+        market_share_data = fetch_market_share(ticker, quarter)
+
         if market_share_data['market_share'] > 0:
+            # Use HSX API data (broker is in Top 10)
             market_share_values.append(f"{market_share_data['market_share']:.2f}%")
             market_rank_values.append(f"#{market_share_data['rank']}" if market_share_data['rank'] else 'N/A')
         else:
-            market_share_values.append('N/A')
-            market_rank_values.append('N/A')
+            # Calculate market share for brokers outside Top 10
+            institution_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
+            investor_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Investor_shares_trading_value')
+            total_trading_value = institution_shares + investor_shares
+
+            # Get market liquidity and trading days
+            if not market_liquidity_df.empty:
+                liquidity_row = market_liquidity_df[
+                    (market_liquidity_df['Year'] == year) &
+                    (market_liquidity_df['Quarter'] == quarter_num)
+                ]
+                if not liquidity_row.empty:
+                    avg_daily_turnover_bn = liquidity_row.iloc[0]['Avg Daily Turnover (B VND)']
+                    trading_days = liquidity_row.iloc[0]['Trading Days']
+
+                    # Market liquidity is in billions, convert to VND for calculation
+                    total_market_value = avg_daily_turnover_bn * 1_000_000_000 * trading_days
+
+                    if total_market_value and total_market_value != 0 and total_trading_value > 0:
+                        market_share = (total_trading_value / total_market_value) / 2 * 100
+                        market_share_values.append(f"{market_share:.2f}% (calc)")
+                        market_rank_values.append('N/A')
+                    else:
+                        market_share_values.append('N/A')
+                        market_rank_values.append('N/A')
+                else:
+                    market_share_values.append('N/A')
+                    market_rank_values.append('N/A')
+            else:
+                market_share_values.append('N/A')
+                market_rank_values.append('N/A')
 
     if market_data['Quarter']:
         # Use the original ticker for display (TCX stays as TCX)
