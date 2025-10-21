@@ -14,6 +14,7 @@ st.set_page_config(
 import pandas as pd
 import toml
 import requests
+import plotly.graph_objects as go
 
 # Load theme from config.toml
 theme_config = toml.load("utils/config.toml")
@@ -887,7 +888,7 @@ if selected_ticker and selected_quarter:
         # Display the comprehensive financial tables
         if not calculated_metrics.empty and not analysis_table.empty:
             # Display Financial Metrics with tabs for better organization
-            tab1, tab2 = st.tabs(["Comprehensive Metrics", "Market Share"])
+            tab1, tab2, tab3 = st.tabs(["📊 Comprehensive Metrics", "📈 Market Share", "🏢 Sector Comparison"])
 
             with tab1:
                 st.subheader(f"Financial Metrics")
@@ -977,6 +978,205 @@ if selected_ticker and selected_quarter:
                     st.dataframe(market_share_table, use_container_width=True, hide_index=True)
                 else:
                     st.info(f"Market share data not available for {selected_ticker_display}")
+
+            with tab3:
+                st.subheader(f"Cross-Broker Comparison - {selected_quarter}")
+                st.markdown("*Compare financial metrics across multiple brokers for the selected quarter*")
+
+                # Broker selection organized by tier
+                st.markdown("#### Select Brokers to Compare")
+
+                # Create columns for tier-based selection
+                tier_cols = st.columns(3)
+
+                selected_brokers = []
+
+                with tier_cols[0]:
+                    st.markdown("**Top Tier**")
+                    for ticker in broker_groups['Top Tier']:
+                        if ticker in available_tickers:
+                            if st.checkbox(get_display_ticker(ticker), key=f"sector_{ticker}", value=(ticker == selected_ticker)):
+                                selected_brokers.append(ticker)
+
+                with tier_cols[1]:
+                    st.markdown("**Mid Tier**")
+                    for ticker in broker_groups['Mid Tier']:
+                        if ticker in available_tickers:
+                            if st.checkbox(get_display_ticker(ticker), key=f"sector_{ticker}"):
+                                selected_brokers.append(ticker)
+
+                with tier_cols[2]:
+                    st.markdown("**Regional**")
+                    for ticker in broker_groups['Regional']:
+                        if ticker in available_tickers:
+                            if st.checkbox(get_display_ticker(ticker), key=f"sector_{ticker}"):
+                                selected_brokers.append(ticker)
+
+                # Metric selection
+                st.markdown("---")
+                st.markdown("#### Select Metrics to Compare")
+
+                # Available metrics (same as Charts page)
+                available_metrics = {
+                    'PBT': 'PBT',
+                    'NPAT': 'NPAT',
+                    'ROE': 'ROE',
+                    'Margin Balance': 'Margin_Lending_book',
+                    'Margin Lending Rate': 'MARGIN_LENDING_RATE',
+                    'Brokerage Market Share': 'Brokerage Market Share',
+                    'Net Brokerage Income': 'Net_Brokerage_Income',
+                    'Margin Income': 'Net_Margin_lending_Income',
+                    'Investment Income': 'Net_investment_income',
+                    'Total Operating Income': 'Total_Operating_Income',
+                    'CIR': 'CIR',
+                    'Interest Rate': 'Interest_Rate',
+                    'Borrowing Balance': 'Borrowing_Balance',
+                }
+
+                # Default metrics
+                default_metrics = ['PBT', 'ROE', 'Margin Balance', 'Margin Lending Rate', 'Brokerage Market Share']
+
+                selected_metric_names = st.multiselect(
+                    "Choose metrics:",
+                    options=list(available_metrics.keys()),
+                    default=default_metrics,
+                    help="Select one or more metrics to compare across brokers"
+                )
+
+                # Generate comparison if brokers and metrics are selected
+                if selected_brokers and selected_metric_names:
+                    st.markdown("---")
+
+                    # Load data for all selected brokers
+                    comparison_data = []
+
+                    for ticker in selected_brokers:
+                        ticker_comparison_data = load_ticker_data(ticker, selected_quarter)
+
+                        if not ticker_comparison_data.empty:
+                            # Parse quarter
+                            try:
+                                quarter_num = int(selected_quarter[0])
+                                year_str = selected_quarter[-2:]
+                                year = 2000 + int(year_str) if int(year_str) < 50 else 1900 + int(year_str)
+                            except:
+                                continue
+
+                            broker_metrics = {'Broker': get_display_ticker(ticker)}
+
+                            for metric_name in selected_metric_names:
+                                metric_code = available_metrics[metric_name]
+
+                                # Special handling for Brokerage Market Share
+                                if metric_name == 'Brokerage Market Share':
+                                    # Try HSX API first
+                                    hsx_data = fetch_market_share(ticker, selected_quarter)
+                                    if hsx_data['market_share'] > 0:
+                                        broker_metrics[metric_name] = hsx_data['market_share']
+                                    else:
+                                        # Calculate fallback
+                                        institution_shares = get_calc_metric_value(ticker_comparison_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
+                                        investor_shares = get_calc_metric_value(ticker_comparison_data, ticker, year, quarter_num, 'Investor_shares_trading_value')
+                                        total_trading_value = institution_shares + investor_shares
+
+                                        market_liquidity_df = load_market_liquidity_data()
+                                        if not market_liquidity_df.empty:
+                                            liquidity_row = market_liquidity_df[
+                                                (market_liquidity_df['Year'] == year) &
+                                                (market_liquidity_df['Quarter'] == quarter_num)
+                                            ]
+                                            if not liquidity_row.empty:
+                                                avg_daily_turnover_bn = liquidity_row.iloc[0]['Avg Daily Turnover (B VND)']
+                                                trading_days = liquidity_row.iloc[0]['Trading Days']
+                                                total_market_value = avg_daily_turnover_bn * 1_000_000_000 * trading_days
+
+                                                if total_market_value and total_market_value != 0 and total_trading_value > 0:
+                                                    market_share = (total_trading_value / total_market_value) / 2 * 100
+                                                    broker_metrics[metric_name] = market_share
+                                                else:
+                                                    broker_metrics[metric_name] = 0
+                                            else:
+                                                broker_metrics[metric_name] = 0
+                                        else:
+                                            broker_metrics[metric_name] = 0
+                                else:
+                                    # Regular metric
+                                    value = get_calc_metric_value(ticker_comparison_data, ticker, year, quarter_num, metric_code)
+                                    broker_metrics[metric_name] = value
+
+                            comparison_data.append(broker_metrics)
+
+                    if comparison_data:
+                        comparison_df = pd.DataFrame(comparison_data)
+
+                        # Display comparison table
+                        st.markdown(f"### Comparison Table")
+
+                        # Format the display
+                        display_comparison = comparison_df.copy()
+                        for col in display_comparison.columns:
+                            if col != 'Broker':
+                                if col in ['ROE', 'Margin Lending Rate', 'Brokerage Market Share', 'CIR', 'Interest Rate']:
+                                    # Percentage metrics
+                                    display_comparison[col] = display_comparison[col].apply(
+                                        lambda x: f"{x:.2f}%" if pd.notna(x) and x != 0 else "-"
+                                    )
+                                else:
+                                    # Value metrics (convert to billions)
+                                    display_comparison[col] = display_comparison[col].apply(
+                                        lambda x: f"{x/1_000_000_000:,.1f}" if pd.notna(x) and x != 0 else "-"
+                                    )
+
+                        st.dataframe(display_comparison, use_container_width=True, hide_index=True)
+
+                        # Create charts for each metric
+                        st.markdown("### Visual Comparison")
+
+                        import plotly.graph_objects as go
+
+                        # Create charts for each selected metric
+                        for metric_name in selected_metric_names:
+                            fig = go.Figure()
+
+                            # Prepare data
+                            brokers_list = comparison_df['Broker'].tolist()
+                            values_list = comparison_df[metric_name].tolist()
+
+                            # Determine if percentage or value metric
+                            is_percentage = metric_name in ['ROE', 'Margin Lending Rate', 'Brokerage Market Share', 'CIR', 'Interest Rate']
+
+                            if not is_percentage:
+                                # Convert to billions for value metrics
+                                values_list = [v/1_000_000_000 if v != 0 else 0 for v in values_list]
+
+                            fig.add_trace(go.Bar(
+                                x=brokers_list,
+                                y=values_list,
+                                name=metric_name,
+                                marker_color=primary_color
+                            ))
+
+                            # Update layout
+                            y_axis_title = f"{metric_name} (%)" if is_percentage else f"{metric_name} (B VND)"
+
+                            fig.update_layout(
+                                title=f"{metric_name} Comparison - {selected_quarter}",
+                                xaxis_title="Broker",
+                                yaxis_title=y_axis_title,
+                                height=400,
+                                showlegend=False,
+                                template="plotly_white"
+                            )
+
+                            st.plotly_chart(fig, use_container_width=True)
+
+                    else:
+                        st.warning("No data available for selected brokers")
+
+                elif not selected_brokers:
+                    st.info("👆 Please select at least one broker to compare")
+                elif not selected_metric_names:
+                    st.info("👆 Please select at least one metric to compare")
 
         else:
             st.warning(f"Could not calculate metrics for {selected_ticker_display} in {selected_quarter}")
