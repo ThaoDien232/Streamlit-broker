@@ -735,7 +735,7 @@ def create_summary_tables(ticker, quarter_label, ticker_data):
 
                     if total_market_value and total_market_value != 0 and total_trading_value > 0:
                         market_share = (total_trading_value / total_market_value) / 2 * 100
-                        market_share_values.append(f"{market_share:.2f}% (calc)")
+                        market_share_values.append(f"{market_share:.2f}%")
                         market_rank_values.append('N/A')
                     else:
                         market_share_values.append('N/A')
