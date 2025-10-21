@@ -582,8 +582,8 @@ def get_all_prop_holdings_last_quarters(ticker, quarters_list):
         if broker_data.empty:
             return pd.DataFrame()
 
-        # Exclude PBT and Other entries
-        broker_data = broker_data[~broker_data['Ticker'].isin(['PBT', 'Other AFS', 'Other FVTPL', 'Others'])]
+        # Exclude PBT and "Other AFS" only - keep "Other FVTPL" and "Others"
+        broker_data = broker_data[~broker_data['Ticker'].isin(['PBT', 'Other AFS'])]
 
         # Calculate total value from both FVTPL and AFS
         broker_data['Total_Value'] = broker_data['FVTPL value'].fillna(0) + broker_data['AFS value'].fillna(0)
@@ -612,10 +612,23 @@ def get_all_prop_holdings_last_quarters(ticker, quarters_list):
         sorted_quarters = sort_quarters_chronologically(holdings_pivot.columns.tolist())
         holdings_pivot = holdings_pivot[sorted_quarters]
 
-        # Sort rows by the most recent quarter value (descending)
+        # Sort rows: "Other FVTPL" and "Others" at the bottom, rest sorted by most recent quarter value
         if len(sorted_quarters) > 0:
             most_recent_quarter = sorted_quarters[-1]
-            holdings_pivot = holdings_pivot.sort_values(by=most_recent_quarter, ascending=False)
+
+            # Separate "Others" entries
+            others_rows = holdings_pivot[holdings_pivot.index.isin(['Other FVTPL', 'Others'])]
+            regular_rows = holdings_pivot[~holdings_pivot.index.isin(['Other FVTPL', 'Others'])]
+
+            # Sort regular rows by most recent quarter value (descending)
+            if not regular_rows.empty:
+                regular_rows = regular_rows.sort_values(by=most_recent_quarter, ascending=False)
+
+            # Combine: regular holdings first, then "Others" at bottom
+            if not others_rows.empty:
+                holdings_pivot = pd.concat([regular_rows, others_rows])
+            else:
+                holdings_pivot = regular_rows
 
         return holdings_pivot
 
