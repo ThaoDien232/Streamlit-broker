@@ -983,34 +983,31 @@ if selected_ticker and selected_quarter:
                 st.subheader(f"Cross-Broker Comparison - {selected_quarter}")
                 st.markdown("*Compare financial metrics across multiple brokers for the selected quarter*")
 
-                # Broker selection organized by tier
+                # Broker selection - multiselect with tier organization
                 st.markdown("#### Select Brokers to Compare")
 
-                # Create columns for tier-based selection
-                tier_cols = st.columns(3)
-
-                selected_brokers = []
-
-                with tier_cols[0]:
-                    st.markdown("**Top Tier**")
-                    for ticker in broker_groups['Top Tier']:
+                # Create broker list ordered by tier (same as main page)
+                comparison_ordered_tickers = []
+                for group_name, tickers in broker_groups.items():
+                    for ticker in tickers:
                         if ticker in available_tickers:
-                            if st.checkbox(get_display_ticker(ticker), key=f"sector_{ticker}", value=(ticker == selected_ticker)):
-                                selected_brokers.append(ticker)
+                            comparison_ordered_tickers.append(ticker)
 
-                with tier_cols[1]:
-                    st.markdown("**Mid Tier**")
-                    for ticker in broker_groups['Mid Tier']:
-                        if ticker in available_tickers:
-                            if st.checkbox(get_display_ticker(ticker), key=f"sector_{ticker}"):
-                                selected_brokers.append(ticker)
+                # Add any brokers not in groups at the end
+                ungrouped = [t for t in available_tickers if not any(t in group for group in broker_groups.values())]
+                comparison_ordered_tickers.extend(ungrouped)
 
-                with tier_cols[2]:
-                    st.markdown("**Regional**")
-                    for ticker in broker_groups['Regional']:
-                        if ticker in available_tickers:
-                            if st.checkbox(get_display_ticker(ticker), key=f"sector_{ticker}"):
-                                selected_brokers.append(ticker)
+                # Create display names mapping
+                ticker_display_map = {ticker: get_display_ticker(ticker) for ticker in comparison_ordered_tickers}
+
+                # Multiselect for brokers
+                selected_brokers = st.multiselect(
+                    "Choose brokers:",
+                    options=comparison_ordered_tickers,
+                    format_func=lambda x: ticker_display_map[x],
+                    default=[selected_ticker],
+                    help="Select one or more brokers to compare"
+                )
 
                 # Metric selection
                 st.markdown("---")
@@ -1109,66 +1106,41 @@ if selected_ticker and selected_quarter:
                     if comparison_data:
                         comparison_df = pd.DataFrame(comparison_data)
 
+                        # Transpose: Metrics as rows, Brokers as columns
+                        # Set Broker as index then transpose
+                        comparison_df_transposed = comparison_df.set_index('Broker').T
+
+                        # Reset index to have Metric as a column
+                        comparison_df_transposed = comparison_df_transposed.reset_index()
+                        comparison_df_transposed.rename(columns={'index': 'Metric'}, inplace=True)
+
                         # Display comparison table
                         st.markdown(f"### Comparison Table")
+                        st.markdown("*Rows: Metrics | Columns: Brokers*")
 
-                        # Format the display
-                        display_comparison = comparison_df.copy()
+                        # Format the display - metrics as rows, brokers as columns
+                        display_comparison = comparison_df_transposed.copy()
+
+                        # Format each broker column based on the metric
                         for col in display_comparison.columns:
-                            if col != 'Broker':
-                                if col in ['ROE', 'Margin Lending Rate', 'Brokerage Market Share', 'CIR', 'Interest Rate']:
-                                    # Percentage metrics
-                                    display_comparison[col] = display_comparison[col].apply(
-                                        lambda x: f"{x:.2f}%" if pd.notna(x) and x != 0 else "-"
-                                    )
-                                else:
-                                    # Value metrics (convert to billions)
-                                    display_comparison[col] = display_comparison[col].apply(
-                                        lambda x: f"{x/1_000_000_000:,.1f}" if pd.notna(x) and x != 0 else "-"
-                                    )
+                            if col != 'Metric':  # Skip the Metric column
+                                formatted_values = []
+                                for idx, row in display_comparison.iterrows():
+                                    metric_name = row['Metric']
+                                    value = row[col]
+
+                                    if pd.isna(value) or value == 0:
+                                        formatted_values.append("-")
+                                    elif metric_name in ['ROE', 'Margin Lending Rate', 'Brokerage Market Share', 'CIR', 'Interest Rate']:
+                                        # Percentage metrics
+                                        formatted_values.append(f"{value:.2f}%")
+                                    else:
+                                        # Value metrics (convert to billions)
+                                        formatted_values.append(f"{value/1_000_000_000:,.1f}")
+
+                                display_comparison[col] = formatted_values
 
                         st.dataframe(display_comparison, use_container_width=True, hide_index=True)
-
-                        # Create charts for each metric
-                        st.markdown("### Visual Comparison")
-
-                        import plotly.graph_objects as go
-
-                        # Create charts for each selected metric
-                        for metric_name in selected_metric_names:
-                            fig = go.Figure()
-
-                            # Prepare data
-                            brokers_list = comparison_df['Broker'].tolist()
-                            values_list = comparison_df[metric_name].tolist()
-
-                            # Determine if percentage or value metric
-                            is_percentage = metric_name in ['ROE', 'Margin Lending Rate', 'Brokerage Market Share', 'CIR', 'Interest Rate']
-
-                            if not is_percentage:
-                                # Convert to billions for value metrics
-                                values_list = [v/1_000_000_000 if v != 0 else 0 for v in values_list]
-
-                            fig.add_trace(go.Bar(
-                                x=brokers_list,
-                                y=values_list,
-                                name=metric_name,
-                                marker_color=primary_color
-                            ))
-
-                            # Update layout
-                            y_axis_title = f"{metric_name} (%)" if is_percentage else f"{metric_name} (B VND)"
-
-                            fig.update_layout(
-                                title=f"{metric_name} Comparison - {selected_quarter}",
-                                xaxis_title="Broker",
-                                yaxis_title=y_axis_title,
-                                height=400,
-                                showlegend=False,
-                                template="plotly_white"
-                            )
-
-                            st.plotly_chart(fig, use_container_width=True)
 
                     else:
                         st.warning("No data available for selected brokers")
