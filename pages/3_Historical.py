@@ -791,6 +791,10 @@ from utils.brokerage_data import get_available_tickers, get_ticker_quarters_list
 
 available_tickers = get_available_tickers()
 
+# Whitelist of tickers to display in UI (data ticker codes)
+# Note: TCBS maps to TCX, VPBS maps to VPX, VPS maps to VCK in display
+DISPLAY_TICKERS_WHITELIST = ['SSI', 'VCI', 'VND', 'HCM', 'TCBS', 'VPBS', 'VPS', 'MBS', 'VIX', 'SHS', 'BSI', 'DSE', 'FTS', 'VDS', 'ORS']
+
 # Broker groups for organized display
 broker_groups = {
     'Top Tier': ['SSI', 'VCI', 'VND', 'HCM', 'TCBS', 'VPBS', 'VPS'],
@@ -827,11 +831,11 @@ with col1:
     # Add brokers in tier order
     for group_name, tickers in broker_groups.items():
         for ticker in tickers:
-            if ticker in available_tickers:
+            if ticker in available_tickers and ticker in DISPLAY_TICKERS_WHITELIST:
                 ordered_tickers.append(ticker)
 
-    # Add any brokers not in groups at the end
-    ungrouped = [t for t in available_tickers if not any(t in group for group in broker_groups.values())]
+    # Add any brokers not in groups at the end (only if whitelisted)
+    ungrouped = [t for t in available_tickers if not any(t in group for group in broker_groups.values()) and t in DISPLAY_TICKERS_WHITELIST]
     ordered_tickers.extend(ungrouped)
 
     # Create display names
@@ -1005,11 +1009,11 @@ if selected_ticker and selected_quarter:
                     comparison_ordered_tickers = []
                     for group_name, tickers in broker_groups.items():
                         for ticker in tickers:
-                            if ticker in available_tickers:
+                            if ticker in available_tickers and ticker in DISPLAY_TICKERS_WHITELIST:
                                 comparison_ordered_tickers.append(ticker)
 
-                    # Add any brokers not in groups at the end
-                    ungrouped = [t for t in available_tickers if not any(t in group for group in broker_groups.values())]
+                    # Add any brokers not in groups at the end (only if whitelisted)
+                    ungrouped = [t for t in available_tickers if not any(t in group for group in broker_groups.values()) and t in DISPLAY_TICKERS_WHITELIST]
                     comparison_ordered_tickers.extend(ungrouped)
 
                     # Create display names mapping
