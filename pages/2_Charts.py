@@ -420,12 +420,10 @@ selected_brokers = st.sidebar.multiselect(
 )
 
 # Fixed default charts (always displayed)
-# Note: TOI structure chart is always shown, but TOI bar chart can be added optionally
-fixed_charts_structure = ['Total_Operating_Income_Structure']  # Placeholder for structure chart
-fixed_charts = ['PBT', 'ROE', 'MARGIN_LENDING_RATE', 'INTEREST_RATE', 'NET_BROKERAGE_FEE']
+# Note: TOI appears twice - once for structure chart (full-width), once for bar chart (with MA4)
+fixed_charts = ['Total_Operating_Income', 'PBT', 'ROE', 'MARGIN_LENDING_RATE', 'INTEREST_RATE', 'NET_BROKERAGE_FEE']
 
 # Additional metrics selection - NOW ALWAYS AVAILABLE
-# Include TOI as an option so users can add the bar chart version
 additional_metrics = st.sidebar.multiselect(
     "Add charts:",
     options=[m for m in allowed_metrics if m not in fixed_charts],
@@ -434,7 +432,8 @@ additional_metrics = st.sidebar.multiselect(
     key="chart_metrics"
 )
 
-# Combine: Always show TOI structure first, then fixed charts, then additional
+# Combine: Always show TOI structure first, then TOI bar chart + other fixed charts, then additional
+# By including TOI twice, we get both the structure chart and the bar chart
 selected_metrics = ['Total_Operating_Income'] + fixed_charts + additional_metrics
 
 # Year selection - default to 2023, 2024, 2025
