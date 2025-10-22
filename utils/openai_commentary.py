@@ -19,19 +19,25 @@ def get_openai_client():
     api_key = None
 
     try:
-        if "openai" in st.secrets and "api_key" in st.secrets["openai"]:
-            api_key = st.secrets["openai"]["api_key"]
-        elif "OPENAI_AI_key" in st.secrets:
-            api_key = st.secrets["OPENAI_AI_key"]
+        if "openai" in st.secrets and isinstance(st.secrets["openai"], dict):
+            for candidate in ("api_key", "API_KEY", "key"):
+                value = st.secrets["openai"].get(candidate)
+                if value:
+                    api_key = value
+                    break
+        if not api_key:
+            value = st.secrets.get("new_key")
+            if value:
+                api_key = value
     except Exception:  # noqa: BLE001
         api_key = None
 
     if not api_key:
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("new_key")
 
     if not api_key:
         raise ValueError(
-            "OpenAI API key not found. Please add it to Streamlit secrets under [openai] or set OPENAI_API_KEY."
+            "OpenAI API key not found. Please add it to Streamlit secrets (new_key) or set the new_key environment variable."
         )
 
     return openai.OpenAI(api_key=api_key)
