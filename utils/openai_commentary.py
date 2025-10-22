@@ -5,8 +5,6 @@ Uses Combined_Financial_Data.csv and broker-specific analysis.
 
 import os
 from datetime import datetime
-from typing import Iterable
-
 import openai
 import pandas as pd
 import streamlit as st
@@ -15,59 +13,23 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-def _normalize_container(container: object) -> dict[str, str]:
-    if isinstance(container, dict):
-        return container
-    try:
-        return dict(container)  # type: ignore[arg-type]
-    except Exception:  # noqa: BLE001
-        normalized: dict[str, str] = {}
-        try:
-            for key in container.keys():  # type: ignore[attr-defined]
-                normalized[key] = container[key]
-        except Exception:  # noqa: BLE001
-            pass
-        return normalized
-
-
-def _lookup_secret(container: object, candidates: Iterable[str]) -> str | None:
-    mapping = _normalize_container(container)
-    for candidate in candidates:
-        value = mapping.get(candidate)
-        if value:
-            return value
-    lowered = {key.lower(): key for key in mapping.keys()}
-    for candidate in candidates:
-        lowered_candidate = candidate.lower()
-        if lowered_candidate in lowered:
-            value = mapping[lowered[lowered_candidate]]
-            if value:
-                return value
-    return None
-
-
 def get_openai_client():
     """Initialize OpenAI client with API key from Streamlit secrets or environment."""
 
     api_key = None
 
     try:
-        if "openai" in st.secrets:
-            api_key = _lookup_secret(st.secrets["openai"], ("api_key", "API_KEY", "key", "new_key"))
-        if not api_key:
-            try:
-                api_key = st.secrets["new_key"]
-            except Exception:  # noqa: BLE001
-                api_key = _lookup_secret(st.secrets, ("new_key",))
+        if "openai" in st.secrets and "api_key" in st.secrets["openai"]:
+            api_key = st.secrets["openai"]["api_key"]
     except Exception:  # noqa: BLE001
         api_key = None
 
     if not api_key:
-        api_key = _lookup_secret(os.environ, ("new_key",))
+        api_key = os.getenv("OPENAI_API_KEY")
 
     if not api_key:
         raise ValueError(
-            "OpenAI API key not found. Please add it to Streamlit secrets (new_key) or set the new_key environment variable."
+            "OpenAI API key not found. Please add it under [openai].api_key in Streamlit secrets or set OPENAI_API_KEY."
         )
 
     return openai.OpenAI(api_key=api_key)
