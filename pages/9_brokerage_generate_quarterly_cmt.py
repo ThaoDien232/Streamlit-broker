@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import csv
 import re
 import textwrap
-from datetime import datetime
-from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
@@ -20,7 +17,6 @@ from utils.openai_commentary import get_openai_client
 st.set_page_config(page_title="Generate Quarterly Commentary", page_icon="🧾", layout="wide")
 
 
-CSV_CACHE_PATH = (Path(__file__).resolve().parent.parent / "sql" / "brokerage_quarterly_commentary.csv").resolve()
 DEFAULT_MODEL = "gpt-5"
 
 SYSTEM_MESSAGE = (
@@ -202,29 +198,6 @@ def build_prompt(quarter: str, rows: pd.DataFrame) -> tuple[str, int]:
     return prompt, bank_count
 
 
-def load_sector_commentary_cache() -> pd.DataFrame:
-    if not CSV_CACHE_PATH.exists():
-        return pd.DataFrame(columns=["QUARTER", "COMMENTARY", "PROMPT", "GENERATED_AT", "MODEL", "SOURCE"])
-
-    try:
-        df = pd.read_csv(CSV_CACHE_PATH, quoting=csv.QUOTE_ALL)
-    except pd.errors.EmptyDataError:
-        return pd.DataFrame(columns=["QUARTER", "COMMENTARY", "PROMPT", "GENERATED_AT", "MODEL", "SOURCE"])
-    except Exception:  # noqa: BLE001
-        df = pd.read_csv(CSV_CACHE_PATH)
-
-    for column in ["QUARTER", "COMMENTARY", "PROMPT", "GENERATED_AT", "MODEL", "SOURCE"]:
-        if column not in df.columns:
-            df[column] = ""
-
-    return df
-
-
-def save_sector_commentary_cache(df: pd.DataFrame) -> None:
-    CSV_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(CSV_CACHE_PATH, index=False, quoting=csv.QUOTE_ALL)
-
-
 def call_openai(prompt: str, model: str) -> str:
     client = get_openai_client()
 
@@ -303,43 +276,6 @@ def main() -> None:
     with st.expander("Prompt preview", expanded=False):
         st.code(prompt, language="markdown")
 
-    cache_df = load_sector_commentary_cache()
-    cached_entry = cache_df[cache_df["QUARTER"] == selected_quarter]
-
-    existing_commentary = None
-    existing_metadata = None
-
-    if not cached_entry.empty:
-        cached_entry = cached_entry.sort_values("GENERATED_AT")
-        latest_row = cached_entry.iloc[-1]
-        commentary_value = latest_row.get("COMMENTARY", "")
-        if isinstance(commentary_value, str):
-            existing_commentary = commentary_value.strip()
-        elif pd.notna(commentary_value):
-            existing_commentary = str(commentary_value)
-
-        generated_at = latest_row.get("GENERATED_AT", "")
-        model_name = latest_row.get("MODEL", "")
-        existing_metadata = f"Generated at: {generated_at}" if generated_at else None
-        if model_name:
-            existing_metadata = (existing_metadata or "Generated") + f" · Model: {model_name}"
-
-    if existing_commentary:
-        action = st.radio(
-            "A saved quarterly commentary exists. Choose an action:",
-            ("Fetch saved commentary", "Generate new commentary"),
-            index=0,
-        )
-    else:
-        action = "Generate new commentary"
-
-    if action == "Fetch saved commentary" and existing_commentary:
-        show_commentary_result("Saved Commentary", existing_commentary, existing_metadata)
-        st.session_state[RESULT_KEY] = existing_commentary
-        st.session_state[PROMPT_KEY] = prompt
-        st.session_state[META_KEY] = existing_metadata
-        return
-
     model = st.selectbox("OpenAI model", (DEFAULT_MODEL, "gpt-4", "gpt-4o", "gpt-4o-mini"))
 
     generate_button = st.button("Generate quarterly commentary", type="primary")
@@ -352,35 +288,12 @@ def main() -> None:
                 st.error(f"Failed to generate commentary: {exc}")
                 return
 
-        generated_timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        metadata = f"Generated at: {generated_timestamp} · Model: {model}"
+        metadata = f"Generated with model: {model}"
 
         st.session_state[RESULT_KEY] = commentary
         st.session_state[PROMPT_KEY] = prompt
         st.session_state[META_KEY] = metadata
-
-        cache_df = cache_df[cache_df["QUARTER"] != selected_quarter]
-        new_row = pd.DataFrame(
-            [
-                {
-                    "QUARTER": selected_quarter,
-                    "COMMENTARY": commentary,
-                    "PROMPT": prompt,
-                    "GENERATED_AT": generated_timestamp,
-                    "MODEL": model,
-                    "SOURCE": "openai",
-                }
-            ]
-        )
-        cache_df = pd.concat([cache_df, new_row], ignore_index=True)
-        save_sector_commentary_cache(cache_df)
-
-        try:
-            readable_path = CSV_CACHE_PATH.relative_to(Path.cwd())
-        except ValueError:
-            readable_path = CSV_CACHE_PATH
-
-        st.success(f"Quarterly commentary generated and saved to {readable_path}.")
+        st.success("Quarterly commentary generated.")
         show_commentary_result("Quarterly Commentary", commentary, metadata)
         with st.expander("Prompt used", expanded=False):
             st.code(prompt, language="markdown")
