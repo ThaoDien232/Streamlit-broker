@@ -19,10 +19,12 @@ def get_openai_client():
     api_key = None
 
     try:
-        if "openai" in st.secrets and "api_key" in st.secrets["openai"]:
-            api_key = st.secrets["openai"]["api_key"]
-        elif "OPENAI_API_KEY" in st.secrets:
-            api_key = st.secrets["OPENAI_API_KEY"]
+        secrets_dict = dict(st.secrets)
+        openai_section = secrets_dict.get("openai")
+        if isinstance(openai_section, dict) and openai_section.get("api_key"):
+            api_key = openai_section["api_key"]
+        elif secrets_dict.get("OPENAI_API_KEY"):
+            api_key = secrets_dict["OPENAI_API_KEY"]
     except Exception:  # noqa: BLE001
         api_key = None
 
@@ -507,7 +509,7 @@ Use one decimal place for percentages (e.g., 15.7%). Keep layout clean and consi
                 {"role": "system", "content": "You are an expert financial analyst specializing in Vietnamese securities and brokerage firms. You MUST follow the exact structure provided in the prompt. Do not deviate from the requested format."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=800,
+            max_completion_tokens=2000,
             temperature=0.5
         )
 

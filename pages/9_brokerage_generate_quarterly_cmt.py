@@ -233,7 +233,7 @@ def call_openai(prompt: str, model: str) -> str:
             {"role": "user", "content": prompt},
         ],
         temperature=0.4,
-        max_tokens=1200,
+        max_completion_tokens=2000,
     )
 
     return response.choices[0].message.content
