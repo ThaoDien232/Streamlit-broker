@@ -226,6 +226,10 @@ def _extract_message_content(message) -> str:
     if isinstance(text_attr, str):
         return text_attr.strip()
 
+    refusal = getattr(message, "refusal", None)
+    if isinstance(refusal, str) and refusal.strip():
+        return refusal.strip()
+
     return ""
 
 
@@ -239,11 +243,37 @@ def call_openai(prompt: str, model: str) -> str:
             {"role": "user", "content": prompt},
         ],
         temperature=1,
-        max_completion_tokens=2000,
+        max_completion_tokens=3000,
     )
 
-    message = response.choices[0].message
+    message = getattr(response.choices[0], "message", None)
     content = _extract_message_content(message)
+
+    if not content:
+        try:
+            response_dict = response.model_dump()
+        except Exception:  # noqa: BLE001
+            response_dict = None
+
+        if response_dict:
+            choices = response_dict.get("choices") or []
+            if choices:
+                message_dict = choices[0].get("message") or {}
+                content = message_dict.get("content") or ""
+                if isinstance(content, list):
+                    pieces = []
+                    for item in content:
+                        if isinstance(item, str):
+                            pieces.append(item)
+                        elif isinstance(item, dict):
+                            text_val = item.get("text") or item.get("content")
+                            if isinstance(text_val, str):
+                                pieces.append(text_val)
+                    content = "\n".join(pieces)
+                elif not isinstance(content, str):
+                    content = str(content)
+
+        content = (content or "").strip()
 
     if not content:
         raise ValueError("OpenAI returned an empty commentary for the generated prompt.")
