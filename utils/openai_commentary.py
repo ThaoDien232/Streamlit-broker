@@ -509,7 +509,7 @@ Use one decimal place for percentages (e.g., 15.7%). Keep layout clean and consi
                 {"role": "system", "content": "You are an expert financial analyst specializing in Vietnamese securities and brokerage firms. You MUST follow the exact structure provided in the prompt. Do not deviate from the requested format."},
                 {"role": "user", "content": prompt}
             ],
-            max_output_tokens=3000,
+            max_tokens=3000,
             temperature=1
         )
 
