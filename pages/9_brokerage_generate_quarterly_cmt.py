@@ -21,7 +21,7 @@ st.set_page_config(page_title="Generate Quarterly Commentary", page_icon="🧾",
 
 
 CSV_CACHE_PATH = Path("sql/brokerage_quarterly_commentary.csv")
-DEFAULT_MODEL = "gpt-4"
+DEFAULT_MODEL = "gpt-5"
 
 SYSTEM_MESSAGE = (
     "You are an expert financial analyst covering Vietnamese brokerage firms. "
@@ -331,7 +331,7 @@ def main() -> None:
         st.session_state[PROMPT_KEY] = prompt
         return
 
-    model = st.selectbox("OpenAI model", (DEFAULT_MODEL, "gpt-4o", "gpt-4o-mini"))
+    model = st.selectbox("OpenAI model", (DEFAULT_MODEL, "gpt-4", "gpt-4o", "gpt-4o-mini"))
 
     generate_button = st.button("Generate quarterly commentary", type="primary")
 
