@@ -21,6 +21,8 @@ def get_openai_client():
     try:
         if "openai" in st.secrets and "api_key" in st.secrets["openai"]:
             api_key = st.secrets["openai"]["api_key"]
+        elif "OPENAI_API_KEY" in st.secrets:
+            api_key = st.secrets["OPENAI_API_KEY"]
     except Exception:  # noqa: BLE001
         api_key = None
 
