@@ -241,6 +241,7 @@ def call_openai(prompt: str, model: str) -> str:
 
 RESULT_KEY = "quarterly_sector_commentary"
 PROMPT_KEY = "quarterly_sector_prompt"
+META_KEY = "quarterly_sector_metadata"
 QUARTER_KEY = "quarterly_sector_selected_quarter"
 
 
@@ -329,6 +330,7 @@ def main() -> None:
         show_commentary_result("Saved Commentary", existing_commentary, existing_metadata)
         st.session_state[RESULT_KEY] = existing_commentary
         st.session_state[PROMPT_KEY] = prompt
+        st.session_state[META_KEY] = existing_metadata
         return
 
     model = st.selectbox("OpenAI model", (DEFAULT_MODEL, "gpt-4", "gpt-4o", "gpt-4o-mini"))
@@ -343,8 +345,12 @@ def main() -> None:
                 st.error(f"Failed to generate commentary: {exc}")
                 return
 
+        generated_timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        metadata = f"Generated at: {generated_timestamp} · Model: {model}"
+
         st.session_state[RESULT_KEY] = commentary
         st.session_state[PROMPT_KEY] = prompt
+        st.session_state[META_KEY] = metadata
 
         cache_df = cache_df[cache_df["QUARTER"] != selected_quarter]
         new_row = pd.DataFrame(
@@ -353,7 +359,7 @@ def main() -> None:
                     "QUARTER": selected_quarter,
                     "COMMENTARY": commentary,
                     "PROMPT": prompt,
-                    "GENERATED_AT": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                    "GENERATED_AT": generated_timestamp,
                     "MODEL": model,
                     "SOURCE": "openai",
                 }
@@ -363,17 +369,20 @@ def main() -> None:
         save_sector_commentary_cache(cache_df)
 
         st.success("Quarterly commentary generated and saved to sql/brokerage_quarterly_commentary.csv.")
+        show_commentary_result("Quarterly Commentary", commentary, metadata)
+        with st.expander("Prompt used", expanded=False):
+            st.code(prompt, language="markdown")
+        return
 
     generated_commentary = st.session_state.get(RESULT_KEY)
     if generated_commentary:
-        metadata = "Generated just now"
+        metadata = st.session_state.get(META_KEY, "Generated just now")
         saved_prompt = st.session_state.get(PROMPT_KEY)
-        if existing_commentary and generated_commentary == existing_commentary and existing_metadata:
-            metadata = existing_metadata
         show_commentary_result("Quarterly Commentary", generated_commentary, metadata)
 
-        with st.expander("Prompt used", expanded=False):
-            st.code(saved_prompt, language="markdown")
+        if saved_prompt:
+            with st.expander("Prompt used", expanded=False):
+                st.code(saved_prompt, language="markdown")
 
 
 if __name__ == "__main__":
