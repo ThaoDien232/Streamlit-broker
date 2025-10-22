@@ -210,8 +210,14 @@ def call_openai(prompt: str, model: str) -> str:
         temperature=1,
         max_completion_tokens=2000,
     )
+    message = response.choices[0].message
+    content = getattr(message, "content", None) or ""
+    content = str(content).strip()
 
-    return response.choices[0].message.content
+    if not content:
+        raise ValueError("OpenAI returned an empty commentary for the generated prompt.")
+
+    return content
 
 
 RESULT_KEY = "quarterly_sector_commentary"
@@ -287,6 +293,10 @@ def main() -> None:
             except Exception as exc:  # noqa: BLE001
                 st.error(f"Failed to generate commentary: {exc}")
                 return
+        commentary = commentary.strip()
+        if not commentary:
+            st.warning("Generation completed but produced no content. Please try again or adjust the prompt.")
+            return
 
         metadata = f"Generated with model: {model}"
 
