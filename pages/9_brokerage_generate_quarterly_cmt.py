@@ -208,6 +208,8 @@ def load_sector_commentary_cache() -> pd.DataFrame:
 
     try:
         df = pd.read_csv(CSV_CACHE_PATH, quoting=csv.QUOTE_ALL)
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame(columns=["QUARTER", "COMMENTARY", "PROMPT", "GENERATED_AT", "MODEL", "SOURCE"])
     except Exception:  # noqa: BLE001
         df = pd.read_csv(CSV_CACHE_PATH)
 
