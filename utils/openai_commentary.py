@@ -4,14 +4,30 @@ Uses Combined_Financial_Data.csv and broker-specific analysis.
 """
 
 import os
+from datetime import datetime
+from typing import Iterable
+
+import openai
 import pandas as pd
 import streamlit as st
-from datetime import datetime
 from dotenv import load_dotenv
-import openai
 
 # Load environment variables
 load_dotenv()
+
+def _lookup_secret(container: dict, candidates: Iterable[str]) -> str | None:
+    for candidate in candidates:
+        if candidate in container and container[candidate]:
+            return container[candidate]
+    lowered = {key.lower(): key for key in container.keys()}
+    for candidate in candidates:
+        lowered_candidate = candidate.lower()
+        if lowered_candidate in lowered:
+            value = container[lowered[lowered_candidate]]
+            if value:
+                return value
+    return None
+
 
 def get_openai_client():
     """Initialize OpenAI client with API key from Streamlit secrets or environment."""
@@ -20,20 +36,14 @@ def get_openai_client():
 
     try:
         if "openai" in st.secrets and isinstance(st.secrets["openai"], dict):
-            for candidate in ("api_key", "API_KEY", "key"):
-                value = st.secrets["openai"].get(candidate)
-                if value:
-                    api_key = value
-                    break
+            api_key = _lookup_secret(st.secrets["openai"], ("api_key", "API_KEY", "key", "new_key"))
         if not api_key:
-            value = st.secrets.get("new_key")
-            if value:
-                api_key = value
+            api_key = _lookup_secret(st.secrets, ("new_key",))
     except Exception:  # noqa: BLE001
         api_key = None
 
     if not api_key:
-        api_key = os.getenv("new_key")
+        api_key = _lookup_secret(os.environ, ("new_key",))
 
     if not api_key:
         raise ValueError(
