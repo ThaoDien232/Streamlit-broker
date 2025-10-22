@@ -232,7 +232,7 @@ def call_openai(prompt: str, model: str) -> str:
             {"role": "system", "content": SYSTEM_MESSAGE},
             {"role": "user", "content": prompt},
         ],
-        temperature=0.4,
+        temperature=1,
         max_completion_tokens=2000,
     )
 

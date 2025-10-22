@@ -510,7 +510,7 @@ Use one decimal place for percentages (e.g., 15.7%). Keep layout clean and consi
                 {"role": "user", "content": prompt}
             ],
             max_completion_tokens=2000,
-            temperature=0.5
+            temperature=1
         )
 
         commentary = response.choices[0].message.content
