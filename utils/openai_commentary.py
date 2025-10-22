@@ -55,7 +55,10 @@ def get_openai_client():
         if "openai" in st.secrets:
             api_key = _lookup_secret(st.secrets["openai"], ("api_key", "API_KEY", "key", "new_key"))
         if not api_key:
-            api_key = _lookup_secret(st.secrets, ("new_key",))
+            try:
+                api_key = st.secrets["new_key"]
+            except Exception:  # noqa: BLE001
+                api_key = _lookup_secret(st.secrets, ("new_key",))
     except Exception:  # noqa: BLE001
         api_key = None
 
