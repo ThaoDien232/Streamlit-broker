@@ -243,7 +243,6 @@ def call_openai(prompt: str, model: str) -> str:
             {"role": "user", "content": prompt},
         ],
         temperature=1,
-        max_tokens=3000,
     )
 
     try:
