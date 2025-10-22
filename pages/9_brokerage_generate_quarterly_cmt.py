@@ -198,6 +198,37 @@ def build_prompt(quarter: str, rows: pd.DataFrame) -> tuple[str, int]:
     return prompt, bank_count
 
 
+def _extract_message_content(message) -> str:
+    if message is None:
+        return ""
+
+    content = getattr(message, "content", None)
+
+    if isinstance(content, str):
+        return content.strip()
+
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text_value = item.get("text") or item.get("content")
+                if isinstance(text_value, str):
+                    parts.append(text_value)
+            else:
+                text_value = getattr(item, "text", None)
+                if isinstance(text_value, str):
+                    parts.append(text_value)
+        return "\n".join(part for part in parts if part).strip()
+
+    text_attr = getattr(message, "text", None)
+    if isinstance(text_attr, str):
+        return text_attr.strip()
+
+    return ""
+
+
 def call_openai(prompt: str, model: str) -> str:
     client = get_openai_client()
 
@@ -210,9 +241,9 @@ def call_openai(prompt: str, model: str) -> str:
         temperature=1,
         max_completion_tokens=2000,
     )
+
     message = response.choices[0].message
-    content = getattr(message, "content", None) or ""
-    content = str(content).strip()
+    content = _extract_message_content(message)
 
     if not content:
         raise ValueError("OpenAI returned an empty commentary for the generated prompt.")
