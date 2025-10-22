@@ -246,6 +246,11 @@ def call_openai(prompt: str, model: str) -> str:
         max_completion_tokens=3000,
     )
 
+    try:
+        st.session_state["quarterly_sector_last_response"] = response.model_dump()
+    except Exception:  # noqa: BLE001
+        st.session_state["quarterly_sector_last_response"] = str(response)
+
     message = getattr(response.choices[0], "message", None)
     content = _extract_message_content(message)
 
@@ -276,7 +281,7 @@ def call_openai(prompt: str, model: str) -> str:
         content = (content or "").strip()
 
     if not content:
-        raise ValueError("OpenAI returned an empty commentary for the generated prompt.")
+        raise ValueError("OpenAI returned an empty commentary for the generated prompt. See 'Raw OpenAI response' below for details.")
 
     return content
 
@@ -353,6 +358,13 @@ def main() -> None:
                 commentary = call_openai(prompt, model)
             except Exception as exc:  # noqa: BLE001
                 st.error(f"Failed to generate commentary: {exc}")
+                raw_response = st.session_state.get("quarterly_sector_last_response")
+                if raw_response:
+                    with st.expander("Raw OpenAI response", expanded=False):
+                        if isinstance(raw_response, dict):
+                            st.json(raw_response)
+                        else:
+                            st.write(raw_response)
                 return
         commentary = commentary.strip()
         if not commentary:
@@ -379,6 +391,14 @@ def main() -> None:
         if saved_prompt:
             with st.expander("Prompt used", expanded=False):
                 st.code(saved_prompt, language="markdown")
+
+        raw_response = st.session_state.get("quarterly_sector_last_response")
+        if raw_response:
+            with st.expander("Raw OpenAI response", expanded=False):
+                if isinstance(raw_response, dict):
+                    st.json(raw_response)
+                else:
+                    st.write(raw_response)
 
 
 if __name__ == "__main__":
