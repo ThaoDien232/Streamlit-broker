@@ -20,7 +20,7 @@ from utils.openai_commentary import get_openai_client
 st.set_page_config(page_title="Generate Quarterly Commentary", page_icon="🧾", layout="wide")
 
 
-CSV_CACHE_PATH = Path("sql/brokerage_quarterly_commentary.csv")
+CSV_CACHE_PATH = (Path(__file__).resolve().parent.parent / "sql" / "brokerage_quarterly_commentary.csv").resolve()
 DEFAULT_MODEL = "gpt-5"
 
 SYSTEM_MESSAGE = (
@@ -310,12 +310,17 @@ def main() -> None:
     if not cached_entry.empty:
         cached_entry = cached_entry.sort_values("GENERATED_AT")
         latest_row = cached_entry.iloc[-1]
-        existing_commentary = str(latest_row.get("COMMENTARY", "")).strip()
+        commentary_value = latest_row.get("COMMENTARY", "")
+        if isinstance(commentary_value, str):
+            existing_commentary = commentary_value.strip()
+        elif pd.notna(commentary_value):
+            existing_commentary = str(commentary_value)
+
         generated_at = latest_row.get("GENERATED_AT", "")
         model_name = latest_row.get("MODEL", "")
-        existing_metadata = "Generated at: " + generated_at
+        existing_metadata = f"Generated at: {generated_at}" if generated_at else None
         if model_name:
-            existing_metadata += f" · Model: {model_name}"
+            existing_metadata = (existing_metadata or "Generated") + f" · Model: {model_name}"
 
     if existing_commentary:
         action = st.radio(
@@ -368,7 +373,12 @@ def main() -> None:
         cache_df = pd.concat([cache_df, new_row], ignore_index=True)
         save_sector_commentary_cache(cache_df)
 
-        st.success("Quarterly commentary generated and saved to sql/brokerage_quarterly_commentary.csv.")
+        try:
+            readable_path = CSV_CACHE_PATH.relative_to(Path.cwd())
+        except ValueError:
+            readable_path = CSV_CACHE_PATH
+
+        st.success(f"Quarterly commentary generated and saved to {readable_path}.")
         show_commentary_result("Quarterly Commentary", commentary, metadata)
         with st.expander("Prompt used", expanded=False):
             st.code(prompt, language="markdown")
