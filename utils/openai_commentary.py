@@ -15,15 +15,32 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-def _lookup_secret(container: dict, candidates: Iterable[str]) -> str | None:
+def _normalize_container(container: object) -> dict[str, str]:
+    if isinstance(container, dict):
+        return container
+    try:
+        return dict(container)  # type: ignore[arg-type]
+    except Exception:  # noqa: BLE001
+        normalized: dict[str, str] = {}
+        try:
+            for key in container.keys():  # type: ignore[attr-defined]
+                normalized[key] = container[key]
+        except Exception:  # noqa: BLE001
+            pass
+        return normalized
+
+
+def _lookup_secret(container: object, candidates: Iterable[str]) -> str | None:
+    mapping = _normalize_container(container)
     for candidate in candidates:
-        if candidate in container and container[candidate]:
-            return container[candidate]
-    lowered = {key.lower(): key for key in container.keys()}
+        value = mapping.get(candidate)
+        if value:
+            return value
+    lowered = {key.lower(): key for key in mapping.keys()}
     for candidate in candidates:
         lowered_candidate = candidate.lower()
         if lowered_candidate in lowered:
-            value = container[lowered[lowered_candidate]]
+            value = mapping[lowered[lowered_candidate]]
             if value:
                 return value
     return None
@@ -35,7 +52,7 @@ def get_openai_client():
     api_key = None
 
     try:
-        if "openai" in st.secrets and isinstance(st.secrets["openai"], dict):
+        if "openai" in st.secrets:
             api_key = _lookup_secret(st.secrets["openai"], ("api_key", "API_KEY", "key", "new_key"))
         if not api_key:
             api_key = _lookup_secret(st.secrets, ("new_key",))
