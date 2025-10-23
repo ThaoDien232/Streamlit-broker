@@ -77,6 +77,12 @@ if df.empty:
     st.info("🔍 **Check**: Database connection in streamlit secrets and broker ticker availability in Market_Data table")
     st.stop()
 
+# Whitelist of tickers to display (same as Charts and Historical pages)
+DISPLAY_TICKERS_WHITELIST = ['SSI', 'VCI', 'VND', 'HCM', 'TCBS', 'VPBS', 'VPS', 'MBS', 'VIX', 'SHS', 'BSI', 'DSE', 'FTS', 'VDS', 'ORS']
+
+# Filter to only show whitelisted brokers (keep aggregates for sector analysis)
+df = df[df['TICKER'].isin(DISPLAY_TICKERS_WHITELIST + ['All_Brokers', 'Listed', 'Unlisted', 'Sector'])]
+
 # Build sector aggregates
 df = create_sector_aggregates(df)
 
