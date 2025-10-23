@@ -418,6 +418,10 @@ def display_prop_book_table():
     brokers = sorted(df_book['Broker'].unique())
     quarters = sort_quarters_by_date(df_book['Quarter'].unique())
 
+    # Initialize session state for selected broker
+    if 'selected_broker' not in st.session_state:
+        st.session_state.selected_broker = brokers[0] if brokers else None
+
     # --- Disclaimers dictionary ---
     disclaimers = {
         "VIX": "Calculated profit/loss may not be correct from lack of latest holding",
@@ -425,12 +429,21 @@ def display_prop_book_table():
         "HCM": "This is not HCM's prop book, not disclosed"
     }
 
+    # Get current index based on session state
+    current_index = 0
+    if st.session_state.selected_broker and st.session_state.selected_broker in brokers:
+        current_index = brokers.index(st.session_state.selected_broker)
 
     selected_brokers = st.selectbox(
         "Select Brokers:",
         options=brokers,
-        index=0
+        index=current_index,
+        key="broker_selectbox"
     )
+
+    # Update session state when selection changes
+    if selected_brokers != st.session_state.selected_broker:
+        st.session_state.selected_broker = selected_brokers
 
     if selected_brokers in disclaimers:
         st.warning(disclaimers[selected_brokers])
