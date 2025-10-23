@@ -209,6 +209,8 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
         'Total Operating Income',
         'SG&A',
         'CIR',
+        'Interest Expense',
+        'Interest Rate',
         'PBT',
         'NPAT',
         'ROE'
@@ -224,8 +226,6 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
         'Total Investments',
         'Total Assets',
         'Total Debt',
-        'Interest Expense',
-        'Interest Rate',
         'Total Equity',
         'Margin/Equity %'
     ]
@@ -346,6 +346,12 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                     income_quarter_values.append(0)
                 continue
 
+            if metric_name == 'Interest Rate':
+                # Get Interest Rate directly from database using INTEREST_RATE keycode
+                interest_rate = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'INTEREST_RATE')
+                income_quarter_values.append(interest_rate)
+                continue
+
             # Standard metric code mapping for Income Statement
             metric_code = {
                 'Net Brokerage Income': 'Net_Brokerage_Income',
@@ -357,6 +363,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 'PBT': 'PBT',
                 'NPAT': 'NPAT',
                 'SG&A': 'SG_A',
+                'Interest Expense': 'Interest_Expense',
                 'Margin Lending Rate': 'MARGIN_LENDING_RATE',
                 'Margin Lending Spread': 'MARGIN_LENDING_SPREAD',
                 'ROE': 'ROE'
@@ -404,12 +411,6 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                     balance_quarter_values.append(0)
                 continue
 
-            if metric_name == 'Interest Rate':
-                # Get Interest Rate directly from database using INTEREST_RATE keycode
-                interest_rate = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'INTEREST_RATE')
-                balance_quarter_values.append(interest_rate)
-                continue
-
             # Standard metric code mapping for Balance Sheet
             metric_code = {
                 'Margin Balance': 'Margin_Lending_book',
@@ -417,8 +418,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 'Non-MTM Equities': 'not_mtm_equities_market_value',
                 'Bonds': 'bonds_market_value',
                 'CDs/Deposits': 'cds_deposits_market_value',
-                'Total Debt': 'Total_Debt_Balance',
-                'Interest Expense': 'Interest_Expense'
+                'Total Debt': 'Total_Debt_Balance'
             }.get(metric_name)
 
             if metric_code:
