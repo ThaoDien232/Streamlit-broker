@@ -198,29 +198,29 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
     income_statement_metrics = [
         'Net Brokerage Income',
         'Market Liquidity (Avg Daily)',
-        '  Brokerage Market Share',  # Indented
-        '  Net Brokerage Fee',  # Indented
+        'Brokerage Market Share',
+        'Net Brokerage Fee',
         'IB Income',
         'Margin Income',
-        '  Margin Lending Rate',  # Indented
-        '  Margin Lending Spread',  # Indented
+        'Margin Lending Rate',
+        'Margin Lending Spread',
         'Investment Income',
         'Other Incomes',
         'Total Operating Income',
         'SG&A',
-        '  CIR',  # Indented
+        'CIR',
         'PBT',
         'NPAT',
-        '  ROE'  # Indented
+        'ROE'
     ]
 
     # Balance Sheet metrics - organized as Assets, then Liabilities & Equity
     balance_sheet_metrics = [
         'Margin Balance',
-        '  MTM Equities',  # Indented
-        '  Non-MTM Equities',  # Indented
-        '  Bonds',  # Indented
-        '  CDs/Deposits',  # Indented
+        'MTM Equities',
+        'Non-MTM Equities',
+        'Bonds',
+        'CDs/Deposits',
         'Total Investments',
         'Total Assets',
         'Borrowing Balance',
@@ -261,10 +261,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
 
         # Process Income Statement metrics
         for metric_name in income_statement_metrics:
-            # Strip whitespace for lookups (handle indented names)
-            metric_name_stripped = metric_name.strip()
-
-            if metric_name_stripped == 'Market Liquidity (Avg Daily)':
+            if metric_name == 'Market Liquidity (Avg Daily)':
                 # Get market liquidity for this quarter
                 if not market_liquidity_df.empty:
                     liquidity_row = market_liquidity_df[
@@ -279,7 +276,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                     income_quarter_values.append(0)
                 continue
 
-            if metric_name_stripped == 'CIR':
+            if metric_name == 'CIR':
                 # Calculate CIR = SG&A / (Total Operating Income - Investment Income)
                 sga = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'SG_A')
                 total_op_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Total_Operating_Income')
@@ -293,7 +290,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                     income_quarter_values.append(0)
                 continue
 
-            if metric_name_stripped == 'Brokerage Market Share':
+            if metric_name == 'Brokerage Market Share':
                 # First, try to get market share from HSX API (for Top 10 brokers)
                 # Reconstruct quarter_label from year and quarter_num (e.g., "1Q24")
                 quarter_label = f"{quarter_num}Q{str(year)[-2:]}"
@@ -334,7 +331,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                         income_quarter_values.append(0)
                 continue
 
-            if metric_name_stripped == 'Net Brokerage Fee':
+            if metric_name == 'Net Brokerage Fee':
                 # Calculate Net Brokerage Fee = Net Brokerage Income / Trading Value (in basis points)
                 net_brokerage_income = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Net_Brokerage_Income')
                 institution_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
@@ -363,7 +360,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 'Margin Lending Rate': 'MARGIN_LENDING_RATE',
                 'Margin Lending Spread': 'MARGIN_LENDING_SPREAD',
                 'ROE': 'ROE'
-            }.get(metric_name_stripped)
+            }.get(metric_name)
 
             if metric_code:
                 value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, metric_code)
@@ -371,16 +368,13 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
 
         # Process Balance Sheet metrics
         for metric_name in balance_sheet_metrics:
-            # Strip whitespace for lookups (handle indented names)
-            metric_name_stripped = metric_name.strip()
-
-            if metric_name_stripped == 'Total Investments':
+            if metric_name == 'Total Investments':
                 # Calculate Total Investments = sum of investment book items
                 total_investments = mtm_equities_value + non_mtm_equities_value + bonds_value + cds_deposits_value
                 balance_quarter_values.append(total_investments)
                 continue
 
-            if metric_name_stripped == 'Total Assets':
+            if metric_name == 'Total Assets':
                 # Calculate Total Assets = Margin Balance + MTM Equities + Non-MTM Equities + Bonds + CDs/Deposits
                 # Fetch margin balance if not already fetched
                 if margin_balance_value is None:
@@ -390,13 +384,13 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 balance_quarter_values.append(total_assets)
                 continue
 
-            if metric_name_stripped == 'Total Equity':
+            if metric_name == 'Total Equity':
                 # Get Total Equity using 'BS.142'
                 total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'BS.142')
                 balance_quarter_values.append(total_equity_value)
                 continue
 
-            if metric_name_stripped == 'Margin/Equity %':
+            if metric_name == 'Margin/Equity %':
                 # Calculate margin/equity ratio
                 if margin_balance_value is None:
                     margin_balance_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Margin_Lending_book')
@@ -410,7 +404,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                     balance_quarter_values.append(0)
                 continue
 
-            if metric_name_stripped == 'Interest Rate':
+            if metric_name == 'Interest Rate':
                 # Calculate Interest Rate = Interest Expense / Average Borrowing Balance * 100
                 # For quarterly data, annualize by multiplying by 4
                 interest_expense = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Interest_Expense')
@@ -454,22 +448,22 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 'CDs/Deposits': 'cds_deposits_market_value',
                 'Borrowing Balance': 'Borrowing_Balance',
                 'Interest Expense': 'Interest_Expense'
-            }.get(metric_name_stripped)
+            }.get(metric_name)
 
             if metric_code:
                 value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, metric_code)
                 balance_quarter_values.append(value)
 
                 # Store asset components for Total Assets calculation
-                if metric_name_stripped == 'Margin Balance':
+                if metric_name == 'Margin Balance':
                     margin_balance_value = value
-                elif metric_name_stripped == 'MTM Equities':
+                elif metric_name == 'MTM Equities':
                     mtm_equities_value = value
-                elif metric_name_stripped == 'Non-MTM Equities':
+                elif metric_name == 'Non-MTM Equities':
                     non_mtm_equities_value = value
-                elif metric_name_stripped == 'Bonds':
+                elif metric_name == 'Bonds':
                     bonds_value = value
-                elif metric_name_stripped == 'CDs/Deposits':
+                elif metric_name == 'CDs/Deposits':
                     cds_deposits_value = value
 
         # Add this quarter's columns to both tables
