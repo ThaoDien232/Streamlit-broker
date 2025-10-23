@@ -209,10 +209,10 @@ def calculate_profit_loss(df, quarter_prices, current_prices, quarter):
         0 if row['Quarter_End_Market_Value'] == 0 else (row['Profit_Loss'] / row['Quarter_End_Market_Value'] * 100), axis=1).round(1)
     return df_calc
     
-def formatted_table(df, selected_quarters=None, key_suffix="", show_selectbox=True):
+def formatted_table(df, selected_quarters=None, key_suffix="", show_selectbox=True, fetch_prices=False):
     if df.empty:
         return pd.DataFrame()
-    
+
     # Numeric columns selection
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
     import hashlib, time
@@ -221,78 +221,70 @@ def formatted_table(df, selected_quarters=None, key_suffix="", show_selectbox=Tr
     broker_info = df['Broker'].iloc[0] if 'Broker' in df.columns and not df.empty else 'unknown'
     unique_str = f"{df_cols_str}-{quarters_str}-{broker_info}-{key_suffix}-{time.time()}"
     selectbox_key = f"value_col_{hashlib.md5(unique_str.encode()).hexdigest()}"
-    
+
     # For download operations, skip the selectbox and use the first numeric column
     if not show_selectbox:
         value_col = numeric_cols[0] if numeric_cols else None
     else:
         value_col = numeric_cols[0] if len(numeric_cols) == 1 else st.selectbox("Select value column:", numeric_cols, key=selectbox_key)
 
-    # Only show rows where the selected value column is present and the other is not
-    other_col = None
-    if value_col == 'FVTPL value' and 'AFS value' in df.columns:
-        other_col = 'AFS value'
-    elif value_col == 'AFS value' and 'FVTPL value' in df.columns:
-        other_col = 'FVTPL value'
-    if other_col:
-        df = df[(df[other_col].isnull() | (df[other_col] == 0))]
-    
+    # Filter rows to only show data for the selected value column
+    # Keep rows that have non-zero values in the selected column
+    if value_col:
+        df = df[(df[value_col].notnull()) & (df[value_col] != 0)]
+
     if selected_quarters is None:
         all_quarters = sort_quarters_by_date(df['Quarter'].unique())
     else:
         all_quarters = sort_quarters_by_date(selected_quarters)
-    
+
     # Filter out 'PBT' for pivot table calculation
     df_no_pbt = df[df['Ticker'] != 'PBT']
-    
+
     # Group and aggregate the data
     group_cols = ['Ticker', 'Quarter']
     df_no_pbt = df_no_pbt.groupby(group_cols, as_index=False).sum()
-    
+
     # Create pivot table
     pivot_table = df_no_pbt.pivot(
         index='Ticker',
         columns='Quarter',
         values=value_col
     ).fillna(0)
-    
+
     pivot_table = pivot_table.reindex(columns=all_quarters, fill_value=0)
 
-    # Calculate Profit/Loss for each ticker
-    tickers = [t for t in pivot_table.index if t.upper() not in ['OTHERS', 'PBT']]
+    # Calculate Profit/Loss for each ticker - ONLY if fetch_prices is True
     profit_dict, pct_dict = {}, {}
-    
-    # Determine if all tickers have zero for the latest quarter
-    latest_quarter = all_quarters[-1]
-    all_latest_zero = all(pivot_table.at[t, latest_quarter] == 0 for t in tickers)
-    for t in tickers:
-        # Find the latest quarter with a nonzero value for this ticker
-        nonzero_quarters = [q for q in all_quarters if pivot_table.at[t, q] != 0]
-        if not nonzero_quarters:
-            profit_dict[t] = ''
-            pct_dict[t] = ''
-            continue
-        # If all tickers have zero for the latest quarter, revert to previous quarter for all
-        if all_latest_zero:
-            q = nonzero_quarters[-1]
-            q_price = get_quarter_end_prices([t], q)[t]
-            c_price = get_current_prices([t])[t]
-            val = pivot_table.at[t, q]
-            if q_price and c_price and q_price != 0 and val != 0:
-                vol = val / q_price
-                p_start = vol * q_price
-                p_now = vol * c_price
-                profit = p_now - p_start
-                pct = 0 if p_start == 0 else (profit / p_start * 100)
-                profit_dict[t] = profit
-                pct_dict[t] = pct
-            else:
+
+    if fetch_prices:
+        # Calculate Profit/Loss for each ticker
+        tickers = [t for t in pivot_table.index if t.upper() not in ['OTHERS', 'PBT']]
+
+        # Determine if all tickers have zero for the latest quarter
+        latest_quarter = all_quarters[-1]
+        all_latest_zero = all(pivot_table.at[t, latest_quarter] == 0 for t in tickers)
+
+        # Only get tickers that are in the latest quarter with nonzero values
+        if all_latest_zero and len(all_quarters) > 1:
+            # Use previous quarter if latest is all zeros
+            target_quarter = all_quarters[-2]
+            tickers_to_fetch = [t for t in tickers if pivot_table.at[t, target_quarter] != 0]
+        else:
+            target_quarter = latest_quarter
+            tickers_to_fetch = [t for t in tickers if pivot_table.at[t, latest_quarter] != 0]
+
+        # Only fetch prices for tickers that need calculation
+        for t in tickers_to_fetch:
+            # Find the latest quarter with a nonzero value for this ticker
+            nonzero_quarters = [q for q in all_quarters if pivot_table.at[t, q] != 0]
+            if not nonzero_quarters:
                 profit_dict[t] = ''
                 pct_dict[t] = ''
-        else:
-            # Only calculate for tickers with nonzero value in the latest quarter
-            if pivot_table.at[t, latest_quarter] != 0:
-                q = latest_quarter
+                continue
+            # If all tickers have zero for the latest quarter, revert to previous quarter for all
+            if all_latest_zero:
+                q = nonzero_quarters[-1]
                 q_price = get_quarter_end_prices([t], q)[t]
                 c_price = get_current_prices([t])[t]
                 val = pivot_table.at[t, q]
@@ -308,9 +300,27 @@ def formatted_table(df, selected_quarters=None, key_suffix="", show_selectbox=Tr
                     profit_dict[t] = ''
                     pct_dict[t] = ''
             else:
-                # Do not calculate profit/loss for tickers with zero in the latest quarter
-                profit_dict[t] = ''
-                pct_dict[t] = ''
+                # Only calculate for tickers with nonzero value in the latest quarter
+                if pivot_table.at[t, latest_quarter] != 0:
+                    q = latest_quarter
+                    q_price = get_quarter_end_prices([t], q)[t]
+                    c_price = get_current_prices([t])[t]
+                    val = pivot_table.at[t, q]
+                    if q_price and c_price and q_price != 0 and val != 0:
+                        vol = val / q_price
+                        p_start = vol * q_price
+                        p_now = vol * c_price
+                        profit = p_now - p_start
+                        pct = 0 if p_start == 0 else (profit / p_start * 100)
+                        profit_dict[t] = profit
+                        pct_dict[t] = pct
+                    else:
+                        profit_dict[t] = ''
+                        pct_dict[t] = ''
+                else:
+                    # Do not calculate profit/loss for tickers with zero in the latest quarter
+                    profit_dict[t] = ''
+                    pct_dict[t] = ''
     
     # Add Profit/Loss and % Profit/Loss columns
     profit_col = "Profit/Loss since latest quarter"
@@ -380,13 +390,18 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
+# Initialize session state for price refresh trigger
+if 'refresh_prices' not in st.session_state:
+    st.session_state.refresh_prices = False
+
 # Add refresh price and export buttons with upload page link
 col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
 
 with col1:
     if st.button("Refresh Prices"):
-        # Clear price cache and update timestamp
+        # Clear price cache and set refresh trigger
         st.session_state.price_cache = {}
+        st.session_state.refresh_prices = True
         st.session_state.price_last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         st.rerun()
 
@@ -394,7 +409,7 @@ with col1:
 if st.session_state.price_last_updated:
     st.caption(f"Prices last updated: {st.session_state.price_last_updated}")
 else:
-    st.caption("Prices not yet loaded")
+    st.caption("Prices not yet loaded - Click 'Refresh Prices' to load")
 
 def display_prop_book_table():
     """Display prop book data by broker and quarter"""
@@ -430,34 +445,34 @@ def display_prop_book_table():
             # Create data organized by broker for the selected quarters
             combined_csv = ""
             brokers_for_export = sorted(df_book['Broker'].unique())
-            
+
             for broker in brokers_for_export:
                 broker_df = df_book[(df_book['Broker'] == broker) & (df_book['Quarter'].isin(selected_quarters))].copy()
                 if not broker_df.empty:
                     combined_csv += f"\n{broker} Prop Book\n"
-                    
-                    # Get FVTPL data
+
+                    # Get FVTPL data (export without price fetching)
                     fvtpl_df = broker_df[(broker_df['FVTPL value'].notnull() & (broker_df['FVTPL value'] != 0))].copy()
                     if not fvtpl_df.empty:
-                        fvtpl_data = formatted_table(fvtpl_df, selected_quarters, key_suffix=f"export_fvtpl_{broker}", show_selectbox=False)
+                        fvtpl_data = formatted_table(fvtpl_df, selected_quarters, key_suffix=f"export_fvtpl_{broker}", show_selectbox=False, fetch_prices=False)
                         combined_csv += f"\nFVTPL Values:\n"
                         combined_csv += fvtpl_data.to_csv(index=True)
                         combined_csv += "\n"
-                    
-                    # Get AFS data if AFS column exists
+
+                    # Get AFS data if AFS column exists (export without price fetching)
                     if 'AFS value' in broker_df.columns:
                         afs_df = broker_df[(broker_df['AFS value'].notnull() & (broker_df['AFS value'] != 0))].copy()
                         if not afs_df.empty:
                             # Copy AFS to FVTPL column for processing since formatted_table expects FVTPL
                             afs_df_modified = afs_df.copy()
                             afs_df_modified['FVTPL value'] = afs_df_modified['AFS value']
-                            afs_data = formatted_table(afs_df_modified, selected_quarters, key_suffix=f"export_afs_{broker}", show_selectbox=False)
+                            afs_data = formatted_table(afs_df_modified, selected_quarters, key_suffix=f"export_afs_{broker}", show_selectbox=False, fetch_prices=False)
                             combined_csv += f"AFS Values:\n"
                             combined_csv += afs_data.to_csv(index=True)
                             combined_csv += "\n"
-                    
+
                     combined_csv += "\n"  # Extra spacing between brokers
-            
+
             st.download_button(
                 label="Export Data",
                 data=combined_csv,
@@ -479,9 +494,19 @@ def display_prop_book_table():
     # Display the prop book table with additional columns
     st.subheader(f"{selected_brokers} Prop Book")
 
-    with st.spinner("Loading data and calculating price changes..."):
-        # Use available_quarters for both display and calculation
-        formatted_df = formatted_table(filtered_df, available_quarters, key_suffix=f"display_{selected_brokers}")
+    # Only fetch prices if user clicked "Refresh Prices" button
+    fetch_prices = st.session_state.refresh_prices
+
+    if fetch_prices:
+        with st.spinner("Loading prices and calculating profit/loss..."):
+            # Use available_quarters for both display and calculation
+            formatted_df = formatted_table(filtered_df, available_quarters, key_suffix=f"display_{selected_brokers}", fetch_prices=True)
+            st.dataframe(formatted_df, use_container_width=True)
+        # Reset the refresh flag after loading
+        st.session_state.refresh_prices = False
+    else:
+        # Display without price fetching (instant load)
+        formatted_df = formatted_table(filtered_df, available_quarters, key_suffix=f"display_{selected_brokers}", fetch_prices=False)
         st.dataframe(formatted_df, use_container_width=True)
 
 # Main application
