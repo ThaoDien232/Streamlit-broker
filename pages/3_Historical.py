@@ -635,6 +635,70 @@ def get_all_prop_holdings_last_quarters(ticker, quarters_list):
     except Exception as e:
         return pd.DataFrame()
 
+@st.cache_data(ttl=86400)  # Cache for 24 hours
+def calculate_prop_holdings_volume(ticker, quarters_list):
+    """
+    Calculate volume (number of shares) held for each stock in prop holdings.
+    Volume = Market Value / Quarter-End Price
+
+    Args:
+        ticker: Broker ticker (e.g., 'SSI', 'VCI')
+        quarters_list: List of quarter labels (e.g., ['4Q24', '1Q25', '2Q25'])
+
+    Returns:
+        DataFrame with Ticker as rows, Quarters as columns, values in number of shares
+        Same structure as prop holdings table for easy comparison
+    """
+    from utils.stock_prices import get_quarter_end_price
+
+    try:
+        # Get the market value holdings data
+        holdings_pivot = get_all_prop_holdings_last_quarters(ticker, quarters_list)
+
+        if holdings_pivot.empty:
+            return pd.DataFrame()
+
+        # Create volume pivot with same structure
+        volume_data = {}
+
+        for quarter in holdings_pivot.columns:
+            quarter_volumes = []
+
+            for stock_ticker in holdings_pivot.index:
+                market_value = holdings_pivot.loc[stock_ticker, quarter]
+
+                # Skip if no holdings or if it's a special category
+                if market_value == 0 or pd.isna(market_value):
+                    quarter_volumes.append(0)
+                    continue
+
+                # Skip "Others" and "Other FVTPL" - can't calculate volume for aggregates
+                if stock_ticker.upper() in ['OTHERS', 'OTHER FVTPL']:
+                    quarter_volumes.append(0)
+                    continue
+
+                # Get quarter-end price (cached)
+                quarter_end_price = get_quarter_end_price(stock_ticker, quarter)
+
+                if quarter_end_price and quarter_end_price > 0:
+                    # Calculate volume: market value (in billions) / price (in VND)
+                    # Market value is in billions VND, so multiply by 1 billion first
+                    volume = (market_value * 1_000_000_000) / quarter_end_price
+                    quarter_volumes.append(volume)
+                else:
+                    # Price not available
+                    quarter_volumes.append(0)
+
+            volume_data[quarter] = quarter_volumes
+
+        # Create DataFrame with same structure as holdings
+        volume_pivot = pd.DataFrame(volume_data, index=holdings_pivot.index)
+
+        return volume_pivot
+
+    except Exception as e:
+        return pd.DataFrame()
+
 def get_investment_composition_last_quarters(ticker_data, ticker, quarters_list):
     """Get investment book composition with simplified 4-category structure for last 6 quarters"""
     from utils.investment_book import get_investment_data
@@ -982,6 +1046,26 @@ if selected_ticker and selected_quarter:
                                 lambda x: f"{x:,.1f}" if x > 0 else "-"
                             )
                         st.dataframe(prop_display, use_container_width=True)
+
+                        # Add expandable volume table
+                        with st.expander("📊 View Holdings Volume (shares)"):
+                            # Get quarters from prop holdings table
+                            quarters_for_volume = prop_holdings_table.columns.tolist()
+
+                            # Calculate volumes
+                            volume_table = calculate_prop_holdings_volume(selected_ticker, quarters_for_volume)
+
+                            if not volume_table.empty:
+                                # Format volumes as integers with thousand separators
+                                volume_display = volume_table.copy()
+                                for col in volume_display.columns:
+                                    volume_display[col] = volume_display[col].apply(
+                                        lambda x: f"{int(x):,}" if x > 0 else "-"
+                                    )
+                                st.dataframe(volume_display, use_container_width=True)
+                                st.caption("*Volume calculated as Market Value (billions VND) / Quarter-End Closing Price*")
+                            else:
+                                st.info("Volume data not available")
                     else:
                         st.info(f"No proprietary holdings data for {selected_ticker_display}")
 
