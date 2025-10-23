@@ -215,11 +215,12 @@ def formatted_table(df, selected_quarters=None, key_suffix="", show_selectbox=Tr
 
     # Numeric columns selection
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-    import hashlib, time
+    import hashlib
     df_cols_str = ','.join(df.columns.astype(str))
     quarters_str = ','.join(selected_quarters) if selected_quarters is not None else ''
     broker_info = df['Broker'].iloc[0] if 'Broker' in df.columns and not df.empty else 'unknown'
-    unique_str = f"{df_cols_str}-{quarters_str}-{broker_info}-{key_suffix}-{time.time()}"
+    # Remove time.time() to preserve selectbox state across reruns
+    unique_str = f"{df_cols_str}-{quarters_str}-{broker_info}-{key_suffix}"
     selectbox_key = f"value_col_{hashlib.md5(unique_str.encode()).hexdigest()}"
 
     # For download operations, skip the selectbox and use the first numeric column
