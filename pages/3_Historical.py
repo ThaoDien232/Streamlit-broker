@@ -165,33 +165,37 @@ def calculate_financial_metrics(ticker_data, selected_quarter, ticker):
     return pd.DataFrame([metrics_dict])
 
 def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
-    """Step 3: Combine historical data and calculated metrics for analysis - Last 6 Quarters"""
+    """Step 3: Combine historical data and calculated metrics for analysis - Last 6 Quarters
+
+    Returns:
+        tuple: (df_income_statement, df_balance_sheet) - Two separate DataFrames
+    """
 
     # Get all quarters sorted chronologically
     quarters = sort_quarters_chronologically([q for q in ticker_data['QUARTER_LABEL'].unique() if pd.notna(q) and q != ''])
 
     # Find the index of selected quarter and get last 6 quarters
     if selected_quarter not in quarters:
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
 
     current_idx = quarters.index(selected_quarter)
     # Get last 6 quarters including current (or fewer if not available)
     last_6_quarters = quarters[max(0, current_idx - 5):current_idx + 1]
 
     if len(last_6_quarters) == 0:
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
 
     # Get ticker from ticker_data
     if ticker_data.empty or 'TICKER' not in ticker_data.columns:
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
 
     ticker = ticker_data['TICKER'].iloc[0]
 
     # Load market liquidity data
     market_liquidity_df = load_market_liquidity_data()
 
-    # Display metrics we want to show (excluding investment book items - they're displayed separately)
-    display_metrics = [
+    # Income Statement metrics
+    income_statement_metrics = [
         'Net Brokerage Income',
         'Market Liquidity (Avg Daily)',
         'Trading Value',
@@ -199,8 +203,6 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
         'Net Brokerage Fee',
         'IB Income',
         'Margin Income',
-        'Margin Balance',
-        'Margin/Equity %',
         'Margin Lending Rate',
         'Margin Lending Spread',
         'Investment Income',
@@ -208,16 +210,29 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
         'Total Operating Income',
         'SG&A',
         'CIR',
-        'Interest Expense',
-        'Borrowing Balance',
-        'Interest Rate',
         'PBT',
         'NPAT',
         'ROE'
     ]
 
-    # Create table structure: Metric as rows, quarters as columns
-    analysis_data = {'Metric': display_metrics}
+    # Balance Sheet metrics - organized as Assets, then Liabilities & Equity
+    balance_sheet_metrics = [
+        'Margin Balance',
+        'MTM Equities',
+        'Non-MTM Equities',
+        'Bonds',
+        'CDs/Deposits',
+        'Total Assets',
+        'Borrowing Balance',
+        'Interest Expense',
+        'Interest Rate',
+        'Total Equity',
+        'Margin/Equity %'
+    ]
+
+    # Create two separate table structures
+    income_statement_data = {'Metric': income_statement_metrics}
+    balance_sheet_data = {'Metric': balance_sheet_metrics}
 
     # For each of the last 6 quarters, get the metric values
     for quarter in last_6_quarters:
@@ -229,12 +244,23 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
         except:
             continue
 
-        # Get metrics for this quarter
-        quarter_values = []
+        # Get metrics for this quarter - Income Statement
+        income_quarter_values = []
+        # Get metrics for Balance Sheet
+        balance_quarter_values = []
+
+        # Variables for calculations
         margin_balance_value = None
         total_equity_value = None
 
-        for metric_name in display_metrics:
+        # Asset components for Total Assets calculation
+        mtm_equities_value = 0
+        non_mtm_equities_value = 0
+        bonds_value = 0
+        cds_deposits_value = 0
+
+        # Process Income Statement metrics
+        for metric_name in income_statement_metrics:
             if metric_name == 'Market Liquidity (Avg Daily)':
                 # Get market liquidity for this quarter
                 if not market_liquidity_df.empty:
@@ -243,30 +269,11 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                         (market_liquidity_df['Quarter'] == quarter_num)
                     ]
                     if not liquidity_row.empty:
-                        quarter_values.append(liquidity_row.iloc[0]['Avg Daily Turnover (B VND)'])
+                        income_quarter_values.append(liquidity_row.iloc[0]['Avg Daily Turnover (B VND)'])
                     else:
-                        quarter_values.append(0)
+                        income_quarter_values.append(0)
                 else:
-                    quarter_values.append(0)
-                continue
-
-            if metric_name == 'Margin/Equity %':
-                # Calculate margin/equity ratio
-                if margin_balance_value is not None and total_equity_value is not None and total_equity_value != 0:
-                    ratio = (margin_balance_value / total_equity_value) * 100
-                    quarter_values.append(ratio)
-                else:
-                    # Need to fetch if not already fetched
-                    if margin_balance_value is None:
-                        margin_balance_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Margin_Lending_book')
-                    if total_equity_value is None:
-                        total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'BS.142')
-
-                    if total_equity_value and total_equity_value != 0:
-                        ratio = (margin_balance_value / total_equity_value) * 100
-                        quarter_values.append(ratio)
-                    else:
-                        quarter_values.append(0)
+                    income_quarter_values.append(0)
                 continue
 
             if metric_name == 'CIR':
@@ -278,44 +285,9 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 denominator = total_op_income - investment_income
                 if denominator and denominator != 0:
                     cir = abs(sga) / denominator * 100  # Use abs since SGA is negative
-                    quarter_values.append(cir)
+                    income_quarter_values.append(cir)
                 else:
-                    quarter_values.append(0)
-                continue
-
-            if metric_name == 'Interest Rate':
-                # Calculate Interest Rate = Interest Expense / Average Borrowing Balance * 100
-                # For quarterly data, annualize by multiplying by 4
-                interest_expense = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Interest_Expense')
-                borrowing_balance = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Borrowing_Balance')
-
-                # Get previous quarter borrowing for average
-                quarters = sort_quarters_chronologically([q for q in ticker_data['QUARTER_LABEL'].unique() if pd.notna(q) and q != ''])
-                current_quarter_label = f"{quarter_num}Q{str(year)[-2:]}"
-                if current_quarter_label in quarters:
-                    current_idx = quarters.index(current_quarter_label)
-                    if current_idx > 0:
-                        prev_quarter_label = quarters[current_idx - 1]
-                        # Parse previous quarter
-                        try:
-                            prev_quarter_num = int(prev_quarter_label[0])
-                            prev_year_str = prev_quarter_label[-2:]
-                            prev_year = 2000 + int(prev_year_str) if int(prev_year_str) < 50 else 1900 + int(prev_year_str)
-                            prev_borrowing = get_calc_metric_value(ticker_data, ticker, prev_year, prev_quarter_num, 'Borrowing_Balance')
-                            avg_borrowing = (borrowing_balance + prev_borrowing) / 2 if prev_borrowing else borrowing_balance
-                        except:
-                            avg_borrowing = borrowing_balance
-                    else:
-                        avg_borrowing = borrowing_balance
-                else:
-                    avg_borrowing = borrowing_balance
-
-                if avg_borrowing and avg_borrowing != 0:
-                    # Annualize the rate for quarterly data
-                    interest_rate = abs(interest_expense) / avg_borrowing * 100 * 4
-                    quarter_values.append(interest_rate)
-                else:
-                    quarter_values.append(0)
+                    income_quarter_values.append(0)
                 continue
 
             if metric_name == 'Trading Value':
@@ -323,7 +295,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 institution_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Institution_shares_trading_value')
                 investor_shares = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Investor_shares_trading_value')
                 total_trading_value = (institution_shares + investor_shares) / 1_000_000_000  # Convert to billions
-                quarter_values.append(total_trading_value)
+                income_quarter_values.append(total_trading_value)
                 continue
 
             if metric_name == 'Brokerage Market Share':
@@ -335,7 +307,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 # If HSX API returns data (broker is in Top 10), use it
                 if hsx_data['market_share'] > 0:
                     # Use HSX-provided market share (already in percentage)
-                    quarter_values.append(hsx_data['market_share'])
+                    income_quarter_values.append(hsx_data['market_share'])
                 else:
                     # Calculate Market Share for brokers not in Top 10
                     # Formula: Trading Value / (Market Liquidity * Trading Days in Quarter) / 2
@@ -358,13 +330,13 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
 
                             if total_market_value and total_market_value != 0:
                                 market_share = (total_trading_value / total_market_value) / 2 * 100  # Divide by 2 and convert to percentage
-                                quarter_values.append(market_share)
+                                income_quarter_values.append(market_share)
                             else:
-                                quarter_values.append(0)
+                                income_quarter_values.append(0)
                         else:
-                            quarter_values.append(0)
+                            income_quarter_values.append(0)
                     else:
-                        quarter_values.append(0)
+                        income_quarter_values.append(0)
                 continue
 
             if metric_name == 'Net Brokerage Fee':
@@ -377,71 +349,149 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 if total_trading_value and total_trading_value != 0:
                     # Calculate as basis points (bps): (income / trading value) * 10000
                     net_brokerage_fee_bps = (net_brokerage_income / total_trading_value) * 10000
-                    quarter_values.append(net_brokerage_fee_bps)
+                    income_quarter_values.append(net_brokerage_fee_bps)
                 else:
-                    quarter_values.append(0)
+                    income_quarter_values.append(0)
                 continue
 
+            # Standard metric code mapping for Income Statement
             metric_code = {
                 'Net Brokerage Income': 'Net_Brokerage_Income',
                 'IB Income': 'Net_IB_Income',
-                'Margin Income': 'Net_Margin_lending_Income',  # Correct METRIC_CODE for margin lending income
+                'Margin Income': 'Net_Margin_lending_Income',
                 'Investment Income': 'Net_investment_income',
+                'Other Incomes': 'Net_Other_Income',
+                'Total Operating Income': 'Total_Operating_Income',
+                'PBT': 'PBT',
+                'NPAT': 'NPAT',
+                'SG&A': 'SG_A',
+                'Margin Lending Rate': 'MARGIN_LENDING_RATE',
+                'Margin Lending Spread': 'MARGIN_LENDING_SPREAD',
+                'ROE': 'ROE'
+            }.get(metric_name)
+
+            if metric_code:
+                value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, metric_code)
+                income_quarter_values.append(value)
+
+        # Process Balance Sheet metrics
+        for metric_name in balance_sheet_metrics:
+            if metric_name == 'Total Assets':
+                # Calculate Total Assets = Margin Balance + MTM Equities + Non-MTM Equities + Bonds + CDs/Deposits
+                # Fetch margin balance if not already fetched
+                if margin_balance_value is None:
+                    margin_balance_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Margin_Lending_book')
+
+                total_assets = margin_balance_value + mtm_equities_value + non_mtm_equities_value + bonds_value + cds_deposits_value
+                balance_quarter_values.append(total_assets)
+                continue
+
+            if metric_name == 'Total Equity':
+                # Get Total Equity using 'BS.142'
+                total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'BS.142')
+                balance_quarter_values.append(total_equity_value)
+                continue
+
+            if metric_name == 'Margin/Equity %':
+                # Calculate margin/equity ratio
+                if margin_balance_value is None:
+                    margin_balance_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Margin_Lending_book')
+                if total_equity_value is None:
+                    total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'BS.142')
+
+                if total_equity_value and total_equity_value != 0:
+                    ratio = (margin_balance_value / total_equity_value) * 100
+                    balance_quarter_values.append(ratio)
+                else:
+                    balance_quarter_values.append(0)
+                continue
+
+            if metric_name == 'Interest Rate':
+                # Calculate Interest Rate = Interest Expense / Average Borrowing Balance * 100
+                # For quarterly data, annualize by multiplying by 4
+                interest_expense = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Interest_Expense')
+                borrowing_balance = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Borrowing_Balance')
+
+                # Get previous quarter borrowing for average
+                quarters_sorted = sort_quarters_chronologically([q for q in ticker_data['QUARTER_LABEL'].unique() if pd.notna(q) and q != ''])
+                current_quarter_label = f"{quarter_num}Q{str(year)[-2:]}"
+                if current_quarter_label in quarters_sorted:
+                    current_idx = quarters_sorted.index(current_quarter_label)
+                    if current_idx > 0:
+                        prev_quarter_label = quarters_sorted[current_idx - 1]
+                        # Parse previous quarter
+                        try:
+                            prev_quarter_num = int(prev_quarter_label[0])
+                            prev_year_str = prev_quarter_label[-2:]
+                            prev_year = 2000 + int(prev_year_str) if int(prev_year_str) < 50 else 1900 + int(prev_year_str)
+                            prev_borrowing = get_calc_metric_value(ticker_data, ticker, prev_year, prev_quarter_num, 'Borrowing_Balance')
+                            avg_borrowing = (borrowing_balance + prev_borrowing) / 2 if prev_borrowing else borrowing_balance
+                        except:
+                            avg_borrowing = borrowing_balance
+                    else:
+                        avg_borrowing = borrowing_balance
+                else:
+                    avg_borrowing = borrowing_balance
+
+                if avg_borrowing and avg_borrowing != 0:
+                    # Annualize the rate for quarterly data
+                    interest_rate = abs(interest_expense) / avg_borrowing * 100 * 4
+                    balance_quarter_values.append(interest_rate)
+                else:
+                    balance_quarter_values.append(0)
+                continue
+
+            # Standard metric code mapping for Balance Sheet
+            metric_code = {
+                'Margin Balance': 'Margin_Lending_book',
                 'MTM Equities': 'mtm_equities_market_value',
                 'Non-MTM Equities': 'not_mtm_equities_market_value',
                 'Bonds': 'bonds_market_value',
                 'CDs/Deposits': 'cds_deposits_market_value',
-                'Other Incomes': 'Net_Other_Income',
-                'Total Operating Income': 'Total_Operating_Income',
-                'PBT': 'PBT',  # KEYCODE in database
-                'NPAT': 'NPAT',  # KEYCODE in database
-                'SG&A': 'SG_A',
-                'Interest Expense': 'Interest_Expense',
                 'Borrowing Balance': 'Borrowing_Balance',
-                'Margin Balance': 'Margin_Lending_book',
-                'Margin Lending Rate': 'MARGIN_LENDING_RATE',
-                'Margin Lending Spread': 'MARGIN_LENDING_SPREAD',
-                'ROE': 'ROE',
-                'CIR': 'CIR',
-                'Interest Rate': 'Interest_Rate'
+                'Interest Expense': 'Interest_Expense'
             }.get(metric_name)
 
-            value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, metric_code)
-            quarter_values.append(value)
+            if metric_code:
+                value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, metric_code)
+                balance_quarter_values.append(value)
 
-            # Store for ratio calculation
-            if metric_name == 'Margin Balance':
-                margin_balance_value = value
-                # Also get Total Equity for the Margin/Equity % calculation
-                total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'BS.142')
-            elif metric_name == 'ROE':
-                # Also get Total Equity for the ratio if not already fetched
-                if total_equity_value is None:
-                    total_equity_value = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'BS.142')
+                # Store asset components for Total Assets calculation
+                if metric_name == 'Margin Balance':
+                    margin_balance_value = value
+                elif metric_name == 'MTM Equities':
+                    mtm_equities_value = value
+                elif metric_name == 'Non-MTM Equities':
+                    non_mtm_equities_value = value
+                elif metric_name == 'Bonds':
+                    bonds_value = value
+                elif metric_name == 'CDs/Deposits':
+                    cds_deposits_value = value
 
-        # Add this quarter's column
-        analysis_data[quarter] = quarter_values
+        # Add this quarter's columns to both tables
+        income_statement_data[quarter] = income_quarter_values
+        balance_sheet_data[quarter] = balance_quarter_values
 
-    # Create DataFrame
-    df_analysis = pd.DataFrame(analysis_data)
+    # Create DataFrames
+    df_income_statement = pd.DataFrame(income_statement_data)
+    df_balance_sheet = pd.DataFrame(balance_sheet_data)
 
     # Check if we have any quarter columns besides 'Metric'
-    if len(df_analysis.columns) <= 1:
-        return pd.DataFrame()
+    if len(df_income_statement.columns) <= 1 or len(df_balance_sheet.columns) <= 1:
+        return pd.DataFrame(), pd.DataFrame()
 
-    # Now add growth columns for the most recent quarter (selected_quarter)
-    # Add QoQ and YoY growth as additional columns after the last quarter
-    if len(last_6_quarters) >= 2 and selected_quarter in df_analysis.columns:
+    # Add growth columns for Income Statement
+    if len(last_6_quarters) >= 2 and selected_quarter in df_income_statement.columns:
         prev_quarter = last_6_quarters[-2]
-        if prev_quarter in df_analysis.columns:
+        if prev_quarter in df_income_statement.columns:
             qoq_growth = []
-            for metric in display_metrics:
-                if metric in ['ROE', 'ROA']:
+            for metric in income_statement_metrics:
+                if metric in ['ROE']:
                     qoq_growth.append('N/A')
                 else:
                     try:
-                        current_val = df_analysis[df_analysis['Metric'] == metric][selected_quarter].values[0]
-                        prev_val = df_analysis[df_analysis['Metric'] == metric][prev_quarter].values[0]
+                        current_val = df_income_statement[df_income_statement['Metric'] == metric][selected_quarter].values[0]
+                        prev_val = df_income_statement[df_income_statement['Metric'] == metric][prev_quarter].values[0]
                         if prev_val != 0 and prev_val != 'N/A' and current_val != 'N/A':
                             growth = ((current_val - prev_val) / abs(prev_val)) * 100
                             qoq_growth.append(growth)
@@ -450,20 +500,20 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                     except (IndexError, KeyError):
                         qoq_growth.append('N/A')
 
-            df_analysis['QoQ Growth %'] = qoq_growth
+            df_income_statement['QoQ Growth %'] = qoq_growth
 
-    # Add YoY growth if we have at least 5 quarters
+    # Add YoY growth for Income Statement if we have at least 5 quarters
     if len(last_6_quarters) >= 5:
         yoy_quarter = last_6_quarters[-5]  # 4 quarters ago
-        if yoy_quarter in df_analysis.columns and selected_quarter in df_analysis.columns:
+        if yoy_quarter in df_income_statement.columns and selected_quarter in df_income_statement.columns:
             yoy_growth = []
-            for metric in display_metrics:
-                if metric in ['ROE', 'ROA']:
+            for metric in income_statement_metrics:
+                if metric in ['ROE']:
                     yoy_growth.append('N/A')
                 else:
                     try:
-                        current_val = df_analysis[df_analysis['Metric'] == metric][selected_quarter].values[0]
-                        yoy_val = df_analysis[df_analysis['Metric'] == metric][yoy_quarter].values[0]
+                        current_val = df_income_statement[df_income_statement['Metric'] == metric][selected_quarter].values[0]
+                        yoy_val = df_income_statement[df_income_statement['Metric'] == metric][yoy_quarter].values[0]
                         if yoy_val != 0 and yoy_val != 'N/A' and current_val != 'N/A':
                             growth = ((current_val - yoy_val) / abs(yoy_val)) * 100
                             yoy_growth.append(growth)
@@ -472,9 +522,55 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                     except (IndexError, KeyError):
                         yoy_growth.append('N/A')
 
-            df_analysis['YoY Growth %'] = yoy_growth
+            df_income_statement['YoY Growth %'] = yoy_growth
 
-    return df_analysis
+    # Add growth columns for Balance Sheet
+    if len(last_6_quarters) >= 2 and selected_quarter in df_balance_sheet.columns:
+        prev_quarter = last_6_quarters[-2]
+        if prev_quarter in df_balance_sheet.columns:
+            qoq_growth = []
+            for metric in balance_sheet_metrics:
+                # Skip ratio/percentage metrics for growth calculation
+                if metric in ['Margin/Equity %', 'Interest Rate']:
+                    qoq_growth.append('N/A')
+                else:
+                    try:
+                        current_val = df_balance_sheet[df_balance_sheet['Metric'] == metric][selected_quarter].values[0]
+                        prev_val = df_balance_sheet[df_balance_sheet['Metric'] == metric][prev_quarter].values[0]
+                        if prev_val != 0 and prev_val != 'N/A' and current_val != 'N/A':
+                            growth = ((current_val - prev_val) / abs(prev_val)) * 100
+                            qoq_growth.append(growth)
+                        else:
+                            qoq_growth.append('N/A')
+                    except (IndexError, KeyError):
+                        qoq_growth.append('N/A')
+
+            df_balance_sheet['QoQ Growth %'] = qoq_growth
+
+    # Add YoY growth for Balance Sheet if we have at least 5 quarters
+    if len(last_6_quarters) >= 5:
+        yoy_quarter = last_6_quarters[-5]  # 4 quarters ago
+        if yoy_quarter in df_balance_sheet.columns and selected_quarter in df_balance_sheet.columns:
+            yoy_growth = []
+            for metric in balance_sheet_metrics:
+                # Skip ratio/percentage metrics for growth calculation
+                if metric in ['Margin/Equity %', 'Interest Rate']:
+                    yoy_growth.append('N/A')
+                else:
+                    try:
+                        current_val = df_balance_sheet[df_balance_sheet['Metric'] == metric][selected_quarter].values[0]
+                        yoy_val = df_balance_sheet[df_balance_sheet['Metric'] == metric][yoy_quarter].values[0]
+                        if yoy_val != 0 and yoy_val != 'N/A' and current_val != 'N/A':
+                            growth = ((current_val - yoy_val) / abs(yoy_val)) * 100
+                            yoy_growth.append(growth)
+                        else:
+                            yoy_growth.append('N/A')
+                    except (IndexError, KeyError):
+                        yoy_growth.append('N/A')
+
+            df_balance_sheet['YoY Growth %'] = yoy_growth
+
+    return df_income_statement, df_balance_sheet
 
 def get_calc_metric_value(df, ticker, year, quarter, metric_code):
     """Get a specific calculated metric value from CALC statement type"""
@@ -953,20 +1049,21 @@ if selected_ticker and selected_quarter:
         # Step 2: Calculate financial metrics and growth rates
         calculated_metrics = calculate_financial_metrics(ticker_data, selected_quarter, selected_ticker)
 
-        # Step 3: Create analysis table
+        # Step 3: Create analysis tables (now returns TWO DataFrames)
         try:
-            analysis_table = create_analysis_table(ticker_data, calculated_metrics, selected_quarter)
+            df_income_statement, df_balance_sheet = create_analysis_table(ticker_data, calculated_metrics, selected_quarter)
         except Exception as e:
             st.error(f"Error in create_analysis_table: {str(e)}")
             import traceback
             st.code(traceback.format_exc())
-            analysis_table = pd.DataFrame()
+            df_income_statement = pd.DataFrame()
+            df_balance_sheet = pd.DataFrame()
 
         # Step 4: Create summary tables with market share, prop book, and investment composition data
         market_share_table, prop_holdings_table, investment_composition_table = create_summary_tables(selected_ticker, selected_quarter, ticker_data)
 
         # Display the comprehensive financial tables
-        if not calculated_metrics.empty and not analysis_table.empty:
+        if not calculated_metrics.empty and not df_income_statement.empty and not df_balance_sheet.empty:
             # Display Financial Metrics with tabs for better organization
             tab1, tab2, tab3 = st.tabs(["📊 Comprehensive Metrics", "📈 Market Share", "🏢 Sector Comparison"])
 
@@ -974,53 +1071,80 @@ if selected_ticker and selected_quarter:
                 st.subheader(f"Financial Metrics")
                 st.markdown("*Units: VNDbn unless otherwise noted*")
 
-                # Display the full analysis table
-                if not analysis_table.empty:
-                    # Format the dataframe for display
-                    def format_value(val, metric_name):
-                        """Format numeric values for display based on metric type"""
-                        if pd.isna(val) or val == 0:
-                            return "-"
-                        elif isinstance(val, (int, float)):
-                            # Special formatting for different metric types
-                            if metric_name == 'Net Brokerage Fee':
-                                # Net Brokerage Fee is in bps
-                                return f"{val:.2f} bps"
-                            elif metric_name in ['Brokerage Market Share', 'Margin/Equity %',
-                                                'Margin Lending Rate', 'Margin Lending Spread',
-                                                'CIR', 'Interest Rate', 'ROE']:
-                                # Percentage metrics - add % symbol
-                                return f"{val:.2f}%"
-                            elif metric_name in ['Market Liquidity (Avg Daily)', 'Trading Value']:
-                                # Already in billions
-                                return f"{val:,.1f}"
-                            else:
-                                # Convert to billions for all other financial metrics (VND values)
-                                val_billions = val / 1_000_000_000
-                                return f"{val_billions:,.1f}"
-                        return val
+                # Format the dataframe for display
+                def format_value(val, metric_name):
+                    """Format numeric values for display based on metric type"""
+                    if pd.isna(val) or val == 0:
+                        return "-"
+                    elif isinstance(val, (int, float)):
+                        # Special formatting for different metric types
+                        if metric_name == 'Net Brokerage Fee':
+                            # Net Brokerage Fee is in bps
+                            return f"{val:.2f} bps"
+                        elif metric_name in ['Brokerage Market Share', 'Margin/Equity %',
+                                            'Margin Lending Rate', 'Margin Lending Spread',
+                                            'CIR', 'Interest Rate', 'ROE']:
+                            # Percentage metrics - add % symbol
+                            return f"{val:.2f}%"
+                        elif metric_name in ['Market Liquidity (Avg Daily)', 'Trading Value']:
+                            # Already in billions
+                            return f"{val:,.1f}"
+                        else:
+                            # Convert to billions for all other financial metrics (VND values)
+                            val_billions = val / 1_000_000_000
+                            return f"{val_billions:,.1f}"
+                    return val
 
+                # Display Income Statement Table
+                st.markdown("### Income Statement")
+                if not df_income_statement.empty:
                     # Apply formatting to numeric columns (skip 'Metric' column and growth columns)
-                    display_df = analysis_table.copy()
-                    for col in display_df.columns:
+                    display_income = df_income_statement.copy()
+                    for col in display_income.columns:
                         if col not in ['Metric', 'QoQ Growth %', 'YoY Growth %']:
                             # Apply formatting with metric name context
-                            display_df[col] = [
+                            display_income[col] = [
                                 format_value(val, metric)
-                                for val, metric in zip(display_df[col], display_df['Metric'])
+                                for val, metric in zip(display_income[col], display_income['Metric'])
                             ]
 
                     # Format growth columns with +/- sign and % symbol
-                    if 'QoQ Growth %' in display_df.columns:
-                        display_df['QoQ Growth %'] = display_df['QoQ Growth %'].apply(
+                    if 'QoQ Growth %' in display_income.columns:
+                        display_income['QoQ Growth %'] = display_income['QoQ Growth %'].apply(
                             lambda x: f"{x:+.1f}%" if isinstance(x, (int, float)) else x
                         )
-                    if 'YoY Growth %' in display_df.columns:
-                        display_df['YoY Growth %'] = display_df['YoY Growth %'].apply(
+                    if 'YoY Growth %' in display_income.columns:
+                        display_income['YoY Growth %'] = display_income['YoY Growth %'].apply(
                             lambda x: f"{x:+.1f}%" if isinstance(x, (int, float)) else x
                         )
 
-                    st.dataframe(display_df, use_container_width=True, hide_index=True)
+                    st.dataframe(display_income, use_container_width=True, hide_index=True)
+
+                # Display Balance Sheet Table
+                st.markdown("---")
+                st.markdown("### Balance Sheet")
+                if not df_balance_sheet.empty:
+                    # Apply formatting to numeric columns (skip 'Metric' column and growth columns)
+                    display_balance = df_balance_sheet.copy()
+                    for col in display_balance.columns:
+                        if col not in ['Metric', 'QoQ Growth %', 'YoY Growth %']:
+                            # Apply formatting with metric name context
+                            display_balance[col] = [
+                                format_value(val, metric)
+                                for val, metric in zip(display_balance[col], display_balance['Metric'])
+                            ]
+
+                    # Format growth columns with +/- sign and % symbol
+                    if 'QoQ Growth %' in display_balance.columns:
+                        display_balance['QoQ Growth %'] = display_balance['QoQ Growth %'].apply(
+                            lambda x: f"{x:+.1f}%" if isinstance(x, (int, float)) else x
+                        )
+                    if 'YoY Growth %' in display_balance.columns:
+                        display_balance['YoY Growth %'] = display_balance['YoY Growth %'].apply(
+                            lambda x: f"{x:+.1f}%" if isinstance(x, (int, float)) else x
+                        )
+
+                    st.dataframe(display_balance, use_container_width=True, hide_index=True)
 
                 # Add Investment Book and Prop Holdings after the metrics table
                 st.markdown("---")
