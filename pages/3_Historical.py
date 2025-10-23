@@ -1115,52 +1115,40 @@ if selected_ticker and selected_quarter:
 
                     st.dataframe(display_balance, use_container_width=True, hide_index=True)
 
-                # Add Investment Book and Prop Holdings after the metrics table
+                # Add Proprietary Holdings after the metrics table
                 st.markdown("---")
 
-                # Investment Book Composition and Proprietary Holdings side by side
-                col1, col2 = st.columns(2)
+                st.markdown(f"#### Proprietary Holdings")
+                if not prop_holdings_table.empty:
+                    # Format the prop holdings table for display (values are already in billions)
+                    prop_display = prop_holdings_table.copy()
+                    for col_name in prop_display.columns:
+                        prop_display[col_name] = prop_display[col_name].apply(
+                            lambda x: f"{x:,.1f}" if x > 0 else "-"
+                        )
+                    st.dataframe(prop_display, use_container_width=True)
 
-                with col1:
-                    num_quarters = len(investment_composition_table.columns) - 1 if not investment_composition_table.empty else 6  # Subtract 1 for 'Investment Type' column
-                    st.markdown(f"#### Investment Book Composition")
-                    if not investment_composition_table.empty:
-                        st.dataframe(investment_composition_table, use_container_width=True, hide_index=True)
-                    else:
-                        st.info(f"No investment holdings data for {selected_ticker_display}")
+                    # Add expandable volume table
+                    with st.expander("📊 View Holdings Volume (shares)"):
+                        # Get quarters from prop holdings table
+                        quarters_for_volume = prop_holdings_table.columns.tolist()
 
-                with col2:
-                    st.markdown(f"#### Proprietary Holdings")
-                    if not prop_holdings_table.empty:
-                        # Format the prop holdings table for display (values are already in billions)
-                        prop_display = prop_holdings_table.copy()
-                        for col_name in prop_display.columns:
-                            prop_display[col_name] = prop_display[col_name].apply(
-                                lambda x: f"{x:,.1f}" if x > 0 else "-"
-                            )
-                        st.dataframe(prop_display, use_container_width=True)
+                        # Calculate volumes
+                        volume_table = calculate_prop_holdings_volume(selected_ticker, quarters_for_volume)
 
-                        # Add expandable volume table
-                        with st.expander("📊 View Holdings Volume (shares)"):
-                            # Get quarters from prop holdings table
-                            quarters_for_volume = prop_holdings_table.columns.tolist()
-
-                            # Calculate volumes
-                            volume_table = calculate_prop_holdings_volume(selected_ticker, quarters_for_volume)
-
-                            if not volume_table.empty:
-                                # Format volumes as integers with thousand separators
-                                volume_display = volume_table.copy()
-                                for col in volume_display.columns:
-                                    volume_display[col] = volume_display[col].apply(
-                                        lambda x: f"{int(x):,}" if x > 0 else "-"
-                                    )
-                                st.dataframe(volume_display, use_container_width=True)
-                                st.caption("*Volume calculated as Market Value (billions VND) / Quarter-End Closing Price*")
-                            else:
-                                st.info("Volume data not available")
-                    else:
-                        st.info(f"No proprietary holdings data for {selected_ticker_display}")
+                        if not volume_table.empty:
+                            # Format volumes as integers with thousand separators
+                            volume_display = volume_table.copy()
+                            for col in volume_display.columns:
+                                volume_display[col] = volume_display[col].apply(
+                                    lambda x: f"{int(x):,}" if x > 0 else "-"
+                                )
+                            st.dataframe(volume_display, use_container_width=True)
+                            st.caption("*Volume calculated as Market Value (billions VND) / Quarter-End Closing Price*")
+                        else:
+                            st.info("Volume data not available")
+                else:
+                    st.info(f"No proprietary holdings data for {selected_ticker_display}")
 
             with tab2:
                 st.subheader("Market Share & Trading Activity")
