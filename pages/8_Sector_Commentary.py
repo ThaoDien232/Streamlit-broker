@@ -127,8 +127,6 @@ def main() -> None:
     generated_at = format_generated_at(latest_row.get("GENERATED_AT"))
     ticker = latest_row.get("TICKER", SECTOR_TICKER)
 
-    st.metric(label="Versions available", value=len(quarter_rows))
-    st.subheader("Sector Commentary")
     st.caption(f"Ticker: {ticker} · Last updated: {generated_at}")
 
     if not commentary_text:
