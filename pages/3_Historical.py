@@ -83,7 +83,7 @@ def calculate_financial_metrics(ticker_data, selected_quarter, ticker):
         'NPAT': 'NPAT',  # KEYCODE in database
         'SG&A': 'SG_A',  # Selling, General & Administrative expenses
         'Interest Expense': 'Interest_Expense',  # Interest expense
-        'Borrowing Balance': 'Borrowing_Balance',  # Total borrowing
+        'Total Debt': 'Total_Debt_Balance',  # Total debt/borrowing balance
         'Margin Balance': 'Margin_Lending_book',
         'ROE': 'ROE',  # Use existing ROE calculation from CSV
         'CIR': 'CIR',  # Cost-to-Income Ratio (calculated)
@@ -223,7 +223,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
         'CDs/Deposits',
         'Total Investments',
         'Total Assets',
-        'Borrowing Balance',
+        'Total Debt',
         'Interest Expense',
         'Interest Rate',
         'Total Equity',
@@ -405,38 +405,9 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 continue
 
             if metric_name == 'Interest Rate':
-                # Calculate Interest Rate = Interest Expense / Average Borrowing Balance * 100
-                # For quarterly data, annualize by multiplying by 4
-                interest_expense = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Interest_Expense')
-                borrowing_balance = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'Borrowing_Balance')
-
-                # Get previous quarter borrowing for average
-                quarters_sorted = sort_quarters_chronologically([q for q in ticker_data['QUARTER_LABEL'].unique() if pd.notna(q) and q != ''])
-                current_quarter_label = f"{quarter_num}Q{str(year)[-2:]}"
-                if current_quarter_label in quarters_sorted:
-                    current_idx = quarters_sorted.index(current_quarter_label)
-                    if current_idx > 0:
-                        prev_quarter_label = quarters_sorted[current_idx - 1]
-                        # Parse previous quarter
-                        try:
-                            prev_quarter_num = int(prev_quarter_label[0])
-                            prev_year_str = prev_quarter_label[-2:]
-                            prev_year = 2000 + int(prev_year_str) if int(prev_year_str) < 50 else 1900 + int(prev_year_str)
-                            prev_borrowing = get_calc_metric_value(ticker_data, ticker, prev_year, prev_quarter_num, 'Borrowing_Balance')
-                            avg_borrowing = (borrowing_balance + prev_borrowing) / 2 if prev_borrowing else borrowing_balance
-                        except:
-                            avg_borrowing = borrowing_balance
-                    else:
-                        avg_borrowing = borrowing_balance
-                else:
-                    avg_borrowing = borrowing_balance
-
-                if avg_borrowing and avg_borrowing != 0:
-                    # Annualize the rate for quarterly data
-                    interest_rate = abs(interest_expense) / avg_borrowing * 100 * 4
-                    balance_quarter_values.append(interest_rate)
-                else:
-                    balance_quarter_values.append(0)
+                # Get Interest Rate directly from database using INTEREST_RATE keycode
+                interest_rate = get_calc_metric_value(ticker_data, ticker, year, quarter_num, 'INTEREST_RATE')
+                balance_quarter_values.append(interest_rate)
                 continue
 
             # Standard metric code mapping for Balance Sheet
@@ -446,7 +417,7 @@ def create_analysis_table(ticker_data, calculated_metrics, selected_quarter):
                 'Non-MTM Equities': 'not_mtm_equities_market_value',
                 'Bonds': 'bonds_market_value',
                 'CDs/Deposits': 'cds_deposits_market_value',
-                'Borrowing Balance': 'Borrowing_Balance',
+                'Total Debt': 'Total_Debt_Balance',
                 'Interest Expense': 'Interest_Expense'
             }.get(metric_name)
 
@@ -1262,8 +1233,8 @@ if selected_ticker and selected_quarter:
                     'Investment Income': 'Net_investment_income',
                     'Total Operating Income': 'Total_Operating_Income',
                     'CIR': 'CIR',
-                    'Interest Rate': 'Interest_Rate',
-                    'Borrowing Balance': 'Borrowing_Balance',
+                    'Interest Rate': 'INTEREST_RATE',
+                    'Total Debt': 'Total_Debt_Balance',
                 }
 
                 # Default metrics
