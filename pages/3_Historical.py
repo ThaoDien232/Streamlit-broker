@@ -971,11 +971,26 @@ def apply_cumulative_view(df_income, df_balance, income_metrics, balance_metrics
     """
     Convert dataframes to cumulative view:
     - IS items: accumulate quarters (3M = 1Q, 6M = 1Q+2Q, 9M = 1Q+2Q+3Q, year = all 4Q)
+    - Ratios/rates: keep as-is (market share, fees, rates, ROE, CIR, etc.)
     - BS items: keep as-is (already point-in-time)
     - Change column names to cumulative format (3M, 6M, 9M, year)
     """
     df_income_cum = df_income.copy()
     df_balance_cum = df_balance.copy()
+
+    # Define which metrics should be accumulated (only actual IS line items)
+    metrics_to_accumulate = [
+        'Net Brokerage Income',
+        'IB Income',
+        'Margin Income',
+        'Investment Income',
+        'Other Incomes',
+        'Total Operating Income',
+        'SG&A',
+        'Interest Expense',
+        'PBT',
+        'NPAT'
+    ]
 
     # Get quarter columns (exclude 'Metric', 'QoQ Growth %', 'YoY Growth %')
     quarter_cols = [col for col in df_income_cum.columns if col not in ['Metric', 'QoQ Growth %', 'YoY Growth %']]
@@ -995,26 +1010,29 @@ def apply_cumulative_view(df_income, df_balance, income_metrics, balance_metrics
         except:
             continue
 
-    # For each year, accumulate IS items
+    # For each year, accumulate only the IS line items (not ratios/rates)
     for year, year_quarters in quarters_by_year.items():
         sorted_year_quarters = sort_quarters_chronologically(year_quarters)
 
         for i, quarter_label in enumerate(sorted_year_quarters):
             # Accumulate IS items from Q1 to current quarter
             if i > 0:
-                for row_idx in range(len(income_metrics)):
+                for metric_name in metrics_to_accumulate:
+                    if metric_name not in income_metrics:
+                        continue
+
                     # Get all quarters from start of year to current
                     quarters_to_sum = sorted_year_quarters[:i+1]
 
                     # Calculate cumulative sum for this metric
                     cumulative_value = 0
                     for q in quarters_to_sum:
-                        val = df_income_cum.loc[df_income_cum['Metric'] == income_metrics[row_idx], q].values
+                        val = df_income_cum.loc[df_income_cum['Metric'] == metric_name, q].values
                         if len(val) > 0 and isinstance(val[0], (int, float)) and not pd.isna(val[0]):
                             cumulative_value += val[0]
 
                     # Update the dataframe with cumulative value
-                    df_income_cum.loc[df_income_cum['Metric'] == income_metrics[row_idx], quarter_label] = cumulative_value
+                    df_income_cum.loc[df_income_cum['Metric'] == metric_name, quarter_label] = cumulative_value
 
     # Rename columns to cumulative format
     new_col_mapping = {}
@@ -1121,7 +1139,7 @@ if selected_ticker and selected_quarter:
                 # Add cumulative view toggle
                 col_toggle, col_spacer = st.columns([1, 4])
                 with col_toggle:
-                    use_cumulative = st.checkbox("Cumulative View", value=False, help="Show YTD cumulative values for IS items (3M, 6M, 9M, year)")
+                    use_cumulative = st.toggle("Cumulative View", value=False)
 
                 st.markdown("*Units: VNDbn unless otherwise noted*")
 
