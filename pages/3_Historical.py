@@ -1015,24 +1015,23 @@ def apply_cumulative_view(df_income, df_balance, income_metrics, balance_metrics
         sorted_year_quarters = sort_quarters_chronologically(year_quarters)
 
         for i, quarter_label in enumerate(sorted_year_quarters):
-            # Accumulate IS items from Q1 to current quarter
-            if i > 0:
-                for metric_name in metrics_to_accumulate:
-                    if metric_name not in income_metrics:
-                        continue
+            # Accumulate IS items from Q1 to current quarter (including Q1 itself)
+            for metric_name in metrics_to_accumulate:
+                if metric_name not in income_metrics:
+                    continue
 
-                    # Get all quarters from start of year to current
-                    quarters_to_sum = sorted_year_quarters[:i+1]
+                # Get all quarters from start of year to current
+                quarters_to_sum = sorted_year_quarters[:i+1]
 
-                    # Calculate cumulative sum for this metric
-                    cumulative_value = 0
-                    for q in quarters_to_sum:
-                        val = df_income_cum.loc[df_income_cum['Metric'] == metric_name, q].values
-                        if len(val) > 0 and isinstance(val[0], (int, float)) and not pd.isna(val[0]):
-                            cumulative_value += val[0]
+                # Calculate cumulative sum for this metric
+                cumulative_value = 0
+                for q in quarters_to_sum:
+                    val = df_income_cum.loc[df_income_cum['Metric'] == metric_name, q].values
+                    if len(val) > 0 and isinstance(val[0], (int, float)) and not pd.isna(val[0]):
+                        cumulative_value += val[0]
 
-                    # Update the dataframe with cumulative value
-                    df_income_cum.loc[df_income_cum['Metric'] == metric_name, quarter_label] = cumulative_value
+                # Update the dataframe with cumulative value
+                df_income_cum.loc[df_income_cum['Metric'] == metric_name, quarter_label] = cumulative_value
 
     # Rename columns to cumulative format
     new_col_mapping = {}
