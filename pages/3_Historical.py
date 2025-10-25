@@ -974,9 +974,13 @@ def apply_cumulative_view(df_income, df_balance, income_metrics, balance_metrics
     - Ratios/rates: keep as-is (market share, fees, rates, ROE, CIR, etc.)
     - BS items: keep as-is (already point-in-time)
     - Change column names to cumulative format (3M, 6M, 9M, year)
+
+    Returns:
+        tuple: (df_income_cum, df_balance_cum, debug_lines)
     """
     df_income_cum = df_income.copy()
     df_balance_cum = df_balance.copy()
+    debug_lines = []  # Collect debug information
 
     # Define which metrics should be accumulated (only actual IS line items)
     metrics_to_accumulate = [
@@ -996,7 +1000,7 @@ def apply_cumulative_view(df_income, df_balance, income_metrics, balance_metrics
     quarter_cols = [col for col in df_income_cum.columns if col not in ['Metric', 'QoQ Growth %', 'YoY Growth %']]
 
     if len(quarter_cols) == 0:
-        return df_income_cum, df_balance_cum
+        return df_income_cum, df_balance_cum, debug_lines
 
     # Group quarters by year for cumulative calculation
     quarters_by_year = {}
@@ -1033,9 +1037,10 @@ def apply_cumulative_view(df_income, df_balance, income_metrics, balance_metrics
                         cumulative_value += val[0]
                         quarterly_values.append(f"{q}={val[0]/1_000_000_000:.1f}B")
 
-                # Debug output - only print for first metric to avoid spam
+                # Collect debug output for PBT only
                 if metric_name == 'PBT':
-                    print(f"DEBUG {year} {quarter_label}: {metric_name} = {' + '.join(quarterly_values)} = {cumulative_value/1_000_000_000:.1f}B")
+                    cumulative_label = convert_to_cumulative_label(quarter_label)
+                    debug_lines.append(f"**{cumulative_label}**: {' + '.join(quarterly_values)} = **{cumulative_value/1_000_000_000:.1f}B**")
 
                 # Update the dataframe with cumulative value
                 df_income_cum.loc[df_income_cum['Metric'] == metric_name, quarter_label] = cumulative_value
@@ -1048,7 +1053,7 @@ def apply_cumulative_view(df_income, df_balance, income_metrics, balance_metrics
     df_income_cum.rename(columns=new_col_mapping, inplace=True)
     df_balance_cum.rename(columns=new_col_mapping, inplace=True)
 
-    return df_income_cum, df_balance_cum
+    return df_income_cum, df_balance_cum, debug_lines
 
 # Main interface
 st.subheader("Select Broker and Quarter")
@@ -1150,6 +1155,7 @@ if selected_ticker and selected_quarter:
                 st.markdown("*Units: VNDbn unless otherwise noted*")
 
                 # Apply cumulative view if enabled
+                cumulative_debug = []
                 if use_cumulative:
                     # Income statement metrics list
                     income_statement_metrics = [
@@ -1187,7 +1193,7 @@ if selected_ticker and selected_quarter:
                         'Margin/Equity %'
                     ]
 
-                    df_income_statement, df_balance_sheet = apply_cumulative_view(
+                    df_income_statement, df_balance_sheet, cumulative_debug = apply_cumulative_view(
                         df_income_statement, df_balance_sheet,
                         income_statement_metrics, balance_sheet_metrics
                     )
@@ -1197,6 +1203,12 @@ if selected_ticker and selected_quarter:
                         df_income_statement = df_income_statement.drop(columns=['QoQ Growth %'])
                     if 'QoQ Growth %' in df_balance_sheet.columns:
                         df_balance_sheet = df_balance_sheet.drop(columns=['QoQ Growth %'])
+
+                    # Display debug information
+                    if cumulative_debug:
+                        st.info("**Cumulative PBT Calculation Debug:**")
+                        for line in cumulative_debug:
+                            st.markdown(f"- {line}")
 
                 # Format the dataframe for display
                 def format_value(val, metric_name):
