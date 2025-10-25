@@ -947,6 +947,85 @@ def sort_quarters_chronologically(quarters):
 
     return sorted(quarters, key=quarter_key)
 
+def convert_to_cumulative_label(quarter_label):
+    """Convert quarter label to cumulative format (1Q24 -> 3M24, 2Q24 -> 6M24, 3Q24 -> 9M24, 4Q24 -> 2024)"""
+    try:
+        quarter_num = int(quarter_label[0])
+        year_str = quarter_label[-2:]
+        year = 2000 + int(year_str) if int(year_str) < 50 else 1900 + int(year_str)
+
+        if quarter_num == 1:
+            return f"3M{year_str}"
+        elif quarter_num == 2:
+            return f"6M{year_str}"
+        elif quarter_num == 3:
+            return f"9M{year_str}"
+        elif quarter_num == 4:
+            return str(year)
+        else:
+            return quarter_label
+    except:
+        return quarter_label
+
+def apply_cumulative_view(df_income, df_balance, income_metrics, balance_metrics):
+    """
+    Convert dataframes to cumulative view:
+    - IS items: accumulate quarters (3M = 1Q, 6M = 1Q+2Q, 9M = 1Q+2Q+3Q, year = all 4Q)
+    - BS items: keep as-is (already point-in-time)
+    - Change column names to cumulative format (3M, 6M, 9M, year)
+    """
+    df_income_cum = df_income.copy()
+    df_balance_cum = df_balance.copy()
+
+    # Get quarter columns (exclude 'Metric', 'QoQ Growth %', 'YoY Growth %')
+    quarter_cols = [col for col in df_income_cum.columns if col not in ['Metric', 'QoQ Growth %', 'YoY Growth %']]
+
+    if len(quarter_cols) == 0:
+        return df_income_cum, df_balance_cum
+
+    # Group quarters by year for cumulative calculation
+    quarters_by_year = {}
+    for q in quarter_cols:
+        try:
+            year_str = q[-2:]
+            year = 2000 + int(year_str) if int(year_str) < 50 else 1900 + int(year_str)
+            if year not in quarters_by_year:
+                quarters_by_year[year] = []
+            quarters_by_year[year].append(q)
+        except:
+            continue
+
+    # For each year, accumulate IS items
+    for year, year_quarters in quarters_by_year.items():
+        sorted_year_quarters = sort_quarters_chronologically(year_quarters)
+
+        for i, quarter_label in enumerate(sorted_year_quarters):
+            # Accumulate IS items from Q1 to current quarter
+            if i > 0:
+                for row_idx in range(len(income_metrics)):
+                    # Get all quarters from start of year to current
+                    quarters_to_sum = sorted_year_quarters[:i+1]
+
+                    # Calculate cumulative sum for this metric
+                    cumulative_value = 0
+                    for q in quarters_to_sum:
+                        val = df_income_cum.loc[df_income_cum['Metric'] == income_metrics[row_idx], q].values
+                        if len(val) > 0 and isinstance(val[0], (int, float)) and not pd.isna(val[0]):
+                            cumulative_value += val[0]
+
+                    # Update the dataframe with cumulative value
+                    df_income_cum.loc[df_income_cum['Metric'] == income_metrics[row_idx], quarter_label] = cumulative_value
+
+    # Rename columns to cumulative format
+    new_col_mapping = {}
+    for col in quarter_cols:
+        new_col_mapping[col] = convert_to_cumulative_label(col)
+
+    df_income_cum.rename(columns=new_col_mapping, inplace=True)
+    df_balance_cum.rename(columns=new_col_mapping, inplace=True)
+
+    return df_income_cum, df_balance_cum
+
 # Main interface
 st.subheader("Select Broker and Quarter")
 
@@ -1038,7 +1117,62 @@ if selected_ticker and selected_quarter:
 
             with tab1:
                 st.subheader(f"Financial Metrics")
+
+                # Add cumulative view toggle
+                col_toggle, col_spacer = st.columns([1, 4])
+                with col_toggle:
+                    use_cumulative = st.checkbox("Cumulative View", value=False, help="Show YTD cumulative values for IS items (3M, 6M, 9M, year)")
+
                 st.markdown("*Units: VNDbn unless otherwise noted*")
+
+                # Apply cumulative view if enabled
+                if use_cumulative:
+                    # Income statement metrics list
+                    income_statement_metrics = [
+                        'Net Brokerage Income',
+                        'Market Liquidity (Avg Daily)',
+                        'Brokerage Market Share',
+                        'Net Brokerage Fee',
+                        'IB Income',
+                        'Margin Income',
+                        'Margin Lending Rate',
+                        'Margin Lending Spread',
+                        'Investment Income',
+                        'Other Incomes',
+                        'Total Operating Income',
+                        'SG&A',
+                        'CIR',
+                        'Interest Expense',
+                        'Interest Rate',
+                        'PBT',
+                        'NPAT',
+                        'ROE'
+                    ]
+
+                    # Balance sheet metrics list
+                    balance_sheet_metrics = [
+                        'Margin Balance',
+                        'MTM Equities',
+                        'Non-MTM Equities',
+                        'Bonds',
+                        'CDs/Deposits',
+                        'Total Investments',
+                        'Total Assets',
+                        'Total Debt',
+                        'Total Equity',
+                        'Margin/Equity %'
+                    ]
+
+                    df_income_statement, df_balance_sheet = apply_cumulative_view(
+                        df_income_statement, df_balance_sheet,
+                        income_statement_metrics, balance_sheet_metrics
+                    )
+
+                    # Remove QoQ Growth column in cumulative view
+                    if 'QoQ Growth %' in df_income_statement.columns:
+                        df_income_statement = df_income_statement.drop(columns=['QoQ Growth %'])
+                    if 'QoQ Growth %' in df_balance_sheet.columns:
+                        df_balance_sheet = df_balance_sheet.drop(columns=['QoQ Growth %'])
 
                 # Format the dataframe for display
                 def format_value(val, metric_name):
