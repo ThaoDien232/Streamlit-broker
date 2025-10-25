@@ -1025,10 +1025,17 @@ def apply_cumulative_view(df_income, df_balance, income_metrics, balance_metrics
 
                 # Calculate cumulative sum for this metric
                 cumulative_value = 0
+                quarterly_values = []  # For debug output
+
                 for q in quarters_to_sum:
                     val = df_income_cum.loc[df_income_cum['Metric'] == metric_name, q].values
                     if len(val) > 0 and isinstance(val[0], (int, float)) and not pd.isna(val[0]):
                         cumulative_value += val[0]
+                        quarterly_values.append(f"{q}={val[0]/1_000_000_000:.1f}B")
+
+                # Debug output - only print for first metric to avoid spam
+                if metric_name == 'PBT':
+                    print(f"DEBUG {year} {quarter_label}: {metric_name} = {' + '.join(quarterly_values)} = {cumulative_value/1_000_000_000:.1f}B")
 
                 # Update the dataframe with cumulative value
                 df_income_cum.loc[df_income_cum['Metric'] == metric_name, quarter_label] = cumulative_value
