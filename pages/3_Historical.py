@@ -1002,6 +1002,9 @@ def apply_cumulative_view(df_income, df_balance, income_metrics, balance_metrics
     if len(quarter_cols) == 0:
         return df_income_cum, df_balance_cum, debug_lines
 
+    # IMPORTANT: Store original quarterly values BEFORE any accumulation
+    df_income_original = df_income.copy()
+
     # Group quarters by year for cumulative calculation
     quarters_by_year = {}
     for q in quarter_cols:
@@ -1027,12 +1030,13 @@ def apply_cumulative_view(df_income, df_balance, income_metrics, balance_metrics
                 # Get all quarters from start of year to current
                 quarters_to_sum = sorted_year_quarters[:i+1]
 
-                # Calculate cumulative sum for this metric
+                # Calculate cumulative sum for this metric using ORIGINAL values
                 cumulative_value = 0
                 quarterly_values = []  # For debug output
 
                 for q in quarters_to_sum:
-                    val = df_income_cum.loc[df_income_cum['Metric'] == metric_name, q].values
+                    # Use original dataframe, not the accumulating one!
+                    val = df_income_original.loc[df_income_original['Metric'] == metric_name, q].values
                     if len(val) > 0 and isinstance(val[0], (int, float)) and not pd.isna(val[0]):
                         cumulative_value += val[0]
                         quarterly_values.append(f"{q}={val[0]/1_000_000_000:.1f}B")
@@ -1042,7 +1046,7 @@ def apply_cumulative_view(df_income, df_balance, income_metrics, balance_metrics
                     cumulative_label = convert_to_cumulative_label(quarter_label)
                     debug_lines.append(f"**{cumulative_label}**: {' + '.join(quarterly_values)} = **{cumulative_value/1_000_000_000:.1f}B**")
 
-                # Update the dataframe with cumulative value
+                # Update the cumulative dataframe with accumulated value
                 df_income_cum.loc[df_income_cum['Metric'] == metric_name, quarter_label] = cumulative_value
 
     # Rename columns to cumulative format
