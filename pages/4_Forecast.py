@@ -576,12 +576,22 @@ if show_daily_debug:
 
     df_daily = run_query(daily_query)
 
+    # Debug: Show raw query result info
+    st.markdown(f"**Debug Info:** Query returned {len(df_daily)} rows")
+    if not df_daily.empty:
+        st.markdown(f"**Columns:** {', '.join(df_daily.columns.tolist())}")
+        st.markdown(f"**Sample data (first 3 rows):**")
+        st.dataframe(df_daily.head(3), use_container_width=True)
+
     if not df_daily.empty:
         df_daily['TRADINGDATE'] = pd.to_datetime(df_daily['TRADINGDATE'])
         df_daily['Month'] = df_daily['TRADINGDATE'].dt.strftime('%B')
 
         # October data
+        st.markdown(f"**Filtering for October:** Looking for month == 10")
         df_oct = df_daily[df_daily['TRADINGDATE'].dt.month == 10].copy()
+        st.markdown(f"**October filter result:** {len(df_oct)} rows found")
+
         if not df_oct.empty:
             oct_avg = df_oct['TOTALVALUE'].mean() / 1e9
             st.markdown(f"#### October 2025 ({len(df_oct)} trading days)")
@@ -596,7 +606,10 @@ if show_daily_debug:
             st.warning("No October 2025 data found")
 
         # November data
+        st.markdown(f"**Filtering for November:** Looking for month == 11")
         df_nov = df_daily[df_daily['TRADINGDATE'].dt.month == 11].copy()
+        st.markdown(f"**November filter result:** {len(df_nov)} rows found")
+
         if not df_nov.empty:
             nov_avg = df_nov['TOTALVALUE'].mean() / 1e9
             st.markdown(f"#### November 2025 MTD ({len(df_nov)} trading days)")
@@ -616,13 +629,32 @@ if show_daily_debug:
             q4_combined_avg = df_daily['TOTALVALUE'].mean() / 1e9
             q4_total_value = df_daily['TOTALVALUE'].sum() / 1e12
 
-            st.markdown(f"#### Q4 2025 QTD Summary")
+            st.markdown(f"#### Q4 2025 QTD Summary (Direct from Database)")
             st.markdown(f"""
             - **Total Trading Days:** {q4_total_days}
             - **Average Daily Turnover:** {q4_combined_avg:,.2f} B VND
             - **Total Turnover:** {q4_total_value:,.2f} T VND
             - **Date Range:** {df_daily['TRADINGDATE'].min().strftime('%Y-%m-%d')} to {df_daily['TRADINGDATE'].max().strftime('%Y-%m-%d')}
             """)
+
+            # Compare with cached aggregated data
+            if not df_liquidity_raw.empty:
+                q4_cached = df_liquidity_raw[(df_liquidity_raw['Year'] == 2025) & (df_liquidity_raw['Quarter'] == 4)]
+                if not q4_cached.empty:
+                    cached_avg = q4_cached['Avg Daily Turnover (B VND)'].iloc[0]
+                    cached_days = q4_cached['Trading Days'].iloc[0]
+
+                    st.markdown(f"#### ⚠️ Comparison with Cached Aggregated Data Used in Forecast")
+                    st.markdown(f"""
+                    - **Cached Trading Days:** {cached_days} (Direct: {q4_total_days})
+                    - **Cached ADTV:** {cached_avg:,.2f} B VND (Direct: {q4_combined_avg:,.2f} B VND)
+                    - **Difference:** {cached_avg - q4_combined_avg:+,.2f} B VND ({((cached_avg - q4_combined_avg) / q4_combined_avg * 100):+.2f}%)
+                    """)
+
+                    if abs(cached_avg - q4_combined_avg) > 0.01:
+                        st.error(f"🚨 **DATA MISMATCH DETECTED!** The cached aggregated data differs from the direct daily calculation. This explains why your Q4 ADTV is wrong. Click 'Reload Data' button to refresh!")
+                    else:
+                        st.success("✅ Cached data matches direct calculation - data is up to date!")
     else:
         st.error("No daily data found for October or November 2025 in the database")
 
