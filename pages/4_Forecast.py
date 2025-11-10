@@ -562,26 +562,93 @@ if show_daily_debug:
 
     # Query daily data for October and November 2025
     from utils.db import run_query
-    daily_query = """
-    SELECT
+
+    st.markdown("### 🔍 Database Table Investigation")
+
+    # First, check what's the latest data in MarketIndex table
+    table_check_query = """
+    SELECT TOP 10
         TRADINGDATE,
+        COMGROUPCODE,
         TOTALVALUE,
         TOTALVALUE / 1e9 as Value_Bn_VND
     FROM dbo.MarketIndex
     WHERE COMGROUPCODE = 'VNINDEX'
-        AND YEAR(TRADINGDATE) = 2025
-        AND MONTH(TRADINGDATE) IN (10, 11)
+    ORDER BY TRADINGDATE DESC
+    """
+
+    st.markdown("**Checking: dbo.MarketIndex table - Latest 10 records for VNINDEX:**")
+    df_latest = run_query(table_check_query)
+
+    if not df_latest.empty:
+        st.dataframe(df_latest, use_container_width=True)
+        st.markdown(f"**Latest date in MarketIndex:** {df_latest['TRADINGDATE'].min()}")
+    else:
+        st.error("❌ MarketIndex table is empty or has no VNINDEX data!")
+
+    # Now check specifically for Q4 2025 data
+    st.markdown("---")
+    st.markdown("**Checking: Q4 2025 data (Oct-Nov) in dbo.MarketIndex:**")
+
+    check_query = """
+    SELECT
+        TRADINGDATE,
+        YEAR(TRADINGDATE) as Year,
+        MONTH(TRADINGDATE) as Month,
+        DAY(TRADINGDATE) as Day,
+        TOTALVALUE,
+        TOTALVALUE / 1e9 as Value_Bn_VND,
+        COMGROUPCODE
+    FROM dbo.MarketIndex
+    WHERE COMGROUPCODE = 'VNINDEX'
+        AND TRADINGDATE >= '2025-10-01'
+        AND TRADINGDATE < '2025-12-01'
     ORDER BY TRADINGDATE
     """
 
-    df_daily = run_query(daily_query)
+    df_daily = run_query(check_query)
 
     # Debug: Show raw query result info
-    st.markdown(f"**Debug Info:** Query returned {len(df_daily)} rows")
+    st.markdown(f"**Query Result:** {len(df_daily)} rows returned")
+
     if not df_daily.empty:
         st.markdown(f"**Columns:** {', '.join(df_daily.columns.tolist())}")
-        st.markdown(f"**Sample data (first 3 rows):**")
-        st.dataframe(df_daily.head(3), use_container_width=True)
+        st.markdown(f"**Date range in data:** {df_daily['TRADINGDATE'].min()} to {df_daily['TRADINGDATE'].max()}")
+
+        # Show breakdown by month
+        if 'Month' in df_daily.columns:
+            month_counts = df_daily.groupby('Month').size()
+            st.markdown(f"**Breakdown by month:**")
+            for month, count in month_counts.items():
+                month_name = "October" if month == 10 else "November" if month == 11 else f"Month {month}"
+                st.markdown(f"- {month_name}: {count} trading days")
+
+        st.markdown(f"**Sample data (first 5 rows):**")
+        st.dataframe(df_daily.head(5), use_container_width=True)
+        st.markdown(f"**Sample data (last 5 rows):**")
+        st.dataframe(df_daily.tail(5), use_container_width=True)
+    else:
+        st.error("❌ No data found for Q4 2025 (Oct-Nov) in dbo.MarketIndex table!")
+
+        # Additional check: Count all 2025 records
+        count_2025_query = """
+        SELECT
+            YEAR(TRADINGDATE) as Year,
+            MONTH(TRADINGDATE) as Month,
+            COUNT(*) as RecordCount
+        FROM dbo.MarketIndex
+        WHERE COMGROUPCODE = 'VNINDEX'
+            AND YEAR(TRADINGDATE) = 2025
+        GROUP BY YEAR(TRADINGDATE), MONTH(TRADINGDATE)
+        ORDER BY Month
+        """
+        df_2025_counts = run_query(count_2025_query)
+
+        if not df_2025_counts.empty:
+            st.markdown("**All 2025 data in MarketIndex by month:**")
+            st.dataframe(df_2025_counts, use_container_width=True)
+        else:
+            st.error("❌ No 2025 data at all in dbo.MarketIndex table!")
 
     if not df_daily.empty:
         df_daily['TRADINGDATE'] = pd.to_datetime(df_daily['TRADINGDATE'])
