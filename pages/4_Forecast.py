@@ -555,6 +555,77 @@ if not df_liquidity_raw.empty:
     else:
         st.sidebar.warning("No Q4/2025 data found in database")
 
+# Debug: Show detailed daily data for Oct and Nov 2025
+show_daily_debug = st.sidebar.checkbox("Show Oct/Nov daily data debug", value=False)
+if show_daily_debug:
+    st.markdown("### 📊 Daily Trading Data Debug - Q4/2025")
+
+    # Query daily data for October and November 2025
+    from utils.db import run_query
+    daily_query = """
+    SELECT
+        TRADINGDATE,
+        TOTALVALUE,
+        TOTALVALUE / 1e9 as Value_Bn_VND
+    FROM dbo.MarketIndex
+    WHERE COMGROUPCODE = 'VNINDEX'
+        AND YEAR(TRADINGDATE) = 2025
+        AND MONTH(TRADINGDATE) IN (10, 11)
+    ORDER BY TRADINGDATE
+    """
+
+    df_daily = run_query(daily_query)
+
+    if not df_daily.empty:
+        df_daily['TRADINGDATE'] = pd.to_datetime(df_daily['TRADINGDATE'])
+        df_daily['Month'] = df_daily['TRADINGDATE'].dt.strftime('%B')
+
+        # October data
+        df_oct = df_daily[df_daily['TRADINGDATE'].dt.month == 10].copy()
+        if not df_oct.empty:
+            oct_avg = df_oct['TOTALVALUE'].mean() / 1e9
+            st.markdown(f"#### October 2025 ({len(df_oct)} trading days)")
+            st.markdown(f"**Average Daily Turnover: {oct_avg:,.2f} B VND**")
+
+            oct_display = df_oct[['TRADINGDATE', 'Value_Bn_VND']].copy()
+            oct_display['TRADINGDATE'] = oct_display['TRADINGDATE'].dt.strftime('%Y-%m-%d')
+            oct_display.columns = ['Date', 'Daily Value (B VND)']
+            oct_display['Daily Value (B VND)'] = oct_display['Daily Value (B VND)'].apply(lambda x: f"{x:,.2f}")
+            st.dataframe(oct_display, use_container_width=True, hide_index=True)
+        else:
+            st.warning("No October 2025 data found")
+
+        # November data
+        df_nov = df_daily[df_daily['TRADINGDATE'].dt.month == 11].copy()
+        if not df_nov.empty:
+            nov_avg = df_nov['TOTALVALUE'].mean() / 1e9
+            st.markdown(f"#### November 2025 MTD ({len(df_nov)} trading days)")
+            st.markdown(f"**Average Daily Turnover: {nov_avg:,.2f} B VND**")
+
+            nov_display = df_nov[['TRADINGDATE', 'Value_Bn_VND']].copy()
+            nov_display['TRADINGDATE'] = nov_display['TRADINGDATE'].dt.strftime('%Y-%m-%d')
+            nov_display.columns = ['Date', 'Daily Value (B VND)']
+            nov_display['Daily Value (B VND)'] = nov_display['Daily Value (B VND)'].apply(lambda x: f"{x:,.2f}")
+            st.dataframe(nov_display, use_container_width=True, hide_index=True)
+        else:
+            st.warning("No November 2025 data found")
+
+        # Combined Q4 summary
+        if not df_daily.empty:
+            q4_total_days = len(df_daily)
+            q4_combined_avg = df_daily['TOTALVALUE'].mean() / 1e9
+            q4_total_value = df_daily['TOTALVALUE'].sum() / 1e12
+
+            st.markdown(f"#### Q4 2025 QTD Summary")
+            st.markdown(f"""
+            - **Total Trading Days:** {q4_total_days}
+            - **Average Daily Turnover:** {q4_combined_avg:,.2f} B VND
+            - **Total Turnover:** {q4_total_value:,.2f} T VND
+            - **Date Range:** {df_daily['TRADINGDATE'].min().strftime('%Y-%m-%d')} to {df_daily['TRADINGDATE'].max().strftime('%Y-%m-%d')}
+            """)
+    else:
+        st.error("No daily data found for October or November 2025 in the database")
+
 df_quarters = prepare_quarter_metrics(df_is_quarterly, selected_broker)
 if df_quarters.empty:
     st.warning("No quarterly data found for the selected broker.")
