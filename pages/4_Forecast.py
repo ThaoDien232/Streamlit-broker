@@ -34,7 +34,7 @@ def _safe_read_excel(path: str, **kwargs) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-@st.cache_data
+@st.cache_data(ttl=1800)  # Cache for 30 minutes to ensure QTD data stays fresh
 def load_data():
     """Load quarterly actuals, index data, and full-year forecast data."""
 
