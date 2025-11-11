@@ -546,6 +546,31 @@ GROUP BY YEAR(TRADINGDATE), DATEPART(QUARTER, TRADINGDATE)
 ORDER BY Year DESC, Quarter DESC
 """, language="sql")
 
+# Debug: Show latest 5 records from MarketIndex
+if st.sidebar.checkbox("Show latest MarketIndex records", value=False):
+    from utils.db import run_query
+    st.sidebar.markdown("### 📊 Latest 5 Records Query:")
+    st.sidebar.code("""
+SELECT TOP 5 * 
+FROM dbo.MarketIndex 
+WHERE COMGROUPCODE = 'VNINDEX' 
+ORDER BY TRADINGDATE DESC
+""", language="sql")
+    
+    latest_query = """
+    SELECT TOP 5 * 
+    FROM dbo.MarketIndex 
+    WHERE COMGROUPCODE = 'VNINDEX' 
+    ORDER BY TRADINGDATE DESC
+    """
+    df_latest_records = run_query(latest_query)
+    
+    if not df_latest_records.empty:
+        st.sidebar.markdown("### 📋 Latest Records:")
+        st.sidebar.dataframe(df_latest_records, use_container_width=True)
+    else:
+        st.sidebar.error("No records found in MarketIndex table")
+
 theme = theme_config.get("theme", {}) if isinstance(theme_config, dict) else {}
 background_color = theme.get("backgroundColor", "#FFFFFF")
 text_color = theme.get("textColor", "#000000")
