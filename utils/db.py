@@ -1,126 +1,50 @@
 import streamlit as st
 import pandas as pd
-import pymssql
 import pyodbc
 from contextlib import contextmanager
-from sqlalchemy import create_engine, text
-import urllib.parse
 import os
 
-def _get_db_config():
-    """Get database configuration from Streamlit secrets or environment variables"""
+def _get_db_connection_string():
+    """Get database connection string from Streamlit secrets or environment variables"""
 
-    # Method 1: Try Streamlit secrets (preferred for Streamlit Cloud)
-    if hasattr(st, 'secrets') and "db" in st.secrets:
-        return dict(st.secrets["db"])
+    # Method 1: Try DC_DB_STRING from Streamlit secrets (preferred)
+    if hasattr(st, 'secrets') and "DC_DB_STRING" in st.secrets:
+        return st.secrets["DC_DB_STRING"]
 
-    # Method 2: Try environment variables (fallback for other deployments)
-    env_config = {
-        'server': os.getenv('DB_SERVER'),
-        'database': os.getenv('DB_DATABASE'),
-        'username': os.getenv('DB_USERNAME'),
-        'password': os.getenv('DB_PASSWORD'),
-        'port': os.getenv('DB_PORT', '1433'),
-        'url': os.getenv('DB_URL')
-    }
-
-    # Check if we have the minimum required environment variables
-    if env_config['server'] and env_config['database'] and env_config['username'] and env_config['password']:
-        return env_config
+    # Method 2: Try environment variable (fallback)
+    env_conn_string = os.getenv('DC_DB_STRING')
+    if env_conn_string:
+        return env_conn_string
 
     # Method 3: Check if we're in Streamlit context but missing secrets
     if hasattr(st, 'secrets'):
         raise RuntimeError(
-            "Database configuration missing from Streamlit secrets. "
-            "Please add [db] section to your Streamlit Cloud app secrets."
+            "Database connection string missing from Streamlit secrets. "
+            "Please add DC_DB_STRING to your Streamlit Cloud app secrets."
         )
 
     # Method 4: Not in Streamlit context and no environment variables
     raise RuntimeError(
-        "Database configuration not found. Please set environment variables:\n"
-        "DB_SERVER, DB_DATABASE, DB_USERNAME, DB_PASSWORD\n"
-        "Or configure secrets in Streamlit Cloud dashboard."
+        "Database connection string not found. Please set environment variable:\n"
+        "DC_DB_STRING\n"
+        "Or configure DC_DB_STRING in Streamlit Cloud dashboard secrets."
     )
 
 @contextmanager
 def get_connection():
-    """Create database connection with multiple configuration sources"""
+    """Create database connection using pyodbc with DC_DB_STRING"""
     connection = None
 
     try:
-        # Get database configuration from available sources
-        db_config = _get_db_config()
+        # Get connection string from available sources
+        connection_string = _get_db_connection_string()
 
-        # Validate required database configuration
-        required_keys = ['server', 'database', 'username', 'password']
-        missing_keys = [key for key in required_keys if not db_config.get(key)]
-        if missing_keys:
-            raise RuntimeError(f"Missing required database configuration: {missing_keys}")
+        # Validate connection string exists
+        if not connection_string:
+            raise RuntimeError("Database connection string (DC_DB_STRING) is empty or invalid")
 
-        # Method 1: Try pyodbc with SQL Server driver (most compatible with Azure SQL)
-        try:
-            # Build ODBC connection string for Azure SQL
-            connection_string = (
-                f"DRIVER={{SQL Server}};"
-                f"SERVER={db_config['server']};"
-                f"DATABASE={db_config['database']};"
-                f"UID={db_config['username']};"
-                f"PWD={db_config['password']};"
-                f"Encrypt=yes;"
-                f"TrustServerCertificate=no;"
-                f"Connection Timeout=30;"
-            )
-
-            connection = pyodbc.connect(connection_string, timeout=30)
-
-        except Exception as pyodbc_error:
-            # Method 2: Fallback to pymssql (for non-Azure SQL Server)
-            try:
-                server = db_config['server']
-                port = int(db_config.get('port', 1433))
-
-                # Handle server,port format
-                if ',' in server:
-                    host_part, port_part = server.split(',', 1)
-                    server = host_part
-                    try:
-                        port = int(port_part)
-                    except ValueError:
-                        port = 1433
-
-                connection = pymssql.connect(
-                    server=server,
-                    user=db_config['username'],
-                    password=db_config['password'],
-                    database=db_config['database'],
-                    port=port,
-                    charset='UTF-8',
-                    autocommit=False,
-                    timeout=30,
-                    login_timeout=30
-                )
-
-            except Exception as pymssql_error:
-                # Method 3: Last resort - SQLAlchemy with URL (if available)
-                try:
-                    if not db_config.get("url"):
-                        raise RuntimeError("No 'url' found in database configuration")
-
-                    connection_url = db_config["url"]
-                    # Fix driver name in URL
-                    fixed_url = connection_url.replace("ODBC+Driver+18+for+SQL+Server", "SQL+Server")
-
-                    engine = create_engine(fixed_url, pool_pre_ping=True)
-                    connection = engine.connect()
-
-                except Exception as sqlalchemy_error:
-                    raise RuntimeError(
-                        f"All database connection methods failed. Please check your database configuration.\n"
-                        f"Errors:\n"
-                        f"  pyodbc: {pyodbc_error}\n"
-                        f"  pymssql: {pymssql_error}\n"
-                        f"  sqlalchemy: {sqlalchemy_error}"
-                    )
+        # Connect using pyodbc
+        connection = pyodbc.connect(connection_string, timeout=30)
 
         # Yield the connection
         try:
@@ -140,42 +64,19 @@ def run_query(sql: str, params: dict | None = None) -> pd.DataFrame:
     """Execute SQL query and return results as DataFrame"""
     try:
         with get_connection() as conn:
-            # Detect connection type and handle accordingly
-            connection_type = type(conn).__name__
+            # pyodbc connection - use ? placeholders for parameters
+            if params:
+                # Convert named parameters (:param) to positional (?) for pyodbc
+                formatted_sql = sql
+                param_values = []
 
-            if connection_type == 'Connection' and hasattr(conn, 'execute'):
-                # SQLAlchemy connection
-                if params:
-                    # Use SQLAlchemy text() for named parameters
-                    result = pd.read_sql(text(sql), conn, params=params)
-                else:
-                    result = pd.read_sql(text(sql), conn)
+                for key, value in params.items():
+                    formatted_sql = formatted_sql.replace(f":{key}", "?")
+                    param_values.append(value)
 
-            elif hasattr(conn, 'cursor'):
-                # pyodbc or pymssql connection
-                if params:
-                    # Convert named parameters (:param) to positional (%s or ?)
-                    formatted_sql = sql
-                    param_values = []
-
-                    # Determine parameter style based on connection
-                    if 'pyodbc' in str(type(conn)):
-                        # pyodbc uses ? placeholders
-                        for key, value in params.items():
-                            formatted_sql = formatted_sql.replace(f":{key}", "?")
-                            param_values.append(value)
-                    else:
-                        # pymssql uses %s placeholders
-                        for key, value in params.items():
-                            formatted_sql = formatted_sql.replace(f":{key}", "%s")
-                            param_values.append(value)
-
-                    result = pd.read_sql(formatted_sql, conn, params=param_values)
-                else:
-                    result = pd.read_sql(sql, conn)
+                result = pd.read_sql(formatted_sql, conn, params=param_values)
             else:
-                # Direct pandas read_sql
-                result = pd.read_sql(sql, conn, params=params)
+                result = pd.read_sql(sql, conn)
 
             return result
 
@@ -192,24 +93,11 @@ def test_connection() -> bool:
     """Test database connection and return True if successful"""
     try:
         with get_connection() as conn:
-            # Handle different connection types
-            connection_type = type(conn).__name__
-
-            if connection_type == 'Connection' and hasattr(conn, 'execute'):
-                # SQLAlchemy connection
-                result = conn.execute(text("SELECT 1 as test"))
-                result.fetchone()
-            elif hasattr(conn, 'cursor'):
-                # pyodbc or pymssql connection
-                cursor = conn.cursor()
-                cursor.execute("SELECT 1 as test")
-                result = cursor.fetchone()
-                cursor.close()
-            else:
-                # Try direct execution
-                result = conn.execute("SELECT 1 as test")
-                result.fetchone()
-
+            # pyodbc connection test
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 as test")
+            result = cursor.fetchone()
+            cursor.close()
             return True
     except Exception as e:
         st.error(f"Database connection test failed: {e}")
