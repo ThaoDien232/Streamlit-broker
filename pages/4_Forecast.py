@@ -543,7 +543,6 @@ if not available_brokers:
 
 default_broker = 'SSI' if 'SSI' in available_brokers else available_brokers[0]
 selected_broker = st.sidebar.selectbox("Select Broker", options=available_brokers, index=available_brokers.index(default_broker))
-show_share_debug = st.sidebar.checkbox("Show market share debug", value=False)
 
 # Display Q4 data freshness info
 if not df_liquidity_raw.empty:
@@ -554,176 +553,6 @@ if not df_liquidity_raw.empty:
         st.sidebar.info(f"**Q4/2025 QTD Data:**\n\n{q4_days} trading days\n\nAvg: {q4_avg:,.0f} B VND/day")
     else:
         st.sidebar.warning("No Q4/2025 data found in database")
-
-# Debug: Show detailed daily data for Oct and Nov 2025
-show_daily_debug = st.sidebar.checkbox("Show Oct/Nov daily data debug", value=False)
-if show_daily_debug:
-    st.markdown("### 📊 Daily Trading Data Debug - Q4/2025")
-
-    # Query daily data for October and November 2025
-    from utils.db import run_query
-
-    st.markdown("### 🔍 Database Table Investigation")
-
-    # First, check what's the latest data in MarketIndex table
-    table_check_query = """
-    SELECT TOP 10
-        TRADINGDATE,
-        COMGROUPCODE,
-        TOTALVALUE,
-        TOTALVALUE / 1e9 as Value_Bn_VND
-    FROM dbo.MarketIndex
-    WHERE COMGROUPCODE = 'VNINDEX'
-    ORDER BY TRADINGDATE DESC
-    """
-
-    st.markdown("**Checking: dbo.MarketIndex table - Latest 10 records for VNINDEX:**")
-    df_latest = run_query(table_check_query)
-
-    if not df_latest.empty:
-        st.dataframe(df_latest, use_container_width=True)
-        st.markdown(f"**Latest date in MarketIndex:** {df_latest['TRADINGDATE'].min()}")
-    else:
-        st.error("❌ MarketIndex table is empty or has no VNINDEX data!")
-
-    # Now check specifically for Q4 2025 data
-    st.markdown("---")
-    st.markdown("**Checking: Q4 2025 data (Oct-Nov) in dbo.MarketIndex:**")
-
-    check_query = """
-    SELECT
-        TRADINGDATE,
-        YEAR(TRADINGDATE) as Year,
-        MONTH(TRADINGDATE) as Month,
-        DAY(TRADINGDATE) as Day,
-        TOTALVALUE,
-        TOTALVALUE / 1e9 as Value_Bn_VND,
-        COMGROUPCODE
-    FROM dbo.MarketIndex
-    WHERE COMGROUPCODE = 'VNINDEX'
-        AND TRADINGDATE >= '2025-10-01'
-        AND TRADINGDATE < '2025-12-01'
-    ORDER BY TRADINGDATE
-    """
-
-    df_daily = run_query(check_query)
-
-    # Debug: Show raw query result info
-    st.markdown(f"**Query Result:** {len(df_daily)} rows returned")
-
-    if not df_daily.empty:
-        st.markdown(f"**Columns:** {', '.join(df_daily.columns.tolist())}")
-        st.markdown(f"**Date range in data:** {df_daily['TRADINGDATE'].min()} to {df_daily['TRADINGDATE'].max()}")
-
-        # Show breakdown by month
-        if 'Month' in df_daily.columns:
-            month_counts = df_daily.groupby('Month').size()
-            st.markdown(f"**Breakdown by month:**")
-            for month, count in month_counts.items():
-                month_name = "October" if month == 10 else "November" if month == 11 else f"Month {month}"
-                st.markdown(f"- {month_name}: {count} trading days")
-
-        st.markdown(f"**Sample data (first 5 rows):**")
-        st.dataframe(df_daily.head(5), use_container_width=True)
-        st.markdown(f"**Sample data (last 5 rows):**")
-        st.dataframe(df_daily.tail(5), use_container_width=True)
-    else:
-        st.error("❌ No data found for Q4 2025 (Oct-Nov) in dbo.MarketIndex table!")
-
-        # Additional check: Count all 2025 records
-        count_2025_query = """
-        SELECT
-            YEAR(TRADINGDATE) as Year,
-            MONTH(TRADINGDATE) as Month,
-            COUNT(*) as RecordCount
-        FROM dbo.MarketIndex
-        WHERE COMGROUPCODE = 'VNINDEX'
-            AND YEAR(TRADINGDATE) = 2025
-        GROUP BY YEAR(TRADINGDATE), MONTH(TRADINGDATE)
-        ORDER BY Month
-        """
-        df_2025_counts = run_query(count_2025_query)
-
-        if not df_2025_counts.empty:
-            st.markdown("**All 2025 data in MarketIndex by month:**")
-            st.dataframe(df_2025_counts, use_container_width=True)
-        else:
-            st.error("❌ No 2025 data at all in dbo.MarketIndex table!")
-
-    if not df_daily.empty:
-        df_daily['TRADINGDATE'] = pd.to_datetime(df_daily['TRADINGDATE'])
-        df_daily['Month'] = df_daily['TRADINGDATE'].dt.strftime('%B')
-
-        # October data
-        st.markdown(f"**Filtering for October:** Looking for month == 10")
-        df_oct = df_daily[df_daily['TRADINGDATE'].dt.month == 10].copy()
-        st.markdown(f"**October filter result:** {len(df_oct)} rows found")
-
-        if not df_oct.empty:
-            oct_avg = df_oct['TOTALVALUE'].mean() / 1e9
-            st.markdown(f"#### October 2025 ({len(df_oct)} trading days)")
-            st.markdown(f"**Average Daily Turnover: {oct_avg:,.2f} B VND**")
-
-            oct_display = df_oct[['TRADINGDATE', 'Value_Bn_VND']].copy()
-            oct_display['TRADINGDATE'] = oct_display['TRADINGDATE'].dt.strftime('%Y-%m-%d')
-            oct_display.columns = ['Date', 'Daily Value (B VND)']
-            oct_display['Daily Value (B VND)'] = oct_display['Daily Value (B VND)'].apply(lambda x: f"{x:,.2f}")
-            st.dataframe(oct_display, use_container_width=True, hide_index=True)
-        else:
-            st.warning("No October 2025 data found")
-
-        # November data
-        st.markdown(f"**Filtering for November:** Looking for month == 11")
-        df_nov = df_daily[df_daily['TRADINGDATE'].dt.month == 11].copy()
-        st.markdown(f"**November filter result:** {len(df_nov)} rows found")
-
-        if not df_nov.empty:
-            nov_avg = df_nov['TOTALVALUE'].mean() / 1e9
-            st.markdown(f"#### November 2025 MTD ({len(df_nov)} trading days)")
-            st.markdown(f"**Average Daily Turnover: {nov_avg:,.2f} B VND**")
-
-            nov_display = df_nov[['TRADINGDATE', 'Value_Bn_VND']].copy()
-            nov_display['TRADINGDATE'] = nov_display['TRADINGDATE'].dt.strftime('%Y-%m-%d')
-            nov_display.columns = ['Date', 'Daily Value (B VND)']
-            nov_display['Daily Value (B VND)'] = nov_display['Daily Value (B VND)'].apply(lambda x: f"{x:,.2f}")
-            st.dataframe(nov_display, use_container_width=True, hide_index=True)
-        else:
-            st.warning("No November 2025 data found")
-
-        # Combined Q4 summary
-        if not df_daily.empty:
-            q4_total_days = len(df_daily)
-            q4_combined_avg = df_daily['TOTALVALUE'].mean() / 1e9
-            q4_total_value = df_daily['TOTALVALUE'].sum() / 1e12
-
-            st.markdown(f"#### Q4 2025 QTD Summary (Direct from Database)")
-            st.markdown(f"""
-            - **Total Trading Days:** {q4_total_days}
-            - **Average Daily Turnover:** {q4_combined_avg:,.2f} B VND
-            - **Total Turnover:** {q4_total_value:,.2f} T VND
-            - **Date Range:** {df_daily['TRADINGDATE'].min().strftime('%Y-%m-%d')} to {df_daily['TRADINGDATE'].max().strftime('%Y-%m-%d')}
-            """)
-
-            # Compare with cached aggregated data
-            if not df_liquidity_raw.empty:
-                q4_cached = df_liquidity_raw[(df_liquidity_raw['Year'] == 2025) & (df_liquidity_raw['Quarter'] == 4)]
-                if not q4_cached.empty:
-                    cached_avg = q4_cached['Avg Daily Turnover (B VND)'].iloc[0]
-                    cached_days = q4_cached['Trading Days'].iloc[0]
-
-                    st.markdown(f"#### ⚠️ Comparison with Cached Aggregated Data Used in Forecast")
-                    st.markdown(f"""
-                    - **Cached Trading Days:** {cached_days} (Direct: {q4_total_days})
-                    - **Cached ADTV:** {cached_avg:,.2f} B VND (Direct: {q4_combined_avg:,.2f} B VND)
-                    - **Difference:** {cached_avg - q4_combined_avg:+,.2f} B VND ({((cached_avg - q4_combined_avg) / q4_combined_avg * 100):+.2f}%)
-                    """)
-
-                    if abs(cached_avg - q4_combined_avg) > 0.01:
-                        st.error(f"🚨 **DATA MISMATCH DETECTED!** The cached aggregated data differs from the direct daily calculation. This explains why your Q4 ADTV is wrong. Click 'Reload Data' button to refresh!")
-                    else:
-                        st.success("✅ Cached data matches direct calculation - data is up to date!")
-    else:
-        st.error("No daily data found for October or November 2025 in the database")
 
 df_quarters = prepare_quarter_metrics(df_is_quarterly, selected_broker)
 if df_quarters.empty:
@@ -932,7 +761,6 @@ history_metrics = []
 year_fee_observations = {}
 broker_code_norm = get_brokerage_code(selected_broker)
 broker_code_norm = broker_code_norm.strip().upper() if broker_code_norm else None
-market_share_debug = []
 
 for y, q in brokerage_history_quarters:
     stats = quarter_stats_lookup.get((y, q), {})
@@ -991,15 +819,6 @@ for y, q in brokerage_history_quarters:
         'trading_days': trading_days,
         'net_brokerage': net_brokerage,
         'share_decimal': share_decimal,
-    })
-
-    market_share_debug.append({
-        'Period': quarter_label(y, q),
-        'Broker Code': broker_code_norm or '-',
-        'API Rows': int(len(share_df)) if not share_df.empty else 0,
-        'API Share %': api_share_pct if api_share_pct is not None else None,
-        'Turnover Share %': share_decimal * 100 if (share_decimal and api_share_pct is None) else None,
-        'Final Share %': share_pct_display,
     })
 
 history_avg_daily = [m['avg_daily_bn'] for m in history_metrics if m['avg_daily_bn'] is not None]
@@ -1084,14 +903,6 @@ if broker_code_norm and not target_share_df.empty:
     match = target_share_df[target_share_df['Brokerage_Code'] == broker_code_norm]
     if not match.empty:
         target_api_share = match.iloc[0]['Market_Share_Percent']
-market_share_debug.append({
-    'Period': target_label,
-    'Broker Code': broker_code_norm or '-',
-    'API Rows': int(len(target_share_df)) if not target_share_df.empty else 0,
-    'API Share %': target_api_share,
-    'Turnover Share %': share_default_pct if (share_default_pct is not None and target_api_share is None) else None,
-    'Final Share %': forecast_metrics['share_pct'],
-})
 
 def fmt_value(value, decimals=0, suffix=""):
     if value is None or (isinstance(value, float) and math.isnan(value)):
@@ -1126,10 +937,6 @@ brokerage_table_df = pd.DataFrame(table_rows)
 brokerage_table_df = brokerage_table_df.set_index('Metric')
 st.dataframe(brokerage_table_df, use_container_width=True)
 
-if show_share_debug:
-    debug_df = pd.DataFrame(market_share_debug)
-    st.markdown("#### Market Share Debug")
-    st.dataframe(debug_df, use_container_width=True)
 st.caption(f"Assuming {trading_days_forecast} trading days for {target_label} and applying net brokerage formula.")
 
 def extract_is_value(year: int, quarter: int, codes: list[str]) -> float | None:
