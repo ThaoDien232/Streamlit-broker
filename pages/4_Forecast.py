@@ -544,16 +544,6 @@ if not available_brokers:
 default_broker = 'SSI' if 'SSI' in available_brokers else available_brokers[0]
 selected_broker = st.sidebar.selectbox("Select Broker", options=available_brokers, index=available_brokers.index(default_broker))
 
-# Display Q4 data freshness info
-if not df_liquidity_raw.empty:
-    q4_2025_data = df_liquidity_raw[(df_liquidity_raw['Year'] == 2025) & (df_liquidity_raw['Quarter'] == 4)]
-    if not q4_2025_data.empty:
-        q4_avg = q4_2025_data['Avg Daily Turnover (B VND)'].iloc[0]
-        q4_days = q4_2025_data['Trading Days'].iloc[0]
-        st.sidebar.info(f"**Q4/2025 QTD Data:**\n\n{q4_days} trading days\n\nAvg: {q4_avg:,.0f} B VND/day")
-    else:
-        st.sidebar.warning("No Q4/2025 data found in database")
-
 df_quarters = prepare_quarter_metrics(df_is_quarterly, selected_broker)
 if df_quarters.empty:
     st.warning("No quarterly data found for the selected broker.")
