@@ -481,7 +481,7 @@ if not stats_df.empty:
     if 'Type' in table_df.columns:
         table_df = table_df.drop('Type', axis=1)
 
-    # Format numeric columns for better display
+    # Format numeric columns for better display (limit to 2 decimal places)
     def format_table_value(val, col_name):
         if pd.isna(val):
             return None
@@ -489,11 +489,11 @@ if not stats_df.empty:
             if metric_type in ['ROE', 'ROA']:
                 return f"{val*100:.2f}%"
             elif metric_type in ['NPAT', 'TOTAL_EQUITY', 'TOTAL_ASSETS']:
-                return f"{val/1e9:.1f}B" if val >= 1e9 else f"{val/1e6:.0f}M"
+                return f"{val/1e9:.2f}B" if val >= 1e9 else f"{val/1e6:.2f}M"
             else:
                 return round(val, 2)
         elif col_name == 'CDF (%)':
-            return f"{val:.1f}%"
+            return f"{val:.2f}%"
         elif col_name == 'Z-Score':
             return round(val, 2)
         else:
