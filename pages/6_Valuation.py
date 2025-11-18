@@ -143,13 +143,8 @@ st.caption(f"Latest data: {latest_date.strftime('%Y-%m-%d')} | Metric: {selected
 # Chart 1: Valuation Distribution Candle Chart
 st.subheader("📈 Valuation Distribution by Broker")
 
-# Sector selection above the chart
-sector_options = ["All_Brokers", "Listed", "Unlisted"] if include_unlisted else ["All_Brokers", "Listed"]
-selected_sector = st.selectbox(
-    "Select Sector:",
-    sector_options,
-    help="Shows selected sector plus all component brokers"
-)
+# No sector selection needed - always show All_Brokers
+selected_sector = "All_Brokers"
 
 # Get tickers to display
 display_tickers = get_sector_and_components(df, selected_sector, include_unlisted)
