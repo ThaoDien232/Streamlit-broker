@@ -192,11 +192,11 @@ def calculate_profit_loss(df, quarter_prices, current_prices, quarter):
     """Calculate profit/loss from quarter-end to current prices"""
     df_calc = df.copy()
     # Add quarter-end price column
-    df_calc['Quarter_End_Price'] = df_calc['Ticker'].map(quarter_prices)
-    df_calc['Current_Price'] = df_calc['Ticker'].map(current_prices)
+    df_calc['Quarter_End_Price'] = df_calc['Holdings'].map(quarter_prices)
+    df_calc['Current_Price'] = df_calc['Holdings'].map(current_prices)
     # Calculate volume using quarter-end prices (volume at quarter end)
-    df_calc['Volume'] = df_calc.apply(lambda row: 
-        0 if row['Ticker'].upper() == 'OTHERS' or pd.isna(row['Quarter_End_Price']) or row['Quarter_End_Price'] == 0
+    df_calc['Volume'] = df_calc.apply(lambda row:
+        0 if row['Holdings'].upper() == 'OTHERS' or pd.isna(row['Quarter_End_Price']) or row['Quarter_End_Price'] == 0
         else row['FVTPL value'] / row['Quarter_End_Price'], axis=1)
     # Calculate quarter-end market value
     df_calc['Quarter_End_Market_Value'] = df_calc['Volume'] * df_calc['Quarter_End_Price'].fillna(0)
@@ -218,7 +218,7 @@ def formatted_table(df, selected_quarters=None, key_suffix="", show_selectbox=Tr
     import hashlib
     df_cols_str = ','.join(df.columns.astype(str))
     quarters_str = ','.join(selected_quarters) if selected_quarters is not None else ''
-    broker_info = df['Broker'].iloc[0] if 'Broker' in df.columns and not df.empty else 'unknown'
+    broker_info = df['Ticker'].iloc[0] if 'Ticker' in df.columns and not df.empty else 'unknown'
     # Remove time.time() to preserve selectbox state across reruns
     unique_str = f"{df_cols_str}-{quarters_str}-{broker_info}-{key_suffix}"
     selectbox_key = f"value_col_{hashlib.md5(unique_str.encode()).hexdigest()}"
@@ -240,15 +240,15 @@ def formatted_table(df, selected_quarters=None, key_suffix="", show_selectbox=Tr
         all_quarters = sort_quarters_by_date(selected_quarters)
 
     # Filter out 'PBT' for pivot table calculation
-    df_no_pbt = df[df['Ticker'] != 'PBT']
+    df_no_pbt = df[df['Holdings'] != 'PBT']
 
     # Group and aggregate the data
-    group_cols = ['Ticker', 'Quarter']
+    group_cols = ['Holdings', 'Quarter']
     df_no_pbt = df_no_pbt.groupby(group_cols, as_index=False).sum()
 
     # Create pivot table
     pivot_table = df_no_pbt.pivot(
-        index='Ticker',
+        index='Holdings',
         columns='Quarter',
         values=value_col
     ).fillna(0)
@@ -330,10 +330,10 @@ def formatted_table(df, selected_quarters=None, key_suffix="", show_selectbox=Tr
     pivot_table[pct_col] = pivot_table.index.map(lambda t: pct_dict.get(t, '') if t not in ['PBT'] else '')
 
     # Add PBT and total rows separately
-    pbt_rows = df[df['Ticker'] == 'PBT']
+    pbt_rows = df[df['Holdings'] == 'PBT']
     if not pbt_rows.empty:
         pbt_pivot = pbt_rows.pivot_table(
-            index='Ticker',
+            index='Holdings',
             columns='Quarter',
             values=value_col,
             aggfunc='first',  # Take the value as-is, no sum
@@ -414,8 +414,8 @@ else:
 
 def display_prop_book_table():
     """Display prop book data by broker and quarter"""
-    
-    brokers = sorted(df_book['Broker'].unique())
+
+    brokers = sorted(df_book['Ticker'].unique())
     quarters = sort_quarters_by_date(df_book['Quarter'].unique())
 
     # Initialize session state for selected broker
@@ -458,10 +458,10 @@ def display_prop_book_table():
         if selected_quarters:
             # Create data organized by broker for the selected quarters
             combined_csv = ""
-            brokers_for_export = sorted(df_book['Broker'].unique())
+            brokers_for_export = sorted(df_book['Ticker'].unique())
 
             for broker in brokers_for_export:
-                broker_df = df_book[(df_book['Broker'] == broker) & (df_book['Quarter'].isin(selected_quarters))].copy()
+                broker_df = df_book[(df_book['Ticker'] == broker) & (df_book['Quarter'].isin(selected_quarters))].copy()
                 if not broker_df.empty:
                     combined_csv += f"\n{broker} Prop Book\n"
 
@@ -496,8 +496,8 @@ def display_prop_book_table():
 
     filtered_df = df_book.copy()
     # Only include PBT rows for the selected broker and selected quarters
-    if selected_brokers and 'Broker' in df_book.columns:
-        filtered_df = filtered_df[(filtered_df['Broker'] == selected_brokers) | ((filtered_df['Ticker'] == 'PBT') & (filtered_df['Broker'] == selected_brokers))]
+    if selected_brokers and 'Ticker' in df_book.columns:
+        filtered_df = filtered_df[(filtered_df['Ticker'] == selected_brokers) | ((filtered_df['Holdings'] == 'PBT') & (filtered_df['Ticker'] == selected_brokers))]
     if selected_quarters and 'Quarter' in df_book.columns:
         filtered_df = filtered_df[filtered_df['Quarter'].isin(selected_quarters)]
 
