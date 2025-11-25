@@ -571,6 +571,25 @@ target_label = quarter_label(target_year, target_quarter)
 forecast_keys = [segment['forecast_key'] for segment in SEGMENTS] + ['PBT', 'Total_Operating_Income']
 forecast_map = get_forecast_map(df_forecast, selected_broker, target_year, forecast_keys)
 
+# Debug: Print Net_Revenue data
+st.write("🐛 DEBUG - Forecast Map Keys:", list(forecast_map.keys()))
+if 'Net_Revenue' in forecast_map:
+    st.write(f"🐛 DEBUG - Net_Revenue from forecast_map: {forecast_map['Net_Revenue']}")
+else:
+    st.write("🐛 DEBUG - Net_Revenue NOT found in forecast_map")
+
+# Debug: Check raw forecast data for Net_Revenue
+if not df_forecast.empty:
+    net_revenue_rows = df_forecast[
+        (df_forecast['TICKER'] == selected_broker) & 
+        (df_forecast['KEYCODE'] == 'Net_Revenue')
+    ]
+    if not net_revenue_rows.empty:
+        st.write("🐛 DEBUG - Net_Revenue rows in df_forecast:")
+        st.dataframe(net_revenue_rows)
+    else:
+        st.write("🐛 DEBUG - No Net_Revenue rows found in df_forecast for selected broker")
+
 ytd_mask = (df_quarters['YEARREPORT'] == target_year) & (df_quarters['LENGTHREPORT'] < target_quarter)
 ytd_totals = collect_totals(df_quarters, ytd_mask)
 
