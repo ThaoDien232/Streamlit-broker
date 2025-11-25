@@ -678,22 +678,34 @@ fy_pbt = fy_pbt_raw / 1e9
 base_pbt = (fy_pbt - ytd_totals.get('pbt', 0.0) / 1e9) / remaining_quarters
 
 # Calculate residual_other from Net_Revenue (revenue components only)
+# Revenue segments only (exclude SG&A and Interest Expense which are costs)
+revenue_segments = ['brokerage_fee', 'margin_income', 'investment_income', 'ib_income']
+
 # Net_Revenue is stored in raw VND in database, needs conversion to bn VND
 fy_net_revenue = forecast_map.get('Net_Revenue', 0.0) / 1e9
-# YTD Net_Revenue needs to be converted from raw VND to bn VND
-ytd_net_revenue = ytd_totals.get('net_revenue', 0.0) / 1e9
+
+# Calculate YTD Net_Revenue from actual revenue segments (not from ytd_totals which doesn't have 'net_revenue')
+ytd_revenue_segments_sum = sum(ytd_totals.get(key, 0.0) for key in revenue_segments) / 1e9
 
 st.write(f"🐛 DEBUG - Net Revenue Calculation:")
-st.write(f"  FY Net_Revenue (from forecast, in bn): {fy_net_revenue:,.2f} bn VND")
-st.write(f"  YTD Net_Revenue (from actuals, converted to bn): {ytd_net_revenue:,.2f} bn VND")
+st.write(f"  FY Net_Revenue (from forecast, full year, in bn): {fy_net_revenue:,.2f} bn VND")
+st.write(f"  YTD Revenue Segments Sum (realized Q1-Q{target_quarter-1}, in bn): {ytd_revenue_segments_sum:,.2f} bn VND")
+st.write(f"  Remaining quarters: {remaining_quarters}")
+
+# For Net Revenue we need to use Total Operating Income from forecast if available, or estimate from revenue segments
+fy_toi = forecast_map.get('Total_Operating_Income', 0.0) / 1e9
+st.write(f"  FY Total Operating Income (from forecast, in bn): {fy_toi:,.2f} bn VND")
+
+# Calculate YTD TOI by summing all revenue components (including residual/other)
+# Since we don't have historical residual data, use Net_Revenue if available, otherwise estimate
+ytd_net_revenue = ytd_revenue_segments_sum  # This is our best estimate
+st.write(f"  YTD Net_Revenue (estimated from revenue segments, in bn): {ytd_net_revenue:,.2f} bn VND")
 st.write(f"  Remaining quarters: {remaining_quarters}")
 
 base_net_revenue = (fy_net_revenue - ytd_net_revenue) / remaining_quarters if fy_net_revenue != 0.0 else 0.0
 
 st.write(f"  Base Net_Revenue per quarter: {base_net_revenue:,.2f} bn VND")
 
-# Revenue segments only (exclude SG&A and Interest Expense which are costs)
-revenue_segments = ['brokerage_fee', 'margin_income', 'investment_income', 'ib_income']
 # base_segments values are already in bn VND (calculated from FY forecast in bn - YTD realized in bn)
 sum_revenue_segments = sum(base_segments.get(key, 0.0) for key in revenue_segments)
 
