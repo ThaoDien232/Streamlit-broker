@@ -571,39 +571,6 @@ target_label = quarter_label(target_year, target_quarter)
 forecast_keys = [segment['forecast_key'] for segment in SEGMENTS] + ['PBT', 'Total_Operating_Income', 'Net_Revenue']
 forecast_map = get_forecast_map(df_forecast, selected_broker, target_year, forecast_keys)
 
-# Debug: Print Net_Revenue data
-st.write("🐛 DEBUG - Forecast Map Keys:", list(forecast_map.keys()))
-if 'Net_Revenue' in forecast_map:
-    raw_net_revenue = forecast_map['Net_Revenue']
-    converted_net_revenue = raw_net_revenue / 1e9
-    st.write(f"🐛 DEBUG - Net_Revenue (raw from database): {raw_net_revenue:,.0f} VND")
-    st.write(f"🐛 DEBUG - Net_Revenue (converted to bn): {converted_net_revenue:,.2f} bn VND")
-else:
-    st.write("🐛 DEBUG - Net_Revenue NOT found in forecast_map")
-
-# Debug: Check raw forecast data for Net_Revenue
-if not df_forecast.empty:
-    net_revenue_rows = df_forecast[
-        (df_forecast['TICKER'] == selected_broker) & 
-        (df_forecast['KEYCODE'] == 'Net_Revenue')
-    ]
-    if not net_revenue_rows.empty:
-        st.write("🐛 DEBUG - Net_Revenue rows in df_forecast:")
-        st.dataframe(net_revenue_rows[['TICKER', 'KEYCODE', 'DATE', 'VALUE', 'RATING']])
-        raw_value = net_revenue_rows['VALUE'].iloc[0]
-        st.write(f"🐛 DEBUG - Net_Revenue VALUE from DB (raw): {raw_value:,.0f} VND")
-        st.write(f"🐛 DEBUG - Net_Revenue VALUE (in bn VND): {raw_value / 1e9:,.2f} bn VND")
-    else:
-        st.write("🐛 DEBUG - No Net_Revenue rows found in df_forecast for selected broker")
-
-# Debug: Check other forecast values for comparison
-st.write("🐛 DEBUG - Sample forecast values for comparison (all in bn VND):")
-for key in ['PBT', 'Total_Operating_Income', 'Net_Brokerage_Income']:
-    if key in forecast_map:
-        st.write(f"  - {key}: {forecast_map[key]:,.2f} bn VND")
-    else:
-        st.write(f"  - {key}: NOT FOUND")
-
 ytd_mask = (df_quarters['YEARREPORT'] == target_year) & (df_quarters['LENGTHREPORT'] < target_quarter)
 ytd_totals = collect_totals(df_quarters, ytd_mask)
 
@@ -655,9 +622,6 @@ missing_segments = []
 
 remaining_quarters = 5 - target_quarter
 
-st.write("🐛 DEBUG - Segment Calculation Details:")
-st.write(f"Remaining quarters: {remaining_quarters}")
-
 for segment in SEGMENTS:
     fy_value_raw = forecast_map.get(segment['forecast_key'])
     if fy_value_raw is None or math.isnan(fy_value_raw):
@@ -669,8 +633,6 @@ for segment in SEGMENTS:
     realized = ytd_totals.get(segment['key'], 0.0) / 1e9
     base_value = (fy_value - realized) / remaining_quarters
     base_segments[segment['key']] = base_value
-
-    st.write(f"  {segment['label']}: FY={fy_value:,.2f} bn, YTD Realized={realized:,.2f} bn, Base={(fy_value - realized):,.2f} bn, Per Quarter={base_value:,.2f} bn")
 
 fy_pbt_raw = forecast_map.get('PBT', 0.0)
 # Convert both forecast and ytd pbt from raw VND to bn VND
@@ -687,74 +649,18 @@ fy_net_revenue = forecast_map.get('Net_Revenue', 0.0) / 1e9
 # Calculate YTD Net_Revenue from actual revenue segments (not from ytd_totals which doesn't have 'net_revenue')
 ytd_revenue_segments_sum = sum(ytd_totals.get(key, 0.0) for key in revenue_segments) / 1e9
 
-st.write(f"🐛 DEBUG - Net Revenue Calculation:")
-st.write(f"  FY Net_Revenue (from forecast, full year, in bn): {fy_net_revenue:,.2f} bn VND")
-st.write(f"  YTD Revenue Segments Sum (realized Q1-Q{target_quarter-1}, in bn): {ytd_revenue_segments_sum:,.2f} bn VND")
-st.write(f"  Remaining quarters: {remaining_quarters}")
-
-# For Net Revenue we need to use Total Operating Income from forecast if available, or estimate from revenue segments
-fy_toi = forecast_map.get('Total_Operating_Income', 0.0) / 1e9
-st.write(f"  FY Total Operating Income (from forecast, in bn): {fy_toi:,.2f} bn VND")
-
 # Calculate YTD TOI by summing all revenue components (including residual/other)
 # Since we don't have historical residual data, use Net_Revenue if available, otherwise estimate
 ytd_net_revenue = ytd_revenue_segments_sum  # This is our best estimate
-st.write(f"  YTD Net_Revenue (estimated from revenue segments, in bn): {ytd_net_revenue:,.2f} bn VND")
-st.write(f"  Remaining quarters: {remaining_quarters}")
 
 base_net_revenue = (fy_net_revenue - ytd_net_revenue) / remaining_quarters if fy_net_revenue != 0.0 else 0.0
-
-st.write(f"  Base Net_Revenue per quarter: {base_net_revenue:,.2f} bn VND")
 
 # base_segments values are already in bn VND (calculated from FY forecast in bn - YTD realized in bn)
 sum_revenue_segments = sum(base_segments.get(key, 0.0) for key in revenue_segments)
 
-st.write(f"  Sum of revenue segments (in bn): {sum_revenue_segments:,.2f} bn VND")
-
 # residual_other = "Other Operating Income" not explicitly modeled
 # Calculate as Net_Revenue - sum of revenue segments (both now in bn VND)
 residual_other = base_net_revenue - sum_revenue_segments if fy_net_revenue != 0.0 else 0.0
-
-st.write(f"  Residual Other (Net_Revenue - revenue segments): {residual_other:,.2f} bn VND")
-
-# Debug: Show base PBT and all components
-st.write("=" * 80)
-st.write("🐛 DEBUG - BASE PBT AND COMPONENTS BREAKDOWN")
-st.write("=" * 80)
-st.write(f"**Base PBT**: {base_pbt:,.2f} bn VND")
-st.write(f"**FY PBT Forecast**: {fy_pbt:,.2f} bn VND")
-st.write(f"**YTD PBT Realized**: {ytd_totals.get('pbt', 0.0) / 1e9:,.2f} bn VND")
-st.write(f"**Remaining Quarters**: {remaining_quarters}")
-st.write("")
-st.write("**Revenue Components (Base Values):**")
-for segment in SEGMENTS:
-    if segment['key'] in revenue_segments:
-        # base_segments values are already in bn VND
-        value_bn = base_segments.get(segment['key'], 0.0)
-        st.write(f"  - {segment['label']}: {value_bn:,.2f} bn VND")
-# sum_revenue_segments is already in bn VND
-st.write(f"  - **Sum of Revenue Segments**: {sum_revenue_segments:,.2f} bn VND")
-st.write(f"  - **Residual Other (Net_Revenue - Revenue Segments)**: {residual_other:,.2f} bn VND")
-st.write(f"  - **Total Revenue (with residual)**: {sum_revenue_segments + residual_other:,.2f} bn VND")
-st.write("")
-st.write("**Cost Components (Base Values):**")
-# base_segments values are already in bn VND, no conversion needed
-sum_cost_segments = sum(base_segments.get(key, 0.0) for key in base_segments.keys() if key not in revenue_segments)
-for segment in SEGMENTS:
-    if segment['key'] not in revenue_segments:
-        # base_segments values are already in bn VND
-        value_bn = base_segments.get(segment['key'], 0.0)
-        st.write(f"  - {segment['label']}: {value_bn:,.2f} bn VND")
-st.write(f"  - **Sum of Cost Segments**: {sum_cost_segments:,.2f} bn VND")
-st.write("")
-st.write(f"**Net_Revenue (Base)**: {base_net_revenue:,.2f} bn VND")
-st.write(f"**FY Net_Revenue Forecast**: {fy_net_revenue:,.2f} bn VND")
-st.write("")
-# All values are already in bn VND
-calculated_pbt = sum_revenue_segments + residual_other - sum_cost_segments
-st.write(f"**Calculated PBT (Revenue - Costs)**: {calculated_pbt:,.2f} bn VND")
-st.write(f"**Difference from Base PBT**: {calculated_pbt - base_pbt:,.2f} bn VND")
-st.write("=" * 80)
 
 prev_pbt = float(latest_row['pbt'])
 yoy_row = df_quarters[(df_quarters['YEARREPORT'] == target_year - 1) & (df_quarters['LENGTHREPORT'] == target_quarter)]
@@ -1434,31 +1340,6 @@ adjusted_toi = residual_other * 1e9 + adjusted_revenue_segments
 # Calculate adjusted PBT (TOI - expenses)
 adjusted_expenses = segment_inputs['sga'] + segment_inputs['interest_expense']
 adjusted_pbt = adjusted_toi + adjusted_expenses  # expenses are negative, so adding them subtracts the costs
-
-# Debug: Show adjusted components and PBT
-st.write("=" * 80)
-st.write("🐛 DEBUG - ADJUSTED FORECAST COMPONENTS")
-st.write("=" * 80)
-st.write(f"**Adjusted PBT**: {adjusted_pbt / 1e9:,.2f} bn VND")
-st.write("")
-st.write("**Adjusted Revenue Components:**")
-for segment in SEGMENTS:
-    if segment['key'] in revenue_segments:
-        st.write(f"  - {segment['label']}: {segment_inputs[segment['key']] / 1e9:,.2f} bn VND")
-st.write(f"  - **Sum of Adjusted Revenue Segments**: {adjusted_revenue_segments / 1e9:,.2f} bn VND")
-st.write(f"  - **Residual Other (unchanged)**: {residual_other:,.2f} bn VND")
-st.write(f"  - **Adjusted TOI (Revenue + Residual)**: {adjusted_toi / 1e9:,.2f} bn VND")
-st.write("")
-st.write("**Adjusted Cost Components (negative = cost):**")
-for segment in SEGMENTS:
-    if segment['key'] not in revenue_segments:
-        st.write(f"  - {segment['label']}: {segment_inputs[segment['key']] / 1e9:,.2f} bn VND")
-st.write(f"  - **Sum of Adjusted Expenses**: {adjusted_expenses / 1e9:,.2f} bn VND")
-st.write("")
-st.write(f"**Calculated Adjusted PBT (TOI + Expenses)**: {adjusted_pbt / 1e9:,.2f} bn VND")
-st.write(f"**Base PBT (reference)**: {base_pbt:,.2f} bn VND")
-st.write(f"**Change vs Base**: {(adjusted_pbt / 1e9) - base_pbt:+,.2f} bn VND")
-st.write("=" * 80)
 
 # Update summary table with adjusted values
 target_column_label = f"{target_label} Base (bn VND)"
