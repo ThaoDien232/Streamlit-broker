@@ -607,7 +607,7 @@ turnover_share_lookup = {}
 if not df_turnover.empty:
     turnover_filtered = df_turnover[df_turnover['Ticker'] == selected_broker].copy()
     turnover_filtered['share'] = turnover_filtered.apply(
-        lambda row: (row['Company turnover'] / row['Market turnover'])
+        lambda row: (row['Company turnover'] / row['Market turnover'] / 2)
         if row['Market turnover'] not in (0, None, np.nan) else np.nan,
         axis=1
     )
@@ -807,7 +807,7 @@ for y, q in brokerage_history_quarters:
     else:
         share_year = get_share_for_year(y)
         if share_year:
-            share_decimal = share_year / 2
+            share_decimal = share_year
             share_pct_display = share_decimal * 100
 
     fee_decimal = None
@@ -856,7 +856,7 @@ if last_with_share:
 if share_default is None:
     share_year = get_share_for_year(target_year)
     if share_year is not None:
-        share_default = share_year / 2
+        share_default = share_year
 
 avg_daily_default = history_avg_daily[-1] if history_avg_daily else 0.0
 if fee_decimal_default:
