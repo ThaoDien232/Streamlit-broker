@@ -568,7 +568,7 @@ target_year, target_quarter = next_quarter(latest_year, latest_quarter)
 latest_label = quarter_label(latest_year, latest_quarter)
 target_label = quarter_label(target_year, target_quarter)
 
-forecast_keys = [segment['forecast_key'] for segment in SEGMENTS] + ['PBT', 'Total_Operating_Income']
+forecast_keys = [segment['forecast_key'] for segment in SEGMENTS] + ['PBT', 'Total_Operating_Income', 'Net_Revenue']
 forecast_map = get_forecast_map(df_forecast, selected_broker, target_year, forecast_keys)
 
 # Debug: Print Net_Revenue data
@@ -653,16 +653,17 @@ for segment in SEGMENTS:
 fy_pbt = forecast_map.get('PBT', 0.0)
 base_pbt = (fy_pbt - ytd_totals.get('pbt', 0.0)) / remaining_quarters
 
-# Calculate residual_other from Total Operating Income (revenue components only)
-fy_toi = forecast_map.get('Total_Operating_Income', 0.0)
-base_toi = (fy_toi - ytd_totals.get('toi', 0.0)) / remaining_quarters if fy_toi != 0.0 else 0.0
+# Calculate residual_other from Net_Revenue (revenue components only)
+fy_net_revenue = forecast_map.get('Net_Revenue', 0.0)
+base_net_revenue = (fy_net_revenue - ytd_totals.get('net_revenue', 0.0)) / remaining_quarters if fy_net_revenue != 0.0 else 0.0
 
 # Revenue segments only (exclude SG&A and Interest Expense which are costs)
 revenue_segments = ['brokerage_fee', 'margin_income', 'investment_income', 'ib_income']
 sum_revenue_segments = sum(base_segments.get(key, 0.0) for key in revenue_segments)
 
 # residual_other = "Other Operating Income" not explicitly modeled
-residual_other = base_toi - sum_revenue_segments if fy_toi != 0.0 else (base_pbt - sum(base_segments.values()))
+# Calculate as Net_Revenue - sum of revenue segments
+residual_other = base_net_revenue - sum_revenue_segments if fy_net_revenue != 0.0 else 0.0
 
 prev_pbt = float(latest_row['pbt'])
 yoy_row = df_quarters[(df_quarters['YEARREPORT'] == target_year - 1) & (df_quarters['LENGTHREPORT'] == target_quarter)]
