@@ -664,24 +664,26 @@ for segment in SEGMENTS:
         missing_segments.append(segment['label'])
         fy_value = 0.0
 
-    realized = ytd_totals.get(segment['key'], 0.0)
+    # Convert ytd_totals from raw VND to bn VND for consistent calculation
+    realized = ytd_totals.get(segment['key'], 0.0) / 1e9
     base_value = (fy_value - realized) / remaining_quarters
     base_segments[segment['key']] = base_value
-    
+
     st.write(f"  {segment['label']}: FY={fy_value:,.2f} bn, YTD Realized={realized:,.2f} bn, Base={(fy_value - realized):,.2f} bn, Per Quarter={base_value:,.2f} bn")
 
 fy_pbt = forecast_map.get('PBT', 0.0)
-base_pbt = (fy_pbt - ytd_totals.get('pbt', 0.0)) / remaining_quarters
+# Convert ytd pbt from raw VND to bn VND
+base_pbt = (fy_pbt - ytd_totals.get('pbt', 0.0) / 1e9) / remaining_quarters
 
 # Calculate residual_other from Net_Revenue (revenue components only)
 # Net_Revenue is stored in raw VND in database, needs conversion to bn VND
 fy_net_revenue = forecast_map.get('Net_Revenue', 0.0) / 1e9
-# YTD Net_Revenue is already in bn VND (like other YTD totals)
-ytd_net_revenue = ytd_totals.get('net_revenue', 0.0)
+# YTD Net_Revenue needs to be converted from raw VND to bn VND
+ytd_net_revenue = ytd_totals.get('net_revenue', 0.0) / 1e9
 
 st.write(f"🐛 DEBUG - Net Revenue Calculation:")
 st.write(f"  FY Net_Revenue (from forecast, in bn): {fy_net_revenue:,.2f} bn VND")
-st.write(f"  YTD Net_Revenue (from actuals, already in bn): {ytd_net_revenue:,.2f} bn VND")
+st.write(f"  YTD Net_Revenue (from actuals, converted to bn): {ytd_net_revenue:,.2f} bn VND")
 st.write(f"  Remaining quarters: {remaining_quarters}")
 
 base_net_revenue = (fy_net_revenue - ytd_net_revenue) / remaining_quarters if fy_net_revenue != 0.0 else 0.0
@@ -707,7 +709,7 @@ st.write("🐛 DEBUG - BASE PBT AND COMPONENTS BREAKDOWN")
 st.write("=" * 80)
 st.write(f"**Base PBT**: {base_pbt:,.2f} bn VND")
 st.write(f"**FY PBT Forecast**: {fy_pbt:,.2f} bn VND")
-st.write(f"**YTD PBT Realized**: {ytd_totals.get('pbt', 0.0):,.2f} bn VND")
+st.write(f"**YTD PBT Realized**: {ytd_totals.get('pbt', 0.0) / 1e9:,.2f} bn VND")
 st.write(f"**Remaining Quarters**: {remaining_quarters}")
 st.write("")
 st.write("**Revenue Components (Base Values):**")
@@ -1440,8 +1442,8 @@ for segment in SEGMENTS:
 st.write(f"  - **Sum of Adjusted Expenses**: {adjusted_expenses / 1e9:,.2f} bn VND")
 st.write("")
 st.write(f"**Calculated Adjusted PBT (TOI + Expenses)**: {adjusted_pbt / 1e9:,.2f} bn VND")
-st.write(f"**Base PBT (reference)**: {base_pbt / 1e9:,.2f} bn VND")
-st.write(f"**Change vs Base**: {(adjusted_pbt - base_pbt) / 1e9:+,.2f} bn VND")
+st.write(f"**Base PBT (reference)**: {base_pbt:,.2f} bn VND")
+st.write(f"**Change vs Base**: {(adjusted_pbt / 1e9) - base_pbt:+,.2f} bn VND")
 st.write("=" * 80)
 
 # Update summary table with adjusted values
@@ -1463,8 +1465,9 @@ st.caption(f"**Base** column: derived from {target_year} FY forecast minus actua
 st.dataframe(summary_df, hide_index=True, key="summary_table_final")
 
 # Calculate comparison metrics
-
-impact_vs_base = adjusted_pbt - base_pbt
+# Convert base_pbt from bn VND to raw VND for consistent comparison with adjusted_pbt (which is in raw VND)
+base_pbt_vnd = base_pbt * 1e9
+impact_vs_base = adjusted_pbt - base_pbt_vnd
 impact_vs_prev = adjusted_pbt - prev_pbt
 impact_vs_yoy = None if yoy_pbt is None else adjusted_pbt - yoy_pbt
 
