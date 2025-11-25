@@ -1411,21 +1411,17 @@ segment_inputs['interest_expense'] = -interest_expense_forecast_bn * 1e9  # Nega
 
 # Calculate adjusted TOI (revenue only)
 adjusted_revenue_segments = sum(segment_inputs[key] for key in revenue_segments)
-# residual_other is in bn VND, convert adjusted_revenue_segments to bn VND
-adjusted_toi = residual_other + (adjusted_revenue_segments / 1e9)
+adjusted_toi = residual_other * 1e9 + adjusted_revenue_segments  # residual_other is in bn, convert to raw VND
 
 # Calculate adjusted PBT (TOI - expenses)
-# SG&A and Interest Expense are negative costs, so we add them (subtracting the costs)
 adjusted_expenses = segment_inputs['sga'] + segment_inputs['interest_expense']
-# Convert to bn VND for calculation
-adjusted_pbt_bn = adjusted_toi + (adjusted_expenses / 1e9)
-adjusted_pbt = adjusted_pbt_bn * 1e9  # Convert back to raw VND for consistency
+adjusted_pbt = adjusted_toi + adjusted_expenses  # expenses are negative, so adding them subtracts the costs
 
 # Debug: Show adjusted components and PBT
 st.write("=" * 80)
 st.write("🐛 DEBUG - ADJUSTED FORECAST COMPONENTS")
 st.write("=" * 80)
-st.write(f"**Adjusted PBT**: {adjusted_pbt_bn:,.2f} bn VND")
+st.write(f"**Adjusted PBT**: {adjusted_pbt / 1e9:,.2f} bn VND")
 st.write("")
 st.write("**Adjusted Revenue Components:**")
 for segment in SEGMENTS:
@@ -1433,7 +1429,7 @@ for segment in SEGMENTS:
         st.write(f"  - {segment['label']}: {segment_inputs[segment['key']] / 1e9:,.2f} bn VND")
 st.write(f"  - **Sum of Adjusted Revenue Segments**: {adjusted_revenue_segments / 1e9:,.2f} bn VND")
 st.write(f"  - **Residual Other (unchanged)**: {residual_other:,.2f} bn VND")
-st.write(f"  - **Adjusted TOI (Revenue + Residual)**: {adjusted_toi:,.2f} bn VND")
+st.write(f"  - **Adjusted TOI (Revenue + Residual)**: {adjusted_toi / 1e9:,.2f} bn VND")
 st.write("")
 st.write("**Adjusted Cost Components (negative = cost):**")
 for segment in SEGMENTS:
@@ -1441,9 +1437,9 @@ for segment in SEGMENTS:
         st.write(f"  - {segment['label']}: {segment_inputs[segment['key']] / 1e9:,.2f} bn VND")
 st.write(f"  - **Sum of Adjusted Expenses**: {adjusted_expenses / 1e9:,.2f} bn VND")
 st.write("")
-st.write(f"**Calculated Adjusted PBT (TOI + Expenses)**: {adjusted_pbt_bn:,.2f} bn VND")
+st.write(f"**Calculated Adjusted PBT (TOI + Expenses)**: {adjusted_pbt / 1e9:,.2f} bn VND")
 st.write(f"**Base PBT (reference)**: {base_pbt / 1e9:,.2f} bn VND")
-st.write(f"**Change vs Base**: {(adjusted_pbt_bn - (base_pbt / 1e9)):+,.2f} bn VND")
+st.write(f"**Change vs Base**: {(adjusted_pbt - base_pbt) / 1e9:+,.2f} bn VND")
 st.write("=" * 80)
 
 # Update summary table with adjusted values
