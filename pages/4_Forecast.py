@@ -1319,6 +1319,20 @@ segment_inputs['interest_expense'] = -interest_expense_forecast_bn * 1e9
 
 adjusted_total_segments = sum(segment_inputs.values())
 adjusted_pbt = residual_other + adjusted_total_segments
+
+# DEBUG: Print each segment contribution
+st.markdown("---")
+st.markdown("### 🔍 Debug: Adjusted PBT Calculation Breakdown")
+st.write(f"**Residual Other:** {residual_other / 1e9:,.2f} bn")
+st.write("")
+st.write("**Segment Contributions (bn VND):**")
+for segment in SEGMENTS:
+    segment_value = segment_inputs[segment['key']]
+    st.write(f"  - {segment['label']}: {segment_value / 1e9:,.2f} bn")
+st.write("")
+st.write(f"**Sum of All Segments:** {adjusted_total_segments / 1e9:,.2f} bn")
+st.write(f"**Adjusted PBT = Residual Other + Sum of Segments:** {adjusted_pbt / 1e9:,.2f} bn")
+st.markdown("---")
 impact_vs_base = adjusted_pbt - base_pbt
 impact_vs_prev = adjusted_pbt - prev_pbt
 impact_vs_yoy = None if yoy_pbt is None else adjusted_pbt - yoy_pbt
