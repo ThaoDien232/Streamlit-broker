@@ -690,8 +690,8 @@ st.write(f"  Base Net_Revenue per quarter: {base_net_revenue:,.2f} bn VND")
 
 # Revenue segments only (exclude SG&A and Interest Expense which are costs)
 revenue_segments = ['brokerage_fee', 'margin_income', 'investment_income', 'ib_income']
-# Convert sum from raw VND to bn VND
-sum_revenue_segments = sum(base_segments.get(key, 0.0) for key in revenue_segments) / 1e9
+# base_segments values are already in bn VND (calculated from FY forecast in bn - YTD realized in bn)
+sum_revenue_segments = sum(base_segments.get(key, 0.0) for key in revenue_segments)
 
 st.write(f"  Sum of revenue segments (in bn): {sum_revenue_segments:,.2f} bn VND")
 
@@ -713,29 +713,29 @@ st.write("")
 st.write("**Revenue Components (Base Values):**")
 for segment in SEGMENTS:
     if segment['key'] in revenue_segments:
-        # Display values - base_segments is in raw VND, convert to bn
-        value_bn = base_segments.get(segment['key'], 0.0) / 1e9
+        # base_segments values are already in bn VND
+        value_bn = base_segments.get(segment['key'], 0.0)
         st.write(f"  - {segment['label']}: {value_bn:,.2f} bn VND")
-# sum_revenue_segments is already converted to bn VND
+# sum_revenue_segments is already in bn VND
 st.write(f"  - **Sum of Revenue Segments**: {sum_revenue_segments:,.2f} bn VND")
 st.write(f"  - **Residual Other (Net_Revenue - Revenue Segments)**: {residual_other:,.2f} bn VND")
 st.write(f"  - **Total Revenue (with residual)**: {sum_revenue_segments + residual_other:,.2f} bn VND")
 st.write("")
 st.write("**Cost Components (Base Values):**")
+# base_segments values are already in bn VND, no conversion needed
 sum_cost_segments = sum(base_segments.get(key, 0.0) for key in base_segments.keys() if key not in revenue_segments)
 for segment in SEGMENTS:
     if segment['key'] not in revenue_segments:
-        # Convert from raw VND to bn VND for display
-        value_bn = base_segments.get(segment['key'], 0.0) / 1e9
+        # base_segments values are already in bn VND
+        value_bn = base_segments.get(segment['key'], 0.0)
         st.write(f"  - {segment['label']}: {value_bn:,.2f} bn VND")
-sum_cost_segments_bn = sum_cost_segments / 1e9
-st.write(f"  - **Sum of Cost Segments**: {sum_cost_segments_bn:,.2f} bn VND")
+st.write(f"  - **Sum of Cost Segments**: {sum_cost_segments:,.2f} bn VND")
 st.write("")
 st.write(f"**Net_Revenue (Base)**: {base_net_revenue:,.2f} bn VND")
 st.write(f"**FY Net_Revenue Forecast**: {fy_net_revenue:,.2f} bn VND")
 st.write("")
-# sum_cost_segments_bn is already converted, sum_revenue_segments is already converted
-calculated_pbt = sum_revenue_segments + residual_other - sum_cost_segments_bn
+# All values are already in bn VND
+calculated_pbt = sum_revenue_segments + residual_other - sum_cost_segments
 st.write(f"**Calculated PBT (Revenue - Costs)**: {calculated_pbt:,.2f} bn VND")
 st.write(f"**Difference from Base PBT**: {calculated_pbt - base_pbt:,.2f} bn VND")
 st.write("=" * 80)
@@ -1397,8 +1397,9 @@ investment_income_forecast_bn = float(investment_income_input_value)
 investment_income_forecast_vnd = investment_income_forecast_bn * 1e9
 
 # Calculate segment inputs with user adjustments
+# Convert base_segments from bn VND to raw VND for consistent calculations
 segment_inputs = {
-    segment['key']: base_segments.get(segment['key'], 0.0)
+    segment['key']: base_segments.get(segment['key'], 0.0) * 1e9
     for segment in SEGMENTS
 }
 
