@@ -659,20 +659,22 @@ st.write("🐛 DEBUG - Segment Calculation Details:")
 st.write(f"Remaining quarters: {remaining_quarters}")
 
 for segment in SEGMENTS:
-    fy_value = forecast_map.get(segment['forecast_key'])
-    if fy_value is None or math.isnan(fy_value):
+    fy_value_raw = forecast_map.get(segment['forecast_key'])
+    if fy_value_raw is None or math.isnan(fy_value_raw):
         missing_segments.append(segment['label'])
-        fy_value = 0.0
+        fy_value_raw = 0.0
 
-    # Convert ytd_totals from raw VND to bn VND for consistent calculation
+    # Convert both forecast and ytd_totals from raw VND to bn VND for consistent calculation
+    fy_value = fy_value_raw / 1e9
     realized = ytd_totals.get(segment['key'], 0.0) / 1e9
     base_value = (fy_value - realized) / remaining_quarters
     base_segments[segment['key']] = base_value
 
     st.write(f"  {segment['label']}: FY={fy_value:,.2f} bn, YTD Realized={realized:,.2f} bn, Base={(fy_value - realized):,.2f} bn, Per Quarter={base_value:,.2f} bn")
 
-fy_pbt = forecast_map.get('PBT', 0.0)
-# Convert ytd pbt from raw VND to bn VND
+fy_pbt_raw = forecast_map.get('PBT', 0.0)
+# Convert both forecast and ytd pbt from raw VND to bn VND
+fy_pbt = fy_pbt_raw / 1e9
 base_pbt = (fy_pbt - ytd_totals.get('pbt', 0.0) / 1e9) / remaining_quarters
 
 # Calculate residual_other from Net_Revenue (revenue components only)
@@ -760,8 +762,8 @@ for segment in SEGMENTS:
     record = {
         "Segment": segment['label'],
         "FY Forecast (bn VND)": format_bn_str(fy_val),
-        f"{target_label} Base (bn VND)": format_bn_str(base_val),
-        f"{target_label} Adjusted (bn VND)": format_bn_str(base_val),  # Will be updated after user adjustments
+        f"{target_label} Base (bn VND)": f"{base_val:,.0f}",  # base_val is already in bn VND
+        f"{target_label} Adjusted (bn VND)": f"{base_val:,.0f}",  # Will be updated after user adjustments
     }
 
     for quarter_num, column_label in quarter_columns:
@@ -776,9 +778,9 @@ for segment in SEGMENTS:
 
 record_pbt = {
     "Segment": "PBT",
-    "FY Forecast (bn VND)": format_bn_str(fy_pbt),
-    f"{target_label} Base (bn VND)": format_bn_str(base_pbt),
-    f"{target_label} Adjusted (bn VND)": format_bn_str(base_pbt),  # Will be updated after user adjustments
+    "FY Forecast (bn VND)": format_bn_str(fy_pbt_raw),  # Use raw value for formatting
+    f"{target_label} Base (bn VND)": f"{base_pbt:,.0f}",  # base_pbt is already in bn VND
+    f"{target_label} Adjusted (bn VND)": f"{base_pbt:,.0f}",  # Will be updated after user adjustments
 }
 
 for quarter_num, column_label in quarter_columns:
@@ -1245,8 +1247,8 @@ def render_segment_override(segment_key: str, title: str, input_key: str) -> tup
     else:
         st.info(f"No historical data available for {title.lower()}.")
 
-    base_value = base_segments.get(segment_key, 0.0)
-    base_bn = format_bn(base_value)
+    # base_segments values are already in bn VND, no need to convert
+    base_bn = base_segments.get(segment_key, 0.0)
     if not math.isfinite(base_bn):
         base_bn = 0.0
 
@@ -1311,8 +1313,8 @@ with income_col:
     else:
         st.info("No historical investment income data available for the last quarters.")
 
-    investment_base_value = base_segments.get('investment_income', 0.0)
-    investment_base_bn = format_bn(investment_base_value)
+    # base_segments values are already in bn VND, no need to convert
+    investment_base_bn = base_segments.get('investment_income', 0.0)
     if not math.isfinite(investment_base_bn):
         investment_base_bn = 0.0
 
