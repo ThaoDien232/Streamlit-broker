@@ -745,6 +745,7 @@ for segment in SEGMENTS:
         "Segment": segment['label'],
         "FY Forecast (bn VND)": format_bn_str(fy_val),
         f"{target_label} Base (bn VND)": format_bn_str(base_val),
+        f"{target_label} Adjusted (bn VND)": format_bn_str(base_val),  # Will be updated after user adjustments
     }
 
     for quarter_num, column_label in quarter_columns:
@@ -761,6 +762,7 @@ record_pbt = {
     "Segment": "PBT",
     "FY Forecast (bn VND)": format_bn_str(fy_pbt),
     f"{target_label} Base (bn VND)": format_bn_str(base_pbt),
+    f"{target_label} Adjusted (bn VND)": format_bn_str(base_pbt),  # Will be updated after user adjustments
 }
 
 for quarter_num, column_label in quarter_columns:
@@ -773,7 +775,7 @@ for quarter_num, column_label in quarter_columns:
 
 summary_rows.append(record_pbt)
 
-columns_order = ["Segment", "FY Forecast (bn VND)"] + [label for _, label in quarter_columns] + [f"{target_label} Base (bn VND)"]
+columns_order = ["Segment", "FY Forecast (bn VND)"] + [label for _, label in quarter_columns] + [f"{target_label} Base (bn VND)", f"{target_label} Adjusted (bn VND)"]
 summary_df = pd.DataFrame(summary_rows)
 summary_df = summary_df[columns_order]
 
@@ -1383,16 +1385,18 @@ investment_income_forecast_vnd = investment_income_forecast_bn * 1e9
 # Update summary with forecast brokerage and margin inputs
 target_column_label = f"{target_label} Base (bn VND)"
 if target_column_label in summary_df.columns:
-    summary_df.loc[summary_df['Segment'] == 'Brokerage Fee', target_column_label] = format_bn_str(net_brokerage_forecast)
-    summary_df.loc[summary_df['Segment'] == 'Margin Income', target_column_label] = format_bn_str(margin_income_forecast_bn * 1e9)
-    summary_df.loc[summary_df['Segment'] == 'IB Income', target_column_label] = format_bn_str(ib_income_forecast_vnd)
-    summary_df.loc[summary_df['Segment'] == 'SG&A', target_column_label] = format_bn_str(sga_forecast_vnd)
-    summary_df.loc[summary_df['Segment'] == 'Investment Income', target_column_label] = format_bn_str(investment_income_forecast_vnd)
-    summary_df.loc[summary_df['Segment'] == 'Interest Expense', target_column_label] = format_bn_str(-interest_expense_forecast_bn * 1e9)
+    # Update the Adjusted column with user inputs
+    adjusted_column_label = f"{target_label} Adjusted (bn VND)"
+    summary_df.loc[summary_df['Segment'] == 'Brokerage Fee', adjusted_column_label] = format_bn_str(net_brokerage_forecast)
+    summary_df.loc[summary_df['Segment'] == 'Margin Income', adjusted_column_label] = format_bn_str(margin_income_forecast_bn * 1e9)
+    summary_df.loc[summary_df['Segment'] == 'IB Income', adjusted_column_label] = format_bn_str(ib_income_forecast_vnd)
+    summary_df.loc[summary_df['Segment'] == 'SG&A', adjusted_column_label] = format_bn_str(sga_forecast_vnd)
+    summary_df.loc[summary_df['Segment'] == 'Investment Income', adjusted_column_label] = format_bn_str(investment_income_forecast_vnd)
+    summary_df.loc[summary_df['Segment'] == 'Interest Expense', adjusted_column_label] = format_bn_str(-interest_expense_forecast_bn * 1e9)
 
 st.subheader("Baseline Breakdown")
-st.caption(f"Base assumptions derived from {target_year} full-year forecast minus actual results up to {latest_label}.")
-st.dataframe(summary_df, hide_index=True)
+st.caption(f"**Base** column: derived from {target_year} FY forecast minus actuals up to {latest_label}. **Adjusted** column: updated with your inputs below.")
+st.dataframe(summary_df, hide_index=True, key="summary_table_final")
 
 segment_inputs = {
     segment['key']: base_segments.get(segment['key'], 0.0)
@@ -1413,6 +1417,10 @@ adjusted_toi = residual_other + adjusted_revenue_segments
 # Calculate adjusted PBT (TOI - expenses)
 adjusted_expenses = segment_inputs['sga'] + segment_inputs['interest_expense']
 adjusted_pbt = adjusted_toi - adjusted_expenses
+
+# Update the PBT row in the summary table
+adjusted_column_label = f"{target_label} Adjusted (bn VND)"
+summary_df.loc[summary_df['Segment'] == 'PBT', adjusted_column_label] = format_bn_str(adjusted_pbt)
 
 impact_vs_base = adjusted_pbt - base_pbt
 impact_vs_prev = adjusted_pbt - prev_pbt
