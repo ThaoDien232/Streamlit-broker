@@ -679,8 +679,33 @@ st.markdown("---")
 st.markdown("### 🔍 Debug: Full-Year Forecast from Database")
 st.write(f"**Source:** Forecast table for {selected_broker}, Year {target_year}")
 st.write("")
+
+# DEBUG: Check for Total_Operating_Income variations
+st.write("**🔍 Checking for Total Operating Income KEYCODEs:**")
+toi_variations = [
+    'Total_Operating_Income',
+    'total_operating_income',
+    'Total_operating_income',
+    'TOTAL_OPERATING_INCOME',
+    'Net_Revenue',
+    'Total_Revenue',
+    'Operating_Income'
+]
+toi_found = False
+for variation in toi_variations:
+    value = forecast_map.get(variation, None)
+    if value is not None and value != 0.0:
+        st.write(f"  ✅ Found '{variation}': {value / 1e9:,.2f} bn")
+        toi_found = True
+    else:
+        st.write(f"  ❌ Not found: '{variation}'")
+
+if not toi_found:
+    st.warning("⚠️ No Total Operating Income KEYCODE found in forecast data!")
+
+st.write("")
 st.write("**Full-Year Forecast Values (bn VND):**")
-st.write(f"  - Total Operating Income: {forecast_map.get('Total_Operating_Income', 0.0) / 1e9:,.2f} bn")
+st.write(f"  - Total Operating Income (requested): {forecast_map.get('Total_Operating_Income', 0.0) / 1e9:,.2f} bn")
 st.write(f"  - PBT: {forecast_map.get('PBT', 0.0) / 1e9:,.2f} bn")
 for segment in SEGMENTS:
     fy_value = forecast_map.get(segment['forecast_key'], 0.0)
