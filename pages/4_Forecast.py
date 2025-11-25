@@ -637,8 +637,19 @@ base_pbt = (fy_pbt - ytd_totals.get('pbt', 0.0)) / remaining_quarters
 sum_base_segments = sum(base_segments.values())
 residual_other = base_pbt - sum_base_segments
 
-# DEBUG: Print base forecast breakdown
+# DEBUG: Print full-year forecast from database
 st.markdown("---")
+st.markdown("### 🔍 Debug: Full-Year Forecast from Database")
+st.write(f"**Source:** Forecast table for {selected_broker}, Year {target_year}")
+st.write("")
+st.write("**Full-Year Forecast Values (bn VND):**")
+st.write(f"  - PBT: {forecast_map.get('PBT', 0.0) / 1e9:,.2f} bn")
+for segment in SEGMENTS:
+    fy_value = forecast_map.get(segment['forecast_key'], 0.0)
+    st.write(f"  - {segment['label']} ({segment['forecast_key']}): {fy_value / 1e9:,.2f} bn")
+st.markdown("---")
+
+# DEBUG: Print base forecast breakdown
 st.markdown("### 🔍 Debug: Base Forecast Calculation Breakdown")
 st.write(f"**Full-Year PBT Forecast:** {fy_pbt / 1e9:,.2f} bn")
 st.write(f"**YTD PBT Actual:** {ytd_totals.get('pbt', 0.0) / 1e9:,.2f} bn")
