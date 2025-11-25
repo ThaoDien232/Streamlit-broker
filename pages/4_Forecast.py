@@ -568,7 +568,7 @@ target_year, target_quarter = next_quarter(latest_year, latest_quarter)
 latest_label = quarter_label(latest_year, latest_quarter)
 target_label = quarter_label(target_year, target_quarter)
 
-forecast_keys = [segment['forecast_key'] for segment in SEGMENTS] + ['PBT']
+forecast_keys = [segment['forecast_key'] for segment in SEGMENTS] + ['PBT', 'Total_Operating_Income']
 forecast_map = get_forecast_map(df_forecast, selected_broker, target_year, forecast_keys)
 
 ytd_mask = (df_quarters['YEARREPORT'] == target_year) & (df_quarters['LENGTHREPORT'] < target_quarter)
@@ -634,8 +634,16 @@ for segment in SEGMENTS:
 fy_pbt = forecast_map.get('PBT', 0.0)
 base_pbt = (fy_pbt - ytd_totals.get('pbt', 0.0)) / remaining_quarters
 
-sum_base_segments = sum(base_segments.values())
-residual_other = base_pbt - sum_base_segments
+# Calculate residual_other from Total Operating Income (revenue components only)
+fy_toi = forecast_map.get('Total_Operating_Income', 0.0)
+base_toi = (fy_toi - ytd_totals.get('toi', 0.0)) / remaining_quarters if fy_toi != 0.0 else 0.0
+
+# Revenue segments only (exclude SG&A and Interest Expense which are costs)
+revenue_segments = ['brokerage_fee', 'margin_income', 'investment_income', 'ib_income']
+sum_revenue_segments = sum(base_segments.get(key, 0.0) for key in revenue_segments)
+
+# residual_other = "Other Operating Income" not explicitly modeled
+residual_other = base_toi - sum_revenue_segments if fy_toi != 0.0 else (base_pbt - sum(base_segments.values()))
 
 # DEBUG: Print full-year forecast from database
 st.markdown("---")
@@ -643,6 +651,7 @@ st.markdown("### 🔍 Debug: Full-Year Forecast from Database")
 st.write(f"**Source:** Forecast table for {selected_broker}, Year {target_year}")
 st.write("")
 st.write("**Full-Year Forecast Values (bn VND):**")
+st.write(f"  - Total Operating Income: {forecast_map.get('Total_Operating_Income', 0.0) / 1e9:,.2f} bn")
 st.write(f"  - PBT: {forecast_map.get('PBT', 0.0) / 1e9:,.2f} bn")
 for segment in SEGMENTS:
     fy_value = forecast_map.get(segment['forecast_key'], 0.0)
@@ -651,18 +660,39 @@ st.markdown("---")
 
 # DEBUG: Print base forecast breakdown
 st.markdown("### 🔍 Debug: Base Forecast Calculation Breakdown")
+st.write(f"**Full-Year TOI Forecast:** {fy_toi / 1e9:,.2f} bn")
+st.write(f"**YTD TOI Actual:** {ytd_totals.get('toi', 0.0) / 1e9:,.2f} bn")
+st.write(f"**Base TOI = (FY - YTD) / Remaining:** {base_toi / 1e9:,.2f} bn")
+st.write("")
 st.write(f"**Full-Year PBT Forecast:** {fy_pbt / 1e9:,.2f} bn")
 st.write(f"**YTD PBT Actual:** {ytd_totals.get('pbt', 0.0) / 1e9:,.2f} bn")
 st.write(f"**Remaining Quarters:** {remaining_quarters}")
 st.write(f"**Base PBT = (FY - YTD) / Remaining:** {base_pbt / 1e9:,.2f} bn")
 st.write("")
-st.write("**Base Segment Contributions (bn VND):**")
-for segment in SEGMENTS:
-    segment_value = base_segments[segment['key']]
-    st.write(f"  - {segment['label']}: {segment_value / 1e9:,.2f} bn")
+st.write("**Base Revenue Segment Contributions (bn VND):**")
+for segment_key in revenue_segments:
+    segment = next((s for s in SEGMENTS if s['key'] == segment_key), None)
+    if segment:
+        segment_value = base_segments[segment['key']]
+        st.write(f"  - {segment['label']}: {segment_value / 1e9:,.2f} bn")
 st.write("")
-st.write(f"**Sum of Base Segments:** {sum_base_segments / 1e9:,.2f} bn")
-st.write(f"**Residual Other = Base PBT - Sum of Segments:** {residual_other / 1e9:,.2f} bn")
+st.write(f"**Sum of Revenue Segments:** {sum_revenue_segments / 1e9:,.2f} bn")
+st.write(f"**Residual Other (Other Operating Income) = Base TOI - Sum of Revenue Segments:** {residual_other / 1e9:,.2f} bn")
+st.write("")
+st.write("**Base Expense Segment Contributions (bn VND):**")
+expense_segments = ['sga', 'interest_expense']
+for segment_key in expense_segments:
+    segment = next((s for s in SEGMENTS if s['key'] == segment_key), None)
+    if segment:
+        segment_value = base_segments[segment['key']]
+        st.write(f"  - {segment['label']}: {segment_value / 1e9:,.2f} bn")
+st.write("")
+st.write(f"**Verification: TOI - Expenses should equal PBT:**")
+sum_expenses = sum(base_segments.get(key, 0.0) for key in expense_segments)
+calculated_pbt = base_toi - sum_expenses
+st.write(f"  Base TOI ({base_toi / 1e9:,.2f}) - Expenses ({sum_expenses / 1e9:,.2f}) = {calculated_pbt / 1e9:,.2f} bn")
+st.write(f"  Base PBT from forecast: {base_pbt / 1e9:,.2f} bn")
+st.write(f"  Difference: {(calculated_pbt - base_pbt) / 1e9:,.2f} bn")
 st.markdown("---")
 
 prev_pbt = float(latest_row['pbt'])
@@ -1343,23 +1373,40 @@ segment_inputs['margin_income'] = margin_income_forecast_bn * 1e9
 segment_inputs['ib_income'] = ib_income_forecast_vnd
 segment_inputs['sga'] = sga_forecast_vnd
 segment_inputs['investment_income'] = investment_income_forecast_vnd
-segment_inputs['interest_expense'] = -interest_expense_forecast_bn * 1e9
+segment_inputs['interest_expense'] = interest_expense_forecast_bn * 1e9  # Keep as positive expense
 
-adjusted_total_segments = sum(segment_inputs.values())
-adjusted_pbt = residual_other + adjusted_total_segments
+# Calculate adjusted TOI (revenue only)
+adjusted_revenue_segments = sum(segment_inputs[key] for key in revenue_segments)
+adjusted_toi = residual_other + adjusted_revenue_segments
+
+# Calculate adjusted PBT (TOI - expenses)
+adjusted_expenses = segment_inputs['sga'] + segment_inputs['interest_expense']
+adjusted_pbt = adjusted_toi - adjusted_expenses
 
 # DEBUG: Print each segment contribution
 st.markdown("---")
 st.markdown("### 🔍 Debug: Adjusted PBT Calculation Breakdown")
-st.write(f"**Residual Other:** {residual_other / 1e9:,.2f} bn")
+st.write(f"**Residual Other (Other Operating Income):** {residual_other / 1e9:,.2f} bn")
 st.write("")
-st.write("**Segment Contributions (bn VND):**")
-for segment in SEGMENTS:
-    segment_value = segment_inputs[segment['key']]
-    st.write(f"  - {segment['label']}: {segment_value / 1e9:,.2f} bn")
+st.write("**Adjusted Revenue Segments (bn VND):**")
+for segment_key in revenue_segments:
+    segment = next((s for s in SEGMENTS if s['key'] == segment_key), None)
+    if segment:
+        segment_value = segment_inputs[segment['key']]
+        st.write(f"  - {segment['label']}: {segment_value / 1e9:,.2f} bn")
 st.write("")
-st.write(f"**Sum of All Segments:** {adjusted_total_segments / 1e9:,.2f} bn")
-st.write(f"**Adjusted PBT = Residual Other + Sum of Segments:** {adjusted_pbt / 1e9:,.2f} bn")
+st.write(f"**Sum of Revenue Segments:** {adjusted_revenue_segments / 1e9:,.2f} bn")
+st.write(f"**Adjusted TOI = Residual Other + Revenue Segments:** {adjusted_toi / 1e9:,.2f} bn")
+st.write("")
+st.write("**Adjusted Expense Segments (bn VND):**")
+for segment_key in expense_segments:
+    segment = next((s for s in SEGMENTS if s['key'] == segment_key), None)
+    if segment:
+        segment_value = segment_inputs[segment['key']]
+        st.write(f"  - {segment['label']}: {segment_value / 1e9:,.2f} bn")
+st.write("")
+st.write(f"**Total Expenses:** {adjusted_expenses / 1e9:,.2f} bn")
+st.write(f"**Adjusted PBT = Adjusted TOI - Expenses:** {adjusted_pbt / 1e9:,.2f} bn")
 st.markdown("---")
 impact_vs_base = adjusted_pbt - base_pbt
 impact_vs_prev = adjusted_pbt - prev_pbt
