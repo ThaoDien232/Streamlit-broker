@@ -1393,21 +1393,25 @@ segment_inputs['margin_income'] = margin_income_forecast_bn * 1e9
 segment_inputs['ib_income'] = ib_income_forecast_vnd
 segment_inputs['sga'] = sga_forecast_vnd
 segment_inputs['investment_income'] = investment_income_forecast_vnd
-segment_inputs['interest_expense'] = interest_expense_forecast_bn * 1e9  # Keep as positive expense
+segment_inputs['interest_expense'] = -interest_expense_forecast_bn * 1e9  # Negative because it's a cost
 
 # Calculate adjusted TOI (revenue only)
 adjusted_revenue_segments = sum(segment_inputs[key] for key in revenue_segments)
-adjusted_toi = residual_other + adjusted_revenue_segments
+# residual_other is in bn VND, convert adjusted_revenue_segments to bn VND
+adjusted_toi = residual_other + (adjusted_revenue_segments / 1e9)
 
 # Calculate adjusted PBT (TOI - expenses)
+# SG&A and Interest Expense are negative costs, so we add them (subtracting the costs)
 adjusted_expenses = segment_inputs['sga'] + segment_inputs['interest_expense']
-adjusted_pbt = adjusted_toi - adjusted_expenses
+# Convert to bn VND for calculation
+adjusted_pbt_bn = adjusted_toi + (adjusted_expenses / 1e9)
+adjusted_pbt = adjusted_pbt_bn * 1e9  # Convert back to raw VND for consistency
 
 # Debug: Show adjusted components and PBT
 st.write("=" * 80)
 st.write("🐛 DEBUG - ADJUSTED FORECAST COMPONENTS")
 st.write("=" * 80)
-st.write(f"**Adjusted PBT**: {adjusted_pbt / 1e9:,.2f} bn VND")
+st.write(f"**Adjusted PBT**: {adjusted_pbt_bn:,.2f} bn VND")
 st.write("")
 st.write("**Adjusted Revenue Components:**")
 for segment in SEGMENTS:
@@ -1415,17 +1419,17 @@ for segment in SEGMENTS:
         st.write(f"  - {segment['label']}: {segment_inputs[segment['key']] / 1e9:,.2f} bn VND")
 st.write(f"  - **Sum of Adjusted Revenue Segments**: {adjusted_revenue_segments / 1e9:,.2f} bn VND")
 st.write(f"  - **Residual Other (unchanged)**: {residual_other:,.2f} bn VND")
-st.write(f"  - **Adjusted TOI (Revenue + Residual)**: {adjusted_toi / 1e9:,.2f} bn VND")
+st.write(f"  - **Adjusted TOI (Revenue + Residual)**: {adjusted_toi:,.2f} bn VND")
 st.write("")
-st.write("**Adjusted Cost Components:**")
+st.write("**Adjusted Cost Components (negative = cost):**")
 for segment in SEGMENTS:
     if segment['key'] not in revenue_segments:
         st.write(f"  - {segment['label']}: {segment_inputs[segment['key']] / 1e9:,.2f} bn VND")
 st.write(f"  - **Sum of Adjusted Expenses**: {adjusted_expenses / 1e9:,.2f} bn VND")
 st.write("")
-st.write(f"**Calculated Adjusted PBT (TOI - Expenses)**: {adjusted_pbt / 1e9:,.2f} bn VND")
+st.write(f"**Calculated Adjusted PBT (TOI + Expenses)**: {adjusted_pbt_bn:,.2f} bn VND")
 st.write(f"**Base PBT (reference)**: {base_pbt / 1e9:,.2f} bn VND")
-st.write(f"**Change vs Base**: {(adjusted_pbt - base_pbt) / 1e9:+,.2f} bn VND")
+st.write(f"**Change vs Base**: {(adjusted_pbt_bn - (base_pbt / 1e9)):+,.2f} bn VND")
 st.write("=" * 80)
 
 # Update summary table with adjusted values
