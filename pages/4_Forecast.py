@@ -676,16 +676,30 @@ base_pbt = (fy_pbt - ytd_totals.get('pbt', 0.0)) / remaining_quarters
 # Calculate residual_other from Net_Revenue (revenue components only)
 # Net_Revenue is stored in raw VND in database, needs conversion to bn VND
 fy_net_revenue = forecast_map.get('Net_Revenue', 0.0) / 1e9
-base_net_revenue = (fy_net_revenue - ytd_totals.get('net_revenue', 0.0)) / remaining_quarters if fy_net_revenue != 0.0 else 0.0
+ytd_net_revenue = ytd_totals.get('net_revenue', 0.0)
+
+st.write(f"🐛 DEBUG - Net Revenue Calculation:")
+st.write(f"  FY Net_Revenue (from forecast, in bn): {fy_net_revenue:,.2f} bn VND")
+st.write(f"  YTD Net_Revenue (from actuals): {ytd_net_revenue:,.2f}")
+st.write(f"  YTD Net_Revenue (in bn): {ytd_net_revenue / 1e9:,.2f} bn VND")
+st.write(f"  Remaining quarters: {remaining_quarters}")
+
+base_net_revenue = (fy_net_revenue - ytd_net_revenue / 1e9) / remaining_quarters if fy_net_revenue != 0.0 else 0.0
+
+st.write(f"  Base Net_Revenue per quarter: {base_net_revenue:,.2f} bn VND")
 
 # Revenue segments only (exclude SG&A and Interest Expense which are costs)
 revenue_segments = ['brokerage_fee', 'margin_income', 'investment_income', 'ib_income']
 # Convert sum from raw VND to bn VND
 sum_revenue_segments = sum(base_segments.get(key, 0.0) for key in revenue_segments) / 1e9
 
+st.write(f"  Sum of revenue segments (in bn): {sum_revenue_segments:,.2f} bn VND")
+
 # residual_other = "Other Operating Income" not explicitly modeled
 # Calculate as Net_Revenue - sum of revenue segments (both now in bn VND)
 residual_other = base_net_revenue - sum_revenue_segments if fy_net_revenue != 0.0 else 0.0
+
+st.write(f"  Residual Other (Net_Revenue - revenue segments): {residual_other:,.2f} bn VND")
 
 # Debug: Show base PBT and all components
 st.write("=" * 80)
