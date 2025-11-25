@@ -1287,37 +1287,30 @@ with book_col:
                     investment_metrics_df, selected_broker, year, quarter
                 )
 
-            for category in ['FVTPL', 'AFS', 'HTM']:
-                category_items = sorted({item for (_, data) in period_data_cache.items()
-                                         for item in data.get(category, {}).get('Market Value', {})})
-                if not category_items:
-                    continue
+            # Use simplified categories from investment_book module
+            from utils.investment_book import SIMPLIFIED_CATEGORIES
 
-                header_row = {'Item': category}
-                for _, _, label in column_labels:
-                    header_row[label] = ''
-                snapshot_rows.append(header_row)
-
-                for item in category_items:
-                    row = {'Item': f'  {item}'}
-                    has_data = False
-                    for (year, quarter), data in period_data_cache.items():
-                        label = quarter_label(year, quarter)
-                        mv = data.get(category, {}).get('Market Value', {}).get(item)
-                        if mv not in (None, 0):
-                            row[label] = format_investment_cell(mv)
-                            has_data = True
-                        else:
-                            row[label] = '-'
-                    if has_data:
-                        snapshot_rows.append(row)
-
-                total_row = {'Item': f'Total {category}'}
+            for category in SIMPLIFIED_CATEGORIES:
+                row = {'Item': category}
+                has_data = False
                 for (year, quarter), data in period_data_cache.items():
                     label = quarter_label(year, quarter)
-                    total_mv = sum(data.get(category, {}).get('Market Value', {}).values())
-                    total_row[label] = format_investment_cell(total_mv)
-                snapshot_rows.append(total_row)
+                    value = data.get(category, 0)
+                    if value not in (None, 0):
+                        row[label] = format_investment_cell(value)
+                        has_data = True
+                    else:
+                        row[label] = '-'
+                if has_data:
+                    snapshot_rows.append(row)
+
+            # Add total row
+            total_row = {'Item': 'TOTAL INVESTMENTS'}
+            for (year, quarter), data in period_data_cache.items():
+                label = quarter_label(year, quarter)
+                total_value = sum(data.values())
+                total_row[label] = format_investment_cell(total_value)
+            snapshot_rows.append(total_row)
 
             if snapshot_rows:
                 investment_table = pd.DataFrame(snapshot_rows)
