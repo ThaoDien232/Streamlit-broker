@@ -637,6 +637,23 @@ base_pbt = (fy_pbt - ytd_totals.get('pbt', 0.0)) / remaining_quarters
 sum_base_segments = sum(base_segments.values())
 residual_other = base_pbt - sum_base_segments
 
+# DEBUG: Print base forecast breakdown
+st.markdown("---")
+st.markdown("### 🔍 Debug: Base Forecast Calculation Breakdown")
+st.write(f"**Full-Year PBT Forecast:** {fy_pbt / 1e9:,.2f} bn")
+st.write(f"**YTD PBT Actual:** {ytd_totals.get('pbt', 0.0) / 1e9:,.2f} bn")
+st.write(f"**Remaining Quarters:** {remaining_quarters}")
+st.write(f"**Base PBT = (FY - YTD) / Remaining:** {base_pbt / 1e9:,.2f} bn")
+st.write("")
+st.write("**Base Segment Contributions (bn VND):**")
+for segment in SEGMENTS:
+    segment_value = base_segments[segment['key']]
+    st.write(f"  - {segment['label']}: {segment_value / 1e9:,.2f} bn")
+st.write("")
+st.write(f"**Sum of Base Segments:** {sum_base_segments / 1e9:,.2f} bn")
+st.write(f"**Residual Other = Base PBT - Sum of Segments:** {residual_other / 1e9:,.2f} bn")
+st.markdown("---")
+
 prev_pbt = float(latest_row['pbt'])
 yoy_row = df_quarters[(df_quarters['YEARREPORT'] == target_year - 1) & (df_quarters['LENGTHREPORT'] == target_quarter)]
 yoy_pbt = float(yoy_row['pbt'].iloc[0]) if not yoy_row.empty else None
