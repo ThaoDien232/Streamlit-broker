@@ -680,10 +680,11 @@ base_net_revenue = (fy_net_revenue - ytd_totals.get('net_revenue', 0.0)) / remai
 
 # Revenue segments only (exclude SG&A and Interest Expense which are costs)
 revenue_segments = ['brokerage_fee', 'margin_income', 'investment_income', 'ib_income']
-sum_revenue_segments = sum(base_segments.get(key, 0.0) for key in revenue_segments)
+# Convert sum from raw VND to bn VND
+sum_revenue_segments = sum(base_segments.get(key, 0.0) for key in revenue_segments) / 1e9
 
 # residual_other = "Other Operating Income" not explicitly modeled
-# Calculate as Net_Revenue - sum of revenue segments
+# Calculate as Net_Revenue - sum of revenue segments (both now in bn VND)
 residual_other = base_net_revenue - sum_revenue_segments if fy_net_revenue != 0.0 else 0.0
 
 # Debug: Show base PBT and all components
@@ -698,22 +699,29 @@ st.write("")
 st.write("**Revenue Components (Base Values):**")
 for segment in SEGMENTS:
     if segment['key'] in revenue_segments:
-        st.write(f"  - {segment['label']}: {base_segments.get(segment['key'], 0.0):,.2f} bn VND")
+        # Display values - base_segments is in raw VND, convert to bn
+        value_bn = base_segments.get(segment['key'], 0.0) / 1e9
+        st.write(f"  - {segment['label']}: {value_bn:,.2f} bn VND")
+# sum_revenue_segments is already converted to bn VND
 st.write(f"  - **Sum of Revenue Segments**: {sum_revenue_segments:,.2f} bn VND")
 st.write(f"  - **Residual Other (Net_Revenue - Revenue Segments)**: {residual_other:,.2f} bn VND")
 st.write(f"  - **Total Revenue (with residual)**: {sum_revenue_segments + residual_other:,.2f} bn VND")
 st.write("")
 st.write("**Cost Components (Base Values):**")
+sum_cost_segments = sum(base_segments.get(key, 0.0) for key in base_segments.keys() if key not in revenue_segments)
 for segment in SEGMENTS:
     if segment['key'] not in revenue_segments:
-        st.write(f"  - {segment['label']}: {base_segments.get(segment['key'], 0.0):,.2f} bn VND")
-sum_cost_segments = sum(base_segments.get(key, 0.0) for key in base_segments.keys() if key not in revenue_segments)
-st.write(f"  - **Sum of Cost Segments**: {sum_cost_segments:,.2f} bn VND")
+        # Convert from raw VND to bn VND for display
+        value_bn = base_segments.get(segment['key'], 0.0) / 1e9
+        st.write(f"  - {segment['label']}: {value_bn:,.2f} bn VND")
+sum_cost_segments_bn = sum_cost_segments / 1e9
+st.write(f"  - **Sum of Cost Segments**: {sum_cost_segments_bn:,.2f} bn VND")
 st.write("")
 st.write(f"**Net_Revenue (Base)**: {base_net_revenue:,.2f} bn VND")
 st.write(f"**FY Net_Revenue Forecast**: {fy_net_revenue:,.2f} bn VND")
 st.write("")
-calculated_pbt = sum_revenue_segments + residual_other - sum_cost_segments
+# sum_cost_segments_bn is already converted, sum_revenue_segments is already converted
+calculated_pbt = sum_revenue_segments + residual_other - sum_cost_segments_bn
 st.write(f"**Calculated PBT (Revenue - Costs)**: {calculated_pbt:,.2f} bn VND")
 st.write(f"**Difference from Base PBT**: {calculated_pbt - base_pbt:,.2f} bn VND")
 st.write("=" * 80)
