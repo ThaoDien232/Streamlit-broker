@@ -1403,6 +1403,31 @@ adjusted_toi = residual_other + adjusted_revenue_segments
 adjusted_expenses = segment_inputs['sga'] + segment_inputs['interest_expense']
 adjusted_pbt = adjusted_toi - adjusted_expenses
 
+# Debug: Show adjusted components and PBT
+st.write("=" * 80)
+st.write("🐛 DEBUG - ADJUSTED FORECAST COMPONENTS")
+st.write("=" * 80)
+st.write(f"**Adjusted PBT**: {adjusted_pbt / 1e9:,.2f} bn VND")
+st.write("")
+st.write("**Adjusted Revenue Components:**")
+for segment in SEGMENTS:
+    if segment['key'] in revenue_segments:
+        st.write(f"  - {segment['label']}: {segment_inputs[segment['key']] / 1e9:,.2f} bn VND")
+st.write(f"  - **Sum of Adjusted Revenue Segments**: {adjusted_revenue_segments / 1e9:,.2f} bn VND")
+st.write(f"  - **Residual Other (unchanged)**: {residual_other:,.2f} bn VND")
+st.write(f"  - **Adjusted TOI (Revenue + Residual)**: {adjusted_toi / 1e9:,.2f} bn VND")
+st.write("")
+st.write("**Adjusted Cost Components:**")
+for segment in SEGMENTS:
+    if segment['key'] not in revenue_segments:
+        st.write(f"  - {segment['label']}: {segment_inputs[segment['key']] / 1e9:,.2f} bn VND")
+st.write(f"  - **Sum of Adjusted Expenses**: {adjusted_expenses / 1e9:,.2f} bn VND")
+st.write("")
+st.write(f"**Calculated Adjusted PBT (TOI - Expenses)**: {adjusted_pbt / 1e9:,.2f} bn VND")
+st.write(f"**Base PBT (reference)**: {base_pbt / 1e9:,.2f} bn VND")
+st.write(f"**Change vs Base**: {(adjusted_pbt - base_pbt) / 1e9:+,.2f} bn VND")
+st.write("=" * 80)
+
 # Update summary table with adjusted values
 target_column_label = f"{target_label} Base (bn VND)"
 if target_column_label in summary_df.columns:
