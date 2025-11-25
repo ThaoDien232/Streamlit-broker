@@ -676,15 +676,15 @@ base_pbt = (fy_pbt - ytd_totals.get('pbt', 0.0)) / remaining_quarters
 # Calculate residual_other from Net_Revenue (revenue components only)
 # Net_Revenue is stored in raw VND in database, needs conversion to bn VND
 fy_net_revenue = forecast_map.get('Net_Revenue', 0.0) / 1e9
+# YTD Net_Revenue is already in bn VND (like other YTD totals)
 ytd_net_revenue = ytd_totals.get('net_revenue', 0.0)
 
 st.write(f"🐛 DEBUG - Net Revenue Calculation:")
 st.write(f"  FY Net_Revenue (from forecast, in bn): {fy_net_revenue:,.2f} bn VND")
-st.write(f"  YTD Net_Revenue (from actuals): {ytd_net_revenue:,.2f}")
-st.write(f"  YTD Net_Revenue (in bn): {ytd_net_revenue / 1e9:,.2f} bn VND")
+st.write(f"  YTD Net_Revenue (from actuals, already in bn): {ytd_net_revenue:,.2f} bn VND")
 st.write(f"  Remaining quarters: {remaining_quarters}")
 
-base_net_revenue = (fy_net_revenue - ytd_net_revenue / 1e9) / remaining_quarters if fy_net_revenue != 0.0 else 0.0
+base_net_revenue = (fy_net_revenue - ytd_net_revenue) / remaining_quarters if fy_net_revenue != 0.0 else 0.0
 
 st.write(f"  Base Net_Revenue per quarter: {base_net_revenue:,.2f} bn VND")
 
