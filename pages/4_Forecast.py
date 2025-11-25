@@ -665,6 +665,38 @@ sum_revenue_segments = sum(base_segments.get(key, 0.0) for key in revenue_segmen
 # Calculate as Net_Revenue - sum of revenue segments
 residual_other = base_net_revenue - sum_revenue_segments if fy_net_revenue != 0.0 else 0.0
 
+# Debug: Show base PBT and all components
+st.write("=" * 80)
+st.write("🐛 DEBUG - BASE PBT AND COMPONENTS BREAKDOWN")
+st.write("=" * 80)
+st.write(f"**Base PBT**: {base_pbt:,.2f} bn VND")
+st.write(f"**FY PBT Forecast**: {fy_pbt:,.2f} bn VND")
+st.write(f"**YTD PBT Realized**: {ytd_totals.get('pbt', 0.0):,.2f} bn VND")
+st.write(f"**Remaining Quarters**: {remaining_quarters}")
+st.write("")
+st.write("**Revenue Components (Base Values):**")
+for segment in SEGMENTS:
+    if segment['key'] in revenue_segments:
+        st.write(f"  - {segment['label']}: {base_segments.get(segment['key'], 0.0):,.2f} bn VND")
+st.write(f"  - **Sum of Revenue Segments**: {sum_revenue_segments:,.2f} bn VND")
+st.write(f"  - **Residual Other (Net_Revenue - Revenue Segments)**: {residual_other:,.2f} bn VND")
+st.write(f"  - **Total Revenue (with residual)**: {sum_revenue_segments + residual_other:,.2f} bn VND")
+st.write("")
+st.write("**Cost Components (Base Values):**")
+for segment in SEGMENTS:
+    if segment['key'] not in revenue_segments:
+        st.write(f"  - {segment['label']}: {base_segments.get(segment['key'], 0.0):,.2f} bn VND")
+sum_cost_segments = sum(base_segments.get(key, 0.0) for key in base_segments.keys() if key not in revenue_segments)
+st.write(f"  - **Sum of Cost Segments**: {sum_cost_segments:,.2f} bn VND")
+st.write("")
+st.write(f"**Net_Revenue (Base)**: {base_net_revenue:,.2f} bn VND")
+st.write(f"**FY Net_Revenue Forecast**: {fy_net_revenue:,.2f} bn VND")
+st.write("")
+calculated_pbt = sum_revenue_segments + residual_other - sum_cost_segments
+st.write(f"**Calculated PBT (Revenue - Costs)**: {calculated_pbt:,.2f} bn VND")
+st.write(f"**Difference from Base PBT**: {calculated_pbt - base_pbt:,.2f} bn VND")
+st.write("=" * 80)
+
 prev_pbt = float(latest_row['pbt'])
 yoy_row = df_quarters[(df_quarters['YEARREPORT'] == target_year - 1) & (df_quarters['LENGTHREPORT'] == target_quarter)]
 yoy_pbt = float(yoy_row['pbt'].iloc[0]) if not yoy_row.empty else None
