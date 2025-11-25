@@ -574,8 +574,10 @@ forecast_map = get_forecast_map(df_forecast, selected_broker, target_year, forec
 # Debug: Print Net_Revenue data
 st.write("🐛 DEBUG - Forecast Map Keys:", list(forecast_map.keys()))
 if 'Net_Revenue' in forecast_map:
-    st.write(f"🐛 DEBUG - Net_Revenue from forecast_map (raw value): {forecast_map['Net_Revenue']}")
-    st.write(f"🐛 DEBUG - Net_Revenue in bn VND (divided by 1e9): {forecast_map['Net_Revenue'] / 1e9}")
+    raw_net_revenue = forecast_map['Net_Revenue']
+    converted_net_revenue = raw_net_revenue / 1e9
+    st.write(f"🐛 DEBUG - Net_Revenue (raw from database): {raw_net_revenue:,.0f} VND")
+    st.write(f"🐛 DEBUG - Net_Revenue (converted to bn): {converted_net_revenue:,.2f} bn VND")
 else:
     st.write("🐛 DEBUG - Net_Revenue NOT found in forecast_map")
 
@@ -588,16 +590,17 @@ if not df_forecast.empty:
     if not net_revenue_rows.empty:
         st.write("🐛 DEBUG - Net_Revenue rows in df_forecast:")
         st.dataframe(net_revenue_rows[['TICKER', 'KEYCODE', 'DATE', 'VALUE', 'RATING']])
-        st.write(f"🐛 DEBUG - Net_Revenue VALUE column (raw): {net_revenue_rows['VALUE'].iloc[0]}")
-        st.write(f"🐛 DEBUG - Net_Revenue in bn VND (divided by 1e9): {net_revenue_rows['VALUE'].iloc[0] / 1e9}")
+        raw_value = net_revenue_rows['VALUE'].iloc[0]
+        st.write(f"🐛 DEBUG - Net_Revenue VALUE from DB (raw): {raw_value:,.0f} VND")
+        st.write(f"🐛 DEBUG - Net_Revenue VALUE (in bn VND): {raw_value / 1e9:,.2f} bn VND")
     else:
         st.write("🐛 DEBUG - No Net_Revenue rows found in df_forecast for selected broker")
 
 # Debug: Check other forecast values for comparison
-st.write("🐛 DEBUG - Sample forecast values for comparison:")
+st.write("🐛 DEBUG - Sample forecast values for comparison (all in bn VND):")
 for key in ['PBT', 'Total_Operating_Income', 'Net_Brokerage_Income']:
     if key in forecast_map:
-        st.write(f"  - {key}: {forecast_map[key]:,.2f}")
+        st.write(f"  - {key}: {forecast_map[key]:,.2f} bn VND")
     else:
         st.write(f"  - {key}: NOT FOUND")
 
