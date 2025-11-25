@@ -655,6 +655,9 @@ missing_segments = []
 
 remaining_quarters = 5 - target_quarter
 
+st.write("🐛 DEBUG - Segment Calculation Details:")
+st.write(f"Remaining quarters: {remaining_quarters}")
+
 for segment in SEGMENTS:
     fy_value = forecast_map.get(segment['forecast_key'])
     if fy_value is None or math.isnan(fy_value):
@@ -662,7 +665,10 @@ for segment in SEGMENTS:
         fy_value = 0.0
 
     realized = ytd_totals.get(segment['key'], 0.0)
-    base_segments[segment['key']] = (fy_value - realized) / remaining_quarters
+    base_value = (fy_value - realized) / remaining_quarters
+    base_segments[segment['key']] = base_value
+    
+    st.write(f"  {segment['label']}: FY={fy_value:,.2f} bn, YTD Realized={realized:,.2f} bn, Base={(fy_value - realized):,.2f} bn, Per Quarter={base_value:,.2f} bn")
 
 fy_pbt = forecast_map.get('PBT', 0.0)
 base_pbt = (fy_pbt - ytd_totals.get('pbt', 0.0)) / remaining_quarters
