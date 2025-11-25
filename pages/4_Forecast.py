@@ -1412,7 +1412,8 @@ segment_inputs['interest_expense'] = -interest_expense_forecast_bn * 1e9  # Nega
 
 # Calculate adjusted TOI (revenue only)
 adjusted_revenue_segments = sum(segment_inputs[key] for key in revenue_segments)
-adjusted_toi = residual_other * 1e9 + adjusted_revenue_segments  # residual_other is in bn, convert to raw VND
+# residual_other is in bn VND, convert to raw VND to match segment_inputs
+adjusted_toi = residual_other * 1e9 + adjusted_revenue_segments
 
 # Calculate adjusted PBT (TOI - expenses)
 adjusted_expenses = segment_inputs['sga'] + segment_inputs['interest_expense']
