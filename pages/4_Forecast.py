@@ -531,6 +531,35 @@ def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None]
 
 theme_config, df_is_quarterly, df_bs_quarterly, df_forecast, df_liquidity_raw, df_turnover = load_data()
 
+# DEBUG: Print all available income statement KEYCODEs in the database
+st.markdown("---")
+st.markdown("### 🔍 Debug: Available Income Statement KEYCODEs in Database")
+st.write("**Income Statement Items from Metrics Table:**")
+if not df_is_quarterly.empty:
+    is_columns = [col for col in df_is_quarterly.columns if col not in ['TICKER', 'YEARREPORT', 'LENGTHREPORT', 'STARTDATE', 'ENDDATE', 'QUARTER_LABEL', 'pbt']]
+    is_columns_sorted = sorted(is_columns)
+    for col in is_columns_sorted:
+        st.write(f"  - {col}")
+else:
+    st.write("  No Income Statement data loaded")
+
+st.write("")
+st.write("**Forecast KEYCODEs Available:**")
+if not df_forecast.empty:
+    forecast_keycodes = df_forecast['KEYCODE'].unique()
+    forecast_keycodes_sorted = sorted([str(k) for k in forecast_keycodes if pd.notna(k)])
+    for keycode in forecast_keycodes_sorted:
+        # Get a sample keycode name if available
+        sample = df_forecast[df_forecast['KEYCODE'] == keycode].iloc[0]
+        keyname = sample.get('KEYCODENAME', '')
+        if keyname and not pd.isna(keyname):
+            st.write(f"  - {keycode}: {keyname}")
+        else:
+            st.write(f"  - {keycode}")
+else:
+    st.write("  No Forecast data loaded")
+st.markdown("---")
+
 theme = theme_config.get("theme", {}) if isinstance(theme_config, dict) else {}
 background_color = theme.get("backgroundColor", "#FFFFFF")
 text_color = theme.get("textColor", "#000000")
