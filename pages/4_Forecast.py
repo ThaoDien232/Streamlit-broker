@@ -1018,6 +1018,20 @@ st.write(f"**Forecast Target Quarter:** {target_label} (Year: {target_year}, Qua
 st.write(f"**MARGIN_INCOME_CODES:** {MARGIN_INCOME_CODES}")
 st.write("---")
 
+# Debug: Show FY forecast breakdown for margin income
+fy_margin_income_raw = forecast_map.get('Net_Margin_lending_Income', 0.0)
+fy_margin_income_bn = fy_margin_income_raw / 1e9
+ytd_margin_income_raw = ytd_totals.get('margin_income', 0.0)
+ytd_margin_income_bn = ytd_margin_income_raw / 1e9
+base_margin_income_bn = base_segments.get('margin_income', 0.0)
+
+st.write("**Full Year Forecast Calculation:**")
+st.write(f"  - FY {target_year} Forecast (from database): {fy_margin_income_raw:,.0f} VND ({fy_margin_income_bn:,.2f} bn)")
+st.write(f"  - YTD Realized (Q1-Q{target_quarter-1}): {ytd_margin_income_raw:,.0f} VND ({ytd_margin_income_bn:,.2f} bn)")
+st.write(f"  - Remaining quarters: {remaining_quarters}")
+st.write(f"  - Base per quarter: ({fy_margin_income_bn:,.2f} - {ytd_margin_income_bn:,.2f}) / {remaining_quarters} = {base_margin_income_bn:,.2f} bn")
+st.write("---")
+
 # Debug: Show margin income values from Q1 2024 onwards
 debug_2024_quarters = [(y, q) for y, q in brokerage_history_quarters if y >= 2024]
 if debug_2024_quarters:
