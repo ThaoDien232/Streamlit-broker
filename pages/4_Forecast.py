@@ -1179,6 +1179,15 @@ st.dataframe(margin_table_df, use_container_width=True)
 
 st.caption("Margin lending income and interest expense calculated as balance × rate ÷ 4 for the forecast quarter.")
 
+# Debug: Show what's in the forecast column
+st.write("### DEBUG: Forecast Quarter Values in Table")
+st.write(f"**Column label:** {margin_forecast_metrics['label']}")
+st.write(f"**target_label:** {target_label}")
+st.write(f"**Are they the same?** {margin_forecast_metrics['label'] == target_label}")
+st.write(f"**Margin Income shown in table:** {margin_forecast_metrics['margin_income_bn']:.2f} bn")
+st.write(f"**Calculation:** {margin_balance_input:,.0f} × {margin_rate_input:.2f}% ÷ 4 = {margin_income_forecast_bn:.2f} bn")
+st.write("---")
+
 
 def render_segment_override(segment_key: str, title: str, input_key: str) -> tuple[float, float]:
     st.markdown(f"#### {title}")
