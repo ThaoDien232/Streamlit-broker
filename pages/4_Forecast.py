@@ -1013,6 +1013,8 @@ margin_history_metrics: list[dict[str, float | None]] = []
 
 st.write("### DEBUG: Margin Income Q1 2024 Onwards")
 st.write(f"**Selected Broker:** {selected_broker}")
+st.write(f"**Latest Actual Quarter:** {latest_label} (Year: {latest_year}, Quarter: {latest_quarter})")
+st.write(f"**Forecast Target Quarter:** {target_label} (Year: {target_year}, Quarter: {target_quarter})")
 st.write(f"**MARGIN_INCOME_CODES:** {MARGIN_INCOME_CODES}")
 st.write("---")
 
