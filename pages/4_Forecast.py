@@ -1093,7 +1093,7 @@ borrowing_balance_adjusted = max(borrowing_balance_base + delta_margin_balance, 
 
 # Use the base margin income from baseline breakdown (FY - YTD) / Remaining Quarters
 # This matches the "Baseline Breakdown" calculation
-margin_income_forecast_bn = base_margin_income_bn
+margin_income_forecast_bn = base_segments.get('margin_income', 0.0)
 
 interest_expense_forecast_bn = (
     borrowing_balance_adjusted * (interest_rate_assumed / 100) / 4 if interest_rate_assumed else 0.0
