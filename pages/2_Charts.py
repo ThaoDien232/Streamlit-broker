@@ -6,6 +6,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from utils.brokerage_codes import BROKERAGE_CODE_MAP
+
 # Load theme from config.toml
 theme_config = toml.load("utils/config.toml")
 theme = theme_config["theme"]
@@ -68,6 +70,40 @@ def get_available_options():
     years = get_available_years_fast()
 
     return tickers, years
+
+
+# Whitelist of tickers to display (data tickers)
+DISPLAY_TICKERS_WHITELIST = [
+    "SSI",
+    "VCI",
+    "VND",
+    "HCM",
+    "TCBS",
+    "VPBS",
+    "VPS",
+    "MBS",
+    "VIX",
+    "SHS",
+    "BSI",
+    "DSE",
+    "FTS",
+    "VDS",
+    "ORS",
+]
+
+
+def get_display_ticker(data_ticker: str) -> str:
+    """Convert data ticker (e.g. TCBS) to display ticker (e.g. TCX)."""
+
+    if not data_ticker:
+        return data_ticker
+
+    for display_code, data_code in BROKERAGE_CODE_MAP.items():
+        if data_code.upper() == str(data_ticker).upper():
+            return display_code
+
+    return str(data_ticker).upper()
+
 
 def reload_data():
     """Clear cache and reload data"""
@@ -407,14 +443,22 @@ broker_groups = {
 
 # Create grouped broker list maintaining order within groups
 grouped_brokers = []
-for group_name, group_brokers in broker_groups.items():
-    # Add brokers from this group that exist in available_brokers
+for _, group_brokers in broker_groups.items():
     for broker in group_brokers:
-        if broker in available_brokers:
+        if (
+            broker in available_brokers
+            and broker in DISPLAY_TICKERS_WHITELIST
+            and broker not in grouped_brokers
+        ):
             grouped_brokers.append(broker)
 
-# Add remaining brokers not in any group (sorted)
-remaining_brokers = sorted([b for b in available_brokers if b not in grouped_brokers])
+# Add remaining brokers not in any group (sorted), limited to whitelist
+remaining_brokers = sorted(
+    broker
+    for broker in available_brokers
+    if broker not in grouped_brokers and broker in DISPLAY_TICKERS_WHITELIST
+)
+
 all_brokers_ordered = grouped_brokers + remaining_brokers
 
 # Broker selection - NO DEFAULT
@@ -422,6 +466,7 @@ selected_brokers = st.sidebar.multiselect(
     "Select Brokers:",
     options=all_brokers_ordered,
     default=[],  # No default brokers
+    format_func=get_display_ticker,
     key="chart_brokers",
     help="Brokers organized by tier: Top (SSI, VCI, VND, HCM, TCBS, VPBS, VPS) | Mid (MBS, VIX, SHS, BSI, FTS) | Regional (DSE, VDS, LPBS, Kafi, ACBS, OCBS, HDBS)"
 )
