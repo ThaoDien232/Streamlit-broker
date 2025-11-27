@@ -999,7 +999,7 @@ def extract_bs_value(year: int, quarter: int, codes: list[str]) -> float | None:
     return total if found else None
 
 
-MARGIN_INCOME_CODES = ['Net_Margin_lending_Income', 'IS.7', 'IS.30']
+MARGIN_INCOME_CODES = ['Net_Margin_lending_Income', 'Net_Margin_Lending_Income']
 INTEREST_EXPENSE_CODES = ['Interest_Expense', 'IS.51']
 MARGIN_BALANCE_CODES = ['BS.8']
 BORROWING_BALANCE_CODES = ['BS.95', 'BS.100', 'BS.122', 'BS.127']
