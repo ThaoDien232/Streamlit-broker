@@ -1011,43 +1011,6 @@ BORROWING_BALANCE_CODES = ['BS.95', 'BS.100', 'BS.122', 'BS.127']
 
 margin_history_metrics: list[dict[str, float | None]] = []
 
-st.write("### DEBUG: Margin Income Q1 2024 Onwards")
-st.write(f"**Selected Broker:** {selected_broker}")
-st.write(f"**Latest Actual Quarter:** {latest_label} (Year: {latest_year}, Quarter: {latest_quarter})")
-st.write(f"**Forecast Target Quarter:** {target_label} (Year: {target_year}, Quarter: {target_quarter})")
-st.write(f"**MARGIN_INCOME_CODES:** {MARGIN_INCOME_CODES}")
-st.write("---")
-
-# Debug: Show FY forecast breakdown for margin income
-fy_margin_income_raw = forecast_map.get('Net_Margin_lending_Income', 0.0)
-fy_margin_income_bn = fy_margin_income_raw / 1e9
-ytd_margin_income_raw = ytd_totals.get('margin_income', 0.0)
-ytd_margin_income_bn = ytd_margin_income_raw / 1e9
-base_margin_income_bn = base_segments.get('margin_income', 0.0)
-
-st.write("**Full Year Forecast Calculation:**")
-st.write(f"  - FY {target_year} Forecast (from database): {fy_margin_income_raw:,.0f} VND ({fy_margin_income_bn:,.2f} bn)")
-st.write(f"  - YTD Realized (Q1-Q{target_quarter-1}): {ytd_margin_income_raw:,.0f} VND ({ytd_margin_income_bn:,.2f} bn)")
-st.write(f"  - Remaining quarters: {remaining_quarters}")
-st.write(f"  - Base per quarter: ({fy_margin_income_bn:,.2f} - {ytd_margin_income_bn:,.2f}) / {remaining_quarters} = {base_margin_income_bn:,.2f} bn")
-st.write("---")
-
-# Debug: Show margin income values from Q1 2024 onwards
-debug_2024_quarters = [(y, q) for y, q in brokerage_history_quarters if y >= 2024]
-if debug_2024_quarters:
-    st.write("**Margin Income Values from Q1 2024:**")
-    for y, q in debug_2024_quarters:
-        margin_income_val = extract_is_value(y, q, MARGIN_INCOME_CODES)
-        quarter_lbl = quarter_label(y, q)
-        if margin_income_val is not None:
-            st.write(f"  - {quarter_lbl}: {margin_income_val:,.0f} VND ({margin_income_val / 1e9:,.2f} bn)")
-        else:
-            st.write(f"  - {quarter_lbl}: No data")
-    st.write("---")
-else:
-    st.write("No quarters from 2024 found in history")
-    st.write("---")
-
 for y, q in brokerage_history_quarters:
     margin_balance_val = extract_bs_value(y, q, MARGIN_BALANCE_CODES)
     borrowing_balance_val = extract_bs_value(y, q, BORROWING_BALANCE_CODES)
@@ -1181,18 +1144,6 @@ margin_table_df = margin_table_df.set_index('Metric')
 st.dataframe(margin_table_df, use_container_width=True)
 
 st.caption(f"Margin lending income for {target_label} uses baseline breakdown: (FY Forecast - YTD) / Remaining Quarters. Interest expense calculated as balance × rate ÷ 4.")
-
-# Debug: Show what's in the forecast column
-st.write("### DEBUG: Forecast Quarter Values in Table")
-st.write(f"**Column label:** {margin_forecast_metrics['label']}")
-st.write(f"**target_label:** {target_label}")
-st.write(f"**Are they the same?** {margin_forecast_metrics['label'] == target_label}")
-st.write(f"**Margin Income shown in table:** {margin_forecast_metrics['margin_income_bn']:.2f} bn")
-st.write(f"**Source:** Using base_margin_income_bn from Baseline Breakdown")
-st.write(f"**Value matches Baseline Breakdown:** {margin_forecast_metrics['margin_income_bn']:.2f} bn = {base_margin_income_bn:.2f} bn")
-old_calculation = margin_balance_input * (margin_rate_input / 100) / 4 if margin_rate_input else 0.0
-st.write(f"**OLD (wrong) calculation would have been:** {margin_balance_input:,.0f} × {margin_rate_input:.2f}% ÷ 4 = {old_calculation:.2f} bn")
-st.write("---")
 
 
 def render_segment_override(segment_key: str, title: str, input_key: str) -> tuple[float, float]:
