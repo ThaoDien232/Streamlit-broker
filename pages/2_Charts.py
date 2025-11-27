@@ -47,6 +47,13 @@ def load_filtered_data(tickers, metrics, years, quarters):
     if df.empty:
         return pd.DataFrame()
 
+    # Remove duplicates before processing
+    # Keep the last occurrence of duplicates based on TICKER, METRIC_CODE, YEARREPORT, LENGTHREPORT
+    df = df.drop_duplicates(
+        subset=['TICKER', 'METRIC_CODE', 'YEARREPORT', 'LENGTHREPORT'],
+        keep='last'
+    )
+
     # Ensure correct data types
     df['YEARREPORT'] = df['YEARREPORT'].astype(int)
     df['LENGTHREPORT'] = df['LENGTHREPORT'].astype(int)

@@ -73,11 +73,13 @@ def load_market_index(
 
     return df
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=300)  # Cache for only 5 minutes to keep QTD data fresh
 def load_market_liquidity_data(start_year: int = 2017) -> pd.DataFrame:
     """
     Load and calculate quarterly market liquidity (average daily turnover) and trading days.
     Replaces the calculation from INDEX.csv.
+
+    Note: Short cache (5 min) to ensure current quarter QTD data stays up-to-date.
 
     Args:
         start_year: Start year (default 2017)

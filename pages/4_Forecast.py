@@ -34,7 +34,7 @@ def _safe_read_excel(path: str, **kwargs) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-@st.cache_data
+@st.cache_data(ttl=300)  # Cache for 5 minutes to ensure QTD data stays fresh
 def load_data():
     """Load quarterly actuals, index data, and full-year forecast data."""
 
@@ -449,7 +449,7 @@ def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None]
         return None, None
 
     mask = (
-        (df_book['Broker'] == broker)
+        (df_book['Ticker'] == broker)
         & df_book['FVTPL value'].notnull()
         & (df_book['FVTPL value'] != 0)
     )
@@ -468,11 +468,11 @@ def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None]
 
     for quarter_key in reversed(quarters):
         subset = broker_df[broker_df['Quarter'] == quarter_key].copy()
-        subset['Ticker'] = subset['Ticker'].fillna('').astype(str)
-        subset = subset[~subset['Ticker'].str.upper().isin(exclude_set)]
+        subset['Holdings'] = subset['Holdings'].fillna('').astype(str)
+        subset = subset[~subset['Holdings'].str.upper().isin(exclude_set)]
         if subset.empty:
             continue
-        grouped = subset.groupby('Ticker', as_index=False)['FVTPL value'].sum()
+        grouped = subset.groupby('Holdings', as_index=False)['FVTPL value'].sum()
         if grouped['FVTPL value'].abs().sum() == 0:
             continue
         selected_quarter = quarter_key
@@ -482,16 +482,16 @@ def calculate_fvtpl_profit_total(broker: str) -> tuple[float | None, str | None]
     if selected_quarter is None or quarter_holdings is None or quarter_holdings.empty:
         return None, None
 
-    tickers = quarter_holdings['Ticker'].tolist()
-    quarter_holdings['Ticker'] = quarter_holdings['Ticker'].astype(str).str.strip().str.upper()
-    tickers = quarter_holdings['Ticker'].tolist()
+    tickers = quarter_holdings['Holdings'].tolist()
+    quarter_holdings['Holdings'] = quarter_holdings['Holdings'].astype(str).str.strip().str.upper()
+    tickers = quarter_holdings['Holdings'].tolist()
     quarter_prices = get_quarter_end_prices(tickers, selected_quarter)
     current_prices = get_current_prices(tickers)
 
     profit_total = 0.0
 
     for _, row in quarter_holdings.iterrows():
-        ticker = row['Ticker']
+        ticker = row['Holdings']
         raw_value = float(row['FVTPL value'])
         quarter_price = quarter_prices.get(ticker)
         current_price = current_prices.get(ticker)
@@ -543,7 +543,6 @@ if not available_brokers:
 
 default_broker = 'SSI' if 'SSI' in available_brokers else available_brokers[0]
 selected_broker = st.sidebar.selectbox("Select Broker", options=available_brokers, index=available_brokers.index(default_broker))
-show_share_debug = st.sidebar.checkbox("Show market share debug", value=False)
 
 df_quarters = prepare_quarter_metrics(df_is_quarterly, selected_broker)
 if df_quarters.empty:
@@ -569,7 +568,7 @@ target_year, target_quarter = next_quarter(latest_year, latest_quarter)
 latest_label = quarter_label(latest_year, latest_quarter)
 target_label = quarter_label(target_year, target_quarter)
 
-forecast_keys = [segment['forecast_key'] for segment in SEGMENTS] + ['PBT']
+forecast_keys = [segment['forecast_key'] for segment in SEGMENTS] + ['PBT', 'Total_Operating_Income', 'Net_Revenue']
 forecast_map = get_forecast_map(df_forecast, selected_broker, target_year, forecast_keys)
 
 ytd_mask = (df_quarters['YEARREPORT'] == target_year) & (df_quarters['LENGTHREPORT'] < target_quarter)
@@ -608,7 +607,7 @@ turnover_share_lookup = {}
 if not df_turnover.empty:
     turnover_filtered = df_turnover[df_turnover['Ticker'] == selected_broker].copy()
     turnover_filtered['share'] = turnover_filtered.apply(
-        lambda row: (row['Company turnover'] / row['Market turnover'])
+        lambda row: (row['Company turnover'] / row['Market turnover'] / 2)
         if row['Market turnover'] not in (0, None, np.nan) else np.nan,
         axis=1
     )
@@ -624,19 +623,44 @@ missing_segments = []
 remaining_quarters = 5 - target_quarter
 
 for segment in SEGMENTS:
-    fy_value = forecast_map.get(segment['forecast_key'])
-    if fy_value is None or math.isnan(fy_value):
+    fy_value_raw = forecast_map.get(segment['forecast_key'])
+    if fy_value_raw is None or math.isnan(fy_value_raw):
         missing_segments.append(segment['label'])
-        fy_value = 0.0
+        fy_value_raw = 0.0
 
-    realized = ytd_totals.get(segment['key'], 0.0)
-    base_segments[segment['key']] = (fy_value - realized) / remaining_quarters
+    # Convert both forecast and ytd_totals from raw VND to bn VND for consistent calculation
+    fy_value = fy_value_raw / 1e9
+    realized = ytd_totals.get(segment['key'], 0.0) / 1e9
+    base_value = (fy_value - realized) / remaining_quarters
+    base_segments[segment['key']] = base_value
 
-fy_pbt = forecast_map.get('PBT', 0.0)
-base_pbt = (fy_pbt - ytd_totals.get('pbt', 0.0)) / remaining_quarters
+fy_pbt_raw = forecast_map.get('PBT', 0.0)
+# Convert both forecast and ytd pbt from raw VND to bn VND
+fy_pbt = fy_pbt_raw / 1e9
+base_pbt = (fy_pbt - ytd_totals.get('pbt', 0.0) / 1e9) / remaining_quarters
 
-sum_base_segments = sum(base_segments.values())
-residual_other = base_pbt - sum_base_segments
+# Calculate residual_other from Net_Revenue (revenue components only)
+# Revenue segments only (exclude SG&A and Interest Expense which are costs)
+revenue_segments = ['brokerage_fee', 'margin_income', 'investment_income', 'ib_income']
+
+# Net_Revenue is stored in raw VND in database, needs conversion to bn VND
+fy_net_revenue = forecast_map.get('Net_Revenue', 0.0) / 1e9
+
+# Calculate YTD Net_Revenue from actual revenue segments (not from ytd_totals which doesn't have 'net_revenue')
+ytd_revenue_segments_sum = sum(ytd_totals.get(key, 0.0) for key in revenue_segments) / 1e9
+
+# Calculate YTD TOI by summing all revenue components (including residual/other)
+# Since we don't have historical residual data, use Net_Revenue if available, otherwise estimate
+ytd_net_revenue = ytd_revenue_segments_sum  # This is our best estimate
+
+base_net_revenue = (fy_net_revenue - ytd_net_revenue) / remaining_quarters if fy_net_revenue != 0.0 else 0.0
+
+# base_segments values are already in bn VND (calculated from FY forecast in bn - YTD realized in bn)
+sum_revenue_segments = sum(base_segments.get(key, 0.0) for key in revenue_segments)
+
+# residual_other = "Other Operating Income" not explicitly modeled
+# Calculate as Net_Revenue - sum of revenue segments (both now in bn VND)
+residual_other = base_net_revenue - sum_revenue_segments if fy_net_revenue != 0.0 else 0.0
 
 prev_pbt = float(latest_row['pbt'])
 yoy_row = df_quarters[(df_quarters['YEARREPORT'] == target_year - 1) & (df_quarters['LENGTHREPORT'] == target_quarter)]
@@ -656,7 +680,8 @@ for segment in SEGMENTS:
     record = {
         "Segment": segment['label'],
         "FY Forecast (bn VND)": format_bn_str(fy_val),
-        f"{target_label} Base (bn VND)": format_bn_str(base_val),
+        f"{target_label} Base (bn VND)": f"{base_val:,.0f}",  # base_val is already in bn VND
+        f"{target_label} Adjusted (bn VND)": f"{base_val:,.0f}",  # Will be updated after user adjustments
     }
 
     for quarter_num, column_label in quarter_columns:
@@ -671,8 +696,9 @@ for segment in SEGMENTS:
 
 record_pbt = {
     "Segment": "PBT",
-    "FY Forecast (bn VND)": format_bn_str(fy_pbt),
-    f"{target_label} Base (bn VND)": format_bn_str(base_pbt),
+    "FY Forecast (bn VND)": format_bn_str(fy_pbt_raw),  # Use raw value for formatting
+    f"{target_label} Base (bn VND)": f"{base_pbt:,.0f}",  # base_pbt is already in bn VND
+    f"{target_label} Adjusted (bn VND)": f"{base_pbt:,.0f}",  # Will be updated after user adjustments
 }
 
 for quarter_num, column_label in quarter_columns:
@@ -685,7 +711,7 @@ for quarter_num, column_label in quarter_columns:
 
 summary_rows.append(record_pbt)
 
-columns_order = ["Segment", "FY Forecast (bn VND)"] + [label for _, label in quarter_columns] + [f"{target_label} Base (bn VND)"]
+columns_order = ["Segment", "FY Forecast (bn VND)"] + [label for _, label in quarter_columns] + [f"{target_label} Base (bn VND)", f"{target_label} Adjusted (bn VND)"]
 summary_df = pd.DataFrame(summary_rows)
 summary_df = summary_df[columns_order]
 
@@ -752,7 +778,6 @@ history_metrics = []
 year_fee_observations = {}
 broker_code_norm = get_brokerage_code(selected_broker)
 broker_code_norm = broker_code_norm.strip().upper() if broker_code_norm else None
-market_share_debug = []
 
 for y, q in brokerage_history_quarters:
     stats = quarter_stats_lookup.get((y, q), {})
@@ -782,7 +807,7 @@ for y, q in brokerage_history_quarters:
     else:
         share_year = get_share_for_year(y)
         if share_year:
-            share_decimal = share_year / 2
+            share_decimal = share_year
             share_pct_display = share_decimal * 100
 
     fee_decimal = None
@@ -813,15 +838,6 @@ for y, q in brokerage_history_quarters:
         'share_decimal': share_decimal,
     })
 
-    market_share_debug.append({
-        'Period': quarter_label(y, q),
-        'Broker Code': broker_code_norm or '-',
-        'API Rows': int(len(share_df)) if not share_df.empty else 0,
-        'API Share %': api_share_pct if api_share_pct is not None else None,
-        'Turnover Share %': share_decimal * 100 if (share_decimal and api_share_pct is None) else None,
-        'Final Share %': share_pct_display,
-    })
-
 history_avg_daily = [m['avg_daily_bn'] for m in history_metrics if m['avg_daily_bn'] is not None]
 history_fee_bps = [m['fee_bps'] for m in history_metrics if m['fee_bps'] is not None]
 history_trading_days = [m['trading_days'] for m in history_metrics if m['trading_days']]
@@ -840,7 +856,7 @@ if last_with_share:
 if share_default is None:
     share_year = get_share_for_year(target_year)
     if share_year is not None:
-        share_default = share_year / 2
+        share_default = share_year
 
 avg_daily_default = history_avg_daily[-1] if history_avg_daily else 0.0
 if fee_decimal_default:
@@ -904,14 +920,6 @@ if broker_code_norm and not target_share_df.empty:
     match = target_share_df[target_share_df['Brokerage_Code'] == broker_code_norm]
     if not match.empty:
         target_api_share = match.iloc[0]['Market_Share_Percent']
-market_share_debug.append({
-    'Period': target_label,
-    'Broker Code': broker_code_norm or '-',
-    'API Rows': int(len(target_share_df)) if not target_share_df.empty else 0,
-    'API Share %': target_api_share,
-    'Turnover Share %': share_default_pct if (share_default_pct is not None and target_api_share is None) else None,
-    'Final Share %': forecast_metrics['share_pct'],
-})
 
 def fmt_value(value, decimals=0, suffix=""):
     if value is None or (isinstance(value, float) and math.isnan(value)):
@@ -946,10 +954,6 @@ brokerage_table_df = pd.DataFrame(table_rows)
 brokerage_table_df = brokerage_table_df.set_index('Metric')
 st.dataframe(brokerage_table_df, use_container_width=True)
 
-if show_share_debug:
-    debug_df = pd.DataFrame(market_share_debug)
-    st.markdown("#### Market Share Debug")
-    st.dataframe(debug_df, use_container_width=True)
 st.caption(f"Assuming {trading_days_forecast} trading days for {target_label} and applying net brokerage formula.")
 
 def extract_is_value(year: int, quarter: int, codes: list[str]) -> float | None:
@@ -1161,8 +1165,8 @@ def render_segment_override(segment_key: str, title: str, input_key: str) -> tup
     else:
         st.info(f"No historical data available for {title.lower()}.")
 
-    base_value = base_segments.get(segment_key, 0.0)
-    base_bn = format_bn(base_value)
+    # base_segments values are already in bn VND, no need to convert
+    base_bn = base_segments.get(segment_key, 0.0)
     if not math.isfinite(base_bn):
         base_bn = 0.0
 
@@ -1227,8 +1231,8 @@ with income_col:
     else:
         st.info("No historical investment income data available for the last quarters.")
 
-    investment_base_value = base_segments.get('investment_income', 0.0)
-    investment_base_bn = format_bn(investment_base_value)
+    # base_segments values are already in bn VND, no need to convert
+    investment_base_bn = base_segments.get('investment_income', 0.0)
     if not math.isfinite(investment_base_bn):
         investment_base_bn = 0.0
 
@@ -1241,14 +1245,14 @@ with income_col:
     )
 
 with book_col:
-    st.markdown("#### Investment Book Snapshot")
-
     if investment_metrics_df.empty:
+        st.markdown("#### Investment Book Snapshot")
         st.info("No investment holdings data available for the selected broker.")
     else:
         quarterly_metrics = investment_metrics_df[investment_metrics_df['LENGTHREPORT'].between(1, 4)]
 
         if quarterly_metrics.empty:
+            st.markdown("#### Investment Book Snapshot")
             st.info("Investment book requires quarterly data. No quarterly records found.")
         else:
             period_records = (
@@ -1257,7 +1261,16 @@ with book_col:
                 .sort_values(['YEARREPORT', 'LENGTHREPORT'], ascending=[False, False])
             )
 
-            display_periods = period_records.head(2).sort_values(['YEARREPORT', 'LENGTHREPORT'])
+            # Get the latest quarter only
+            display_periods = period_records.head(1)
+
+            # Get the latest quarter info for the title
+            latest_record = display_periods.iloc[0]
+            latest_year = int(latest_record['YEARREPORT'])
+            latest_quarter = int(latest_record['LENGTHREPORT'])
+            latest_quarter_label = quarter_label(latest_year, latest_quarter)
+
+            st.markdown(f"#### Investment Book Snapshot ({latest_quarter_label})")
 
             snapshot_rows: list[dict[str, str]] = []
             column_labels: list[tuple[int, int, str]] = []
@@ -1274,37 +1287,30 @@ with book_col:
                     investment_metrics_df, selected_broker, year, quarter
                 )
 
-            for category in ['FVTPL', 'AFS', 'HTM']:
-                category_items = sorted({item for (_, data) in period_data_cache.items()
-                                         for item in data.get(category, {}).get('Market Value', {})})
-                if not category_items:
-                    continue
+            # Use simplified categories from investment_book module
+            from utils.investment_book import SIMPLIFIED_CATEGORIES
 
-                header_row = {'Item': category}
-                for _, _, label in column_labels:
-                    header_row[label] = ''
-                snapshot_rows.append(header_row)
-
-                for item in category_items:
-                    row = {'Item': f'  {item}'}
-                    has_data = False
-                    for (year, quarter), data in period_data_cache.items():
-                        label = quarter_label(year, quarter)
-                        mv = data.get(category, {}).get('Market Value', {}).get(item)
-                        if mv not in (None, 0):
-                            row[label] = format_investment_cell(mv)
-                            has_data = True
-                        else:
-                            row[label] = '-'
-                    if has_data:
-                        snapshot_rows.append(row)
-
-                total_row = {'Item': f'Total {category}'}
+            for category in SIMPLIFIED_CATEGORIES:
+                row = {'Item': category}
+                has_data = False
                 for (year, quarter), data in period_data_cache.items():
                     label = quarter_label(year, quarter)
-                    total_mv = sum(data.get(category, {}).get('Market Value', {}).values())
-                    total_row[label] = format_investment_cell(total_mv)
-                snapshot_rows.append(total_row)
+                    value = data.get(category, 0)
+                    if value not in (None, 0):
+                        row[label] = format_investment_cell(value)
+                        has_data = True
+                    else:
+                        row[label] = '-'
+                if has_data:
+                    snapshot_rows.append(row)
+
+            # Add total row
+            total_row = {'Item': 'TOTAL INVESTMENTS'}
+            for (year, quarter), data in period_data_cache.items():
+                label = quarter_label(year, quarter)
+                total_value = sum(data.values())
+                total_row[label] = format_investment_cell(total_value)
+            snapshot_rows.append(total_row)
 
             if snapshot_rows:
                 investment_table = pd.DataFrame(snapshot_rows)
@@ -1314,22 +1320,10 @@ with book_col:
 investment_income_forecast_bn = float(investment_income_input_value)
 investment_income_forecast_vnd = investment_income_forecast_bn * 1e9
 
-# Update summary with forecast brokerage and margin inputs
-target_column_label = f"{target_label} Base (bn VND)"
-if target_column_label in summary_df.columns:
-    summary_df.loc[summary_df['Segment'] == 'Brokerage Fee', target_column_label] = format_bn_str(net_brokerage_forecast)
-    summary_df.loc[summary_df['Segment'] == 'Margin Income', target_column_label] = format_bn_str(margin_income_forecast_bn * 1e9)
-    summary_df.loc[summary_df['Segment'] == 'IB Income', target_column_label] = format_bn_str(ib_income_forecast_vnd)
-    summary_df.loc[summary_df['Segment'] == 'SG&A', target_column_label] = format_bn_str(sga_forecast_vnd)
-    summary_df.loc[summary_df['Segment'] == 'Investment Income', target_column_label] = format_bn_str(investment_income_forecast_vnd)
-    summary_df.loc[summary_df['Segment'] == 'Interest Expense', target_column_label] = format_bn_str(-interest_expense_forecast_bn * 1e9)
-
-st.subheader("Baseline Breakdown")
-st.caption(f"Base assumptions derived from {target_year} full-year forecast minus actual results up to {latest_label}.")
-st.dataframe(summary_df, hide_index=True)
-
+# Calculate segment inputs with user adjustments
+# Convert base_segments from bn VND to raw VND for consistent calculations
 segment_inputs = {
-    segment['key']: base_segments.get(segment['key'], 0.0)
+    segment['key']: base_segments.get(segment['key'], 0.0) * 1e9
     for segment in SEGMENTS
 }
 
@@ -1338,11 +1332,39 @@ segment_inputs['margin_income'] = margin_income_forecast_bn * 1e9
 segment_inputs['ib_income'] = ib_income_forecast_vnd
 segment_inputs['sga'] = sga_forecast_vnd
 segment_inputs['investment_income'] = investment_income_forecast_vnd
-segment_inputs['interest_expense'] = -interest_expense_forecast_bn * 1e9
+segment_inputs['interest_expense'] = -interest_expense_forecast_bn * 1e9  # Negative because it's a cost
 
-adjusted_total_segments = sum(segment_inputs.values())
-adjusted_pbt = residual_other + adjusted_total_segments
-impact_vs_base = adjusted_pbt - base_pbt
+# Calculate adjusted TOI (revenue only)
+adjusted_revenue_segments = sum(segment_inputs[key] for key in revenue_segments)
+# residual_other is in bn VND, convert to raw VND to match segment_inputs
+adjusted_toi = residual_other * 1e9 + adjusted_revenue_segments
+
+# Calculate adjusted PBT (TOI - expenses)
+adjusted_expenses = segment_inputs['sga'] + segment_inputs['interest_expense']
+adjusted_pbt = adjusted_toi + adjusted_expenses  # expenses are negative, so adding them subtracts the costs
+
+# Update summary table with adjusted values
+target_column_label = f"{target_label} Base (bn VND)"
+if target_column_label in summary_df.columns:
+    # Update the Adjusted column with user inputs
+    adjusted_column_label = f"{target_label} Adjusted (bn VND)"
+    summary_df.loc[summary_df['Segment'] == 'Brokerage Fee', adjusted_column_label] = format_bn_str(net_brokerage_forecast)
+    summary_df.loc[summary_df['Segment'] == 'Margin Income', adjusted_column_label] = format_bn_str(margin_income_forecast_bn * 1e9)
+    summary_df.loc[summary_df['Segment'] == 'IB Income', adjusted_column_label] = format_bn_str(ib_income_forecast_vnd)
+    summary_df.loc[summary_df['Segment'] == 'SG&A', adjusted_column_label] = format_bn_str(sga_forecast_vnd)
+    summary_df.loc[summary_df['Segment'] == 'Investment Income', adjusted_column_label] = format_bn_str(investment_income_forecast_vnd)
+    summary_df.loc[summary_df['Segment'] == 'Interest Expense', adjusted_column_label] = format_bn_str(-interest_expense_forecast_bn * 1e9)
+    # Update PBT with calculated adjusted value
+    summary_df.loc[summary_df['Segment'] == 'PBT', adjusted_column_label] = format_bn_str(adjusted_pbt)
+
+st.subheader("Baseline Breakdown")
+st.caption(f"**Base** column: derived from {target_year} FY forecast minus actuals up to {latest_label}. **Adjusted** column: updated with your inputs below.")
+st.dataframe(summary_df, hide_index=True, key="summary_table_final")
+
+# Calculate comparison metrics
+# Convert base_pbt from bn VND to raw VND for consistent comparison with adjusted_pbt (which is in raw VND)
+base_pbt_vnd = base_pbt * 1e9
+impact_vs_base = adjusted_pbt - base_pbt_vnd
 impact_vs_prev = adjusted_pbt - prev_pbt
 impact_vs_yoy = None if yoy_pbt is None else adjusted_pbt - yoy_pbt
 

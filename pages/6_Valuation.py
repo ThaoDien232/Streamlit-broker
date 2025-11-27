@@ -77,6 +77,12 @@ if df.empty:
     st.info("🔍 **Check**: Database connection in streamlit secrets and broker ticker availability in Market_Data table")
     st.stop()
 
+# Whitelist of tickers to display (same as Charts and Historical pages)
+DISPLAY_TICKERS_WHITELIST = ['SSI', 'VCI', 'VND', 'HCM', 'TCBS', 'VPBS', 'VPS', 'MBS', 'VIX', 'SHS', 'BSI', 'DSE', 'FTS', 'VDS', 'ORS']
+
+# Filter to only show whitelisted brokers (keep aggregates for sector analysis)
+df = df[df['TICKER'].isin(DISPLAY_TICKERS_WHITELIST + ['All_Brokers', 'Listed', 'Unlisted', 'Sector'])]
+
 # Build sector aggregates
 df = create_sector_aggregates(df)
 
@@ -137,13 +143,8 @@ st.caption(f"Latest data: {latest_date.strftime('%Y-%m-%d')} | Metric: {selected
 # Chart 1: Valuation Distribution Candle Chart
 st.subheader("📈 Valuation Distribution by Broker")
 
-# Sector selection above the chart
-sector_options = ["All_Brokers", "Listed", "Unlisted"] if include_unlisted else ["All_Brokers", "Listed"]
-selected_sector = st.selectbox(
-    "Select Sector:",
-    sector_options,
-    help="Shows selected sector plus all component brokers"
-)
+# No sector selection needed - always show All_Brokers
+selected_sector = "All_Brokers"
 
 # Get tickers to display
 display_tickers = get_sector_and_components(df, selected_sector, include_unlisted)
@@ -480,7 +481,7 @@ if not stats_df.empty:
     if 'Type' in table_df.columns:
         table_df = table_df.drop('Type', axis=1)
 
-    # Format numeric columns for better display
+    # Format numeric columns for better display (limit to 2 decimal places)
     def format_table_value(val, col_name):
         if pd.isna(val):
             return None
@@ -488,11 +489,11 @@ if not stats_df.empty:
             if metric_type in ['ROE', 'ROA']:
                 return f"{val*100:.2f}%"
             elif metric_type in ['NPAT', 'TOTAL_EQUITY', 'TOTAL_ASSETS']:
-                return f"{val/1e9:.1f}B" if val >= 1e9 else f"{val/1e6:.0f}M"
+                return f"{val/1e9:.2f}B" if val >= 1e9 else f"{val/1e6:.2f}M"
             else:
                 return round(val, 2)
         elif col_name == 'CDF (%)':
-            return f"{val:.1f}%"
+            return f"{val:.2f}%"
         elif col_name == 'Z-Score':
             return round(val, 2)
         else:
