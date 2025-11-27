@@ -1128,7 +1128,10 @@ interest_rate_assumed = interest_rate_input
 delta_margin_balance = margin_balance_input - margin_balance_base
 borrowing_balance_adjusted = max(borrowing_balance_base + delta_margin_balance, 0.0)
 
-margin_income_forecast_bn = margin_balance_input * (margin_rate_input / 100) / 4 if margin_rate_input else 0.0
+# Use the base margin income from baseline breakdown (FY - YTD) / Remaining Quarters
+# This matches the "Baseline Breakdown" calculation
+margin_income_forecast_bn = base_margin_income_bn
+
 interest_expense_forecast_bn = (
     borrowing_balance_adjusted * (interest_rate_assumed / 100) / 4 if interest_rate_assumed else 0.0
 )
@@ -1137,7 +1140,7 @@ margin_forecast_metrics = {
     'label': target_label,
     'margin_balance_bn': margin_balance_input,
     'margin_rate_pct': margin_rate_input,
-    'margin_income_bn': margin_income_forecast_bn,
+    'margin_income_bn': margin_income_forecast_bn,  # Now uses base value from baseline breakdown
     'borrowing_balance_bn': borrowing_balance_adjusted,
     'interest_rate_pct': interest_rate_assumed,
     'interest_expense_bn': interest_expense_forecast_bn,
@@ -1177,7 +1180,7 @@ margin_table_df = pd.DataFrame(margin_table_rows)
 margin_table_df = margin_table_df.set_index('Metric')
 st.dataframe(margin_table_df, use_container_width=True)
 
-st.caption("Margin lending income and interest expense calculated as balance × rate ÷ 4 for the forecast quarter.")
+st.caption(f"Margin lending income for {target_label} uses baseline breakdown: (FY Forecast - YTD) / Remaining Quarters. Interest expense calculated as balance × rate ÷ 4.")
 
 # Debug: Show what's in the forecast column
 st.write("### DEBUG: Forecast Quarter Values in Table")
@@ -1185,7 +1188,10 @@ st.write(f"**Column label:** {margin_forecast_metrics['label']}")
 st.write(f"**target_label:** {target_label}")
 st.write(f"**Are they the same?** {margin_forecast_metrics['label'] == target_label}")
 st.write(f"**Margin Income shown in table:** {margin_forecast_metrics['margin_income_bn']:.2f} bn")
-st.write(f"**Calculation:** {margin_balance_input:,.0f} × {margin_rate_input:.2f}% ÷ 4 = {margin_income_forecast_bn:.2f} bn")
+st.write(f"**Source:** Using base_margin_income_bn from Baseline Breakdown")
+st.write(f"**Value matches Baseline Breakdown:** {margin_forecast_metrics['margin_income_bn']:.2f} bn = {base_margin_income_bn:.2f} bn")
+old_calculation = margin_balance_input * (margin_rate_input / 100) / 4 if margin_rate_input else 0.0
+st.write(f"**OLD (wrong) calculation would have been:** {margin_balance_input:,.0f} × {margin_rate_input:.2f}% ÷ 4 = {old_calculation:.2f} bn")
 st.write("---")
 
 
