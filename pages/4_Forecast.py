@@ -141,7 +141,7 @@ SEGMENTS = [
         "key": "margin_income",
         "label": "Margin Income",
         "forecast_key": "Net_Margin_lending_Income",
-        "columns": ['Net_Margin_lending_Income', 'Net_Margin_Lending_Income'],
+        "columns": ['Net_Margin_lending_Income', 'Net_Margin_Lending_Income', 'IS.7', 'IS.30'],
     },
     {
         "key": "investment_income",
@@ -1003,7 +1003,7 @@ def extract_bs_value(year: int, quarter: int, codes: list[str]) -> float | None:
     return total if found else None
 
 
-MARGIN_INCOME_CODES = ['Net_Margin_lending_Income', 'Net_Margin_Lending_Income']
+MARGIN_INCOME_CODES = ['Net_Margin_lending_Income', 'Net_Margin_Lending_Income', 'IS.7', 'IS.30']
 INTEREST_EXPENSE_CODES = ['Interest_Expense', 'IS.51']
 MARGIN_BALANCE_CODES = ['BS.8']
 BORROWING_BALANCE_CODES = ['BS.95', 'BS.100', 'BS.122', 'BS.127']
