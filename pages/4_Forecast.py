@@ -1012,11 +1012,46 @@ BORROWING_BALANCE_CODES = ['BS.95', 'BS.100', 'BS.122', 'BS.127']
 
 margin_history_metrics: list[dict[str, float | None]] = []
 
+st.write("### DEBUG: Margin Income Data Source Analysis")
+st.write(f"**Selected Broker:** {selected_broker}")
+st.write(f"**MARGIN_INCOME_CODES being searched:** {MARGIN_INCOME_CODES}")
+st.write(f"**MARGIN_BALANCE_CODES being searched:** {MARGIN_BALANCE_CODES}")
+st.write("---")
+
+# Debug: Show what columns are available in df_is_quarterly for this broker
+debug_is_subset = df_is_quarterly[df_is_quarterly['TICKER'] == selected_broker]
+if not debug_is_subset.empty:
+    st.write("**Available columns in df_is_quarterly for this broker:**")
+    margin_related_cols = [col for col in debug_is_subset.columns if 'margin' in col.lower() or 'lending' in col.lower()]
+    st.write(f"Margin/Lending related columns: {margin_related_cols}")
+st.write("---")
+
 for y, q in brokerage_history_quarters:
     margin_balance_val = extract_bs_value(y, q, MARGIN_BALANCE_CODES)
     borrowing_balance_val = extract_bs_value(y, q, BORROWING_BALANCE_CODES)
     margin_income_val = extract_is_value(y, q, MARGIN_INCOME_CODES)
     interest_expense_val = extract_is_value(y, q, INTEREST_EXPENSE_CODES)
+
+    # Debug output for each quarter
+    st.write(f"**{quarter_label(y, q)} - Extracted Values:**")
+    st.write(f"  - Margin Income (raw): {margin_income_val:,.0f} VND" if margin_income_val is not None else "  - Margin Income (raw): None")
+    st.write(f"  - Margin Balance (raw): {margin_balance_val:,.0f} VND" if margin_balance_val is not None else "  - Margin Balance (raw): None")
+
+    # Show the actual data row from df_is_quarterly for this period
+    debug_row = df_is_quarterly[
+        (df_is_quarterly['TICKER'] == selected_broker) &
+        (df_is_quarterly['YEARREPORT'] == y) &
+        (df_is_quarterly['LENGTHREPORT'] == q)
+    ]
+    if not debug_row.empty:
+        st.write(f"  - Data found in df_is_quarterly: YES")
+        # Show all margin-related columns and their values
+        for code in MARGIN_INCOME_CODES:
+            if code in debug_row.columns:
+                val = debug_row[code].iloc[0]
+                st.write(f"  - Column '{code}': {val:,.0f}" if pd.notnull(val) else f"  - Column '{code}': NULL/Missing")
+    else:
+        st.write(f"  - Data found in df_is_quarterly: NO")
 
     margin_balance_bn = margin_balance_val / 1e9 if margin_balance_val is not None else None
     borrowing_balance_bn = borrowing_balance_val / 1e9 if borrowing_balance_val is not None else None
@@ -1024,9 +1059,15 @@ for y, q in brokerage_history_quarters:
     margin_income_bn = abs(margin_income_val) / 1e9 if margin_income_val is not None else None
     interest_expense_bn = abs(interest_expense_val) / 1e9 if interest_expense_val is not None else None
 
+    st.write(f"  - Margin Income (bn after abs()): {margin_income_bn:,.2f}" if margin_income_bn is not None else "  - Margin Income (bn): None")
+
     margin_rate_pct = None
     if margin_balance_val not in (None, 0) and margin_income_val is not None:
         margin_rate_pct = (margin_income_val * 4 / margin_balance_val) * 100
+        st.write(f"  - Calculated Margin Rate: {margin_rate_pct:.2f}%")
+    else:
+        st.write(f"  - Calculated Margin Rate: Cannot calculate (missing balance or income)")
+    st.write("---")
 
     interest_rate_pct = None
     if borrowing_balance_val not in (None, 0) and interest_expense_val is not None:
