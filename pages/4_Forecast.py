@@ -1011,6 +1011,7 @@ BORROWING_BALANCE_CODES = ['BS.95', 'BS.100', 'BS.122', 'BS.127']
 
 margin_history_metrics: list[dict[str, float | None]] = []
 
+
 for y, q in brokerage_history_quarters:
     margin_balance_val = extract_bs_value(y, q, MARGIN_BALANCE_CODES)
     borrowing_balance_val = extract_bs_value(y, q, BORROWING_BALANCE_CODES)
@@ -1093,6 +1094,7 @@ borrowing_balance_adjusted = max(borrowing_balance_base + delta_margin_balance, 
 
 # Use the base margin income from baseline breakdown (FY - YTD) / Remaining Quarters
 # This matches the "Baseline Breakdown" calculation
+# base_segments['margin_income'] is already in bn VND
 margin_income_forecast_bn = base_segments.get('margin_income', 0.0)
 
 interest_expense_forecast_bn = (
@@ -1143,7 +1145,7 @@ margin_table_df = pd.DataFrame(margin_table_rows)
 margin_table_df = margin_table_df.set_index('Metric')
 st.dataframe(margin_table_df, use_container_width=True)
 
-st.caption(f"Margin lending income for {target_label} uses baseline breakdown: (FY Forecast - YTD) / Remaining Quarters. Interest expense calculated as balance × rate ÷ 4.")
+st.caption("Margin lending income and interest expense calculated as balance × rate ÷ 4 for the forecast quarter.")
 
 
 def render_segment_override(segment_key: str, title: str, input_key: str) -> tuple[float, float]:
