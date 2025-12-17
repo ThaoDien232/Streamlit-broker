@@ -21,6 +21,8 @@ if 'price_cache' not in st.session_state:
     st.session_state.price_cache = {}
 if 'price_last_updated' not in st.session_state:
     st.session_state.price_last_updated = None
+if 'price_errors' not in st.session_state:
+    st.session_state.price_errors = []
 
 # Load the prop book data with error handling
 @st.cache_data
@@ -81,7 +83,7 @@ def fetch_historical_price(ticker: str) -> pd.DataFrame:
     """
     # Validate ticker before making API call
     if not is_valid_ticker(ticker):
-        print(f"Skipping invalid ticker: {ticker}")
+        # Silently skip invalid tickers (no error message needed for OTHERS, PBT, etc.)
         return pd.DataFrame()
 
     # Clean ticker
@@ -97,7 +99,7 @@ def fetch_historical_price(ticker: str) -> pd.DataFrame:
         df = stock.quote.history(start='2020-01-01', end=datetime.now().strftime('%Y-%m-%d'))
 
         if df.empty:
-            print(f"No data found for ticker: {clean_ticker}")
+            st.warning(f"No price data found for ticker: {clean_ticker}")
             return pd.DataFrame()
 
         # Rename 'time' column to 'tradingDate' for compatibility
@@ -111,10 +113,20 @@ def fetch_historical_price(ticker: str) -> pd.DataFrame:
         return df[[col for col in keep if col in df.columns]]
 
     except ImportError as e:
-        print(f"vnstock library not installed. Please run: pip install vnstock")
+        error_msg = f"ImportError for {clean_ticker}: {str(e)}"
+        if error_msg not in st.session_state.price_errors:
+            st.session_state.price_errors.append(error_msg)
+        st.error(f"❌ vnstock library not installed. Please contact administrator.")
+        st.error(f"Error details: {str(e)}")
         return pd.DataFrame()
     except Exception as e:
-        print(f"Error fetching data for '{clean_ticker}': {e}")
+        error_msg = f"Error fetching {clean_ticker}: {type(e).__name__} - {str(e)}"
+        if error_msg not in st.session_state.price_errors:
+            st.session_state.price_errors.append(error_msg)
+        st.error(f"❌ Error fetching price data for '{clean_ticker}'")
+        st.error(f"Error type: {type(e).__name__}")
+        st.error(f"Error details: {str(e)}")
+        st.info("💡 Possible causes: Network issues, API rate limits, or firewall restrictions on deployment platform.")
         return pd.DataFrame()
 
 def get_close_price(df: pd.DataFrame, target_date: str = None):
@@ -377,6 +389,68 @@ with st.sidebar:
     if st.button("🔄 Reload Data"):
         st.cache_data.clear()
         st.rerun()
+
+    # Diagnostic panel
+    with st.expander("🔧 Diagnostics", expanded=False):
+        st.subheader("System Information")
+
+        # Check vnstock installation
+        try:
+            from vnstock import Vnstock
+            import vnstock
+            vnstock_version = getattr(vnstock, '__version__', 'Unknown')
+            st.success(f"✓ vnstock installed: v{vnstock_version}")
+        except ImportError as e:
+            st.error(f"✗ vnstock NOT installed: {str(e)}")
+
+        # Python version
+        import sys
+        st.info(f"Python version: {sys.version}")
+
+        # Pandas version
+        st.info(f"Pandas version: {pd.__version__}")
+
+        # Show cache status
+        st.subheader("Price Cache Status")
+        st.info(f"Cached prices: {len(st.session_state.price_cache)} items")
+        if st.session_state.price_last_updated:
+            st.info(f"Last updated: {st.session_state.price_last_updated}")
+        else:
+            st.warning("Prices not yet loaded")
+
+        # Show errors
+        st.subheader("Error Log")
+        if st.session_state.price_errors:
+            st.error(f"Total errors: {len(st.session_state.price_errors)}")
+            for idx, error in enumerate(st.session_state.price_errors[:5], 1):  # Show first 5 errors
+                st.text(f"{idx}. {error}")
+            if len(st.session_state.price_errors) > 5:
+                st.text(f"... and {len(st.session_state.price_errors) - 5} more errors")
+
+            if st.button("Clear Error Log"):
+                st.session_state.price_errors = []
+                st.rerun()
+        else:
+            st.success("No errors recorded")
+
+        # Test API connection button
+        st.subheader("Test API Connection")
+        if st.button("Test VCI Connection"):
+            test_ticker = "VNM"
+            st.info(f"Testing with ticker: {test_ticker}")
+            with st.spinner("Testing..."):
+                try:
+                    from vnstock import Vnstock
+                    stock = Vnstock().stock(symbol=test_ticker, source='VCI')
+                    df = stock.quote.history(start='2024-12-01', end=datetime.now().strftime('%Y-%m-%d'))
+                    if not df.empty:
+                        st.success(f"✓ API Connection OK! Fetched {len(df)} rows")
+                        st.text(f"Latest price: {df.iloc[-1]['close']}")
+                    else:
+                        st.warning("API responded but returned no data")
+                except Exception as e:
+                    st.error(f"✗ Connection failed: {type(e).__name__}")
+                    st.error(f"Details: {str(e)}")
 
 # Initialize session state for price refresh trigger
 if 'refresh_prices' not in st.session_state:
