@@ -13,6 +13,8 @@ font_family = theme["font"]
 import pandas as pd
 from datetime import datetime
 import re
+import requests
+import time
 
 st.set_page_config(page_title="Prop Book Dashboard", layout="wide")
 
@@ -78,10 +80,10 @@ def is_valid_ticker(ticker: str) -> bool:
 
 def fetch_historical_price(ticker: str) -> pd.DataFrame:
     """
-    Fetch daily stock prices using vnstock library with VCI source.
-    Returns DataFrame with 'tradingDate', 'open', 'high', 'low', 'close', 'volume'.
+    Fetch daily closing prices from dclab database (Market_Data table).
+    Returns DataFrame with 'tradingDate' and 'close' columns only.
     """
-    # Validate ticker before making API call
+    # Validate ticker before making database call
     if not is_valid_ticker(ticker):
         # Silently skip invalid tickers (no error message needed for OTHERS, PBT, etc.)
         return pd.DataFrame()
@@ -90,43 +92,34 @@ def fetch_historical_price(ticker: str) -> pd.DataFrame:
     clean_ticker = ticker.strip().upper()
 
     try:
-        from vnstock import Vnstock
+        # Import database function
+        from utils.db import get_historical_prices
 
-        # Use VCI source (TCBS API is deprecated)
-        stock = Vnstock().stock(symbol=clean_ticker, source='VCI')
-
-        # Fetch historical data from 2020 to now
-        df = stock.quote.history(start='2020-01-01', end=datetime.now().strftime('%Y-%m-%d'))
+        # Fetch from database
+        df = get_historical_prices(clean_ticker, start_date='2020-01-01')
 
         if df.empty:
-            st.warning(f"No price data found for ticker: {clean_ticker}")
+            error_msg = f"No price data found in database for {clean_ticker}"
+            if error_msg not in st.session_state.price_errors:
+                st.session_state.price_errors.append(error_msg)
             return pd.DataFrame()
 
-        # Rename 'time' column to 'tradingDate' for compatibility
-        df = df.rename(columns={'time': 'tradingDate'})
-
-        # Convert tradingDate to datetime if not already
-        df['tradingDate'] = pd.to_datetime(df['tradingDate'])
-
-        # Keep relevant columns
-        keep = ['tradingDate', 'open', 'high', 'low', 'close', 'volume']
-        return df[[col for col in keep if col in df.columns]]
+        return df
 
     except ImportError as e:
-        error_msg = f"ImportError for {clean_ticker}: {str(e)}"
+        error_msg = f"Database module import error for {clean_ticker}: {str(e)}"
         if error_msg not in st.session_state.price_errors:
             st.session_state.price_errors.append(error_msg)
-        st.error(f"❌ vnstock library not installed. Please contact administrator.")
+        st.error(f"❌ Database module not found. Please contact administrator.")
         st.error(f"Error details: {str(e)}")
         return pd.DataFrame()
     except Exception as e:
-        error_msg = f"Error fetching {clean_ticker}: {type(e).__name__} - {str(e)}"
+        error_msg = f"Database error for {clean_ticker}: {type(e).__name__} - {str(e)}"
         if error_msg not in st.session_state.price_errors:
             st.session_state.price_errors.append(error_msg)
-        st.error(f"❌ Error fetching price data for '{clean_ticker}'")
+        st.error(f"❌ Error fetching price data from database for '{clean_ticker}'")
         st.error(f"Error type: {type(e).__name__}")
         st.error(f"Error details: {str(e)}")
-        st.info("💡 Possible causes: Network issues, API rate limits, or firewall restrictions on deployment platform.")
         return pd.DataFrame()
 
 def get_close_price(df: pd.DataFrame, target_date: str = None):

@@ -299,3 +299,49 @@ def get_valuation_screening(
     """
 
     return run_query(query, params)
+
+def get_historical_prices(ticker: str, start_date: str = '2020-01-01') -> pd.DataFrame:
+    """
+    Get historical closing prices for a specific ticker from dclab Market_Data table.
+    Returns DataFrame with 'tradingDate' and 'close' columns.
+    Note: Database stores prices in VND, we divide by 1000 to match VCI format (thousands VND).
+    """
+    query = """
+    SELECT
+        TRADE_DATE as tradingDate,
+        PX_LAST as close
+    FROM Market_Data
+    WHERE TICKER = :ticker
+      AND TRADE_DATE >= :start_date
+      AND PX_LAST IS NOT NULL
+    ORDER BY TRADE_DATE ASC
+    """
+    params = {"ticker": ticker.upper(), "start_date": start_date}
+
+    df = run_query(query, params)
+
+    if not df.empty:
+        # Convert tradingDate to datetime
+        df['tradingDate'] = pd.to_datetime(df['tradingDate'])
+
+        # Convert prices from VND to thousands to match VCI format (divide by 1000)
+        df['close'] = df['close'] / 1000
+
+    return df
+
+def get_latest_price(ticker: str) -> float:
+    """Get the most recent closing price for a ticker from Market_Data table"""
+    query = """
+    SELECT TOP 1
+        PX_LAST as close
+    FROM Market_Data
+    WHERE TICKER = :ticker
+    ORDER BY TRADE_DATE DESC
+    """
+    params = {"ticker": ticker.upper()}
+
+    df = run_query(query, params)
+
+    if not df.empty:
+        return df.iloc[0]['close'] / 1000  # Convert to thousands
+    return None
