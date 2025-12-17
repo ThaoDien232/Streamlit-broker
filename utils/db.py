@@ -309,7 +309,7 @@ def get_historical_prices(ticker: str, start_date: str = '2020-01-01') -> pd.Dat
     query = """
     SELECT
         TRADE_DATE as tradingDate,
-        PX_LAST as close
+        PX_LAST as [close]
     FROM Market_Data
     WHERE TICKER = :ticker
       AND TRADE_DATE >= :start_date
