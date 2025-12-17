@@ -11,10 +11,8 @@ text_color = theme["textColor"]
 
 font_family = theme["font"]
 import pandas as pd
-import requests
 from datetime import datetime
 import re
-from urllib.parse import quote
 
 st.set_page_config(page_title="Prop Book Dashboard", layout="wide")
 
@@ -78,59 +76,45 @@ def is_valid_ticker(ticker: str) -> bool:
 
 def fetch_historical_price(ticker: str) -> pd.DataFrame:
     """
-    Fetch daily stock prices from TCBS API for the given ticker.
+    Fetch daily stock prices using vnstock library with VCI source.
     Returns DataFrame with 'tradingDate', 'open', 'high', 'low', 'close', 'volume'.
     """
     # Validate ticker before making API call
     if not is_valid_ticker(ticker):
         print(f"Skipping invalid ticker: {ticker}")
         return pd.DataFrame()
-    
-    url = "https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term"
-    
-    # Clean and encode ticker properly
+
+    # Clean ticker
     clean_ticker = ticker.strip().upper()
-    
-    params = {
-        "ticker": clean_ticker,
-        "type": "stock",
-        "resolution": "D",
-        "from": "0",
-        "to": str(int(datetime.now().timestamp()))
-    }
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json"
-    }
+
     try:
-        response = requests.get(url, params=params, headers=headers, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        if 'data' in data and data['data']:
-            df = pd.DataFrame(data['data'])
-            # Convert tradingDate to datetime (ISO or ms)
-            if 'tradingDate' in df.columns:
-                if df['tradingDate'].dtype == 'object' and df['tradingDate'].str.contains('T').any():
-                    df['tradingDate'] = pd.to_datetime(df['tradingDate'])
-                else:
-                    df['tradingDate'] = pd.to_datetime(df['tradingDate'], unit='ms')
-            # Only keep relevant columns
-            keep = ['tradingDate', 'open', 'high', 'low', 'close', 'volume']
-            return df[[col for col in keep if col in df.columns]]
-        else:
+        from vnstock import Vnstock
+
+        # Use VCI source (TCBS API is deprecated)
+        stock = Vnstock().stock(symbol=clean_ticker, source='VCI')
+
+        # Fetch historical data from 2020 to now
+        df = stock.quote.history(start='2020-01-01', end=datetime.now().strftime('%Y-%m-%d'))
+
+        if df.empty:
             print(f"No data found for ticker: {clean_ticker}")
             return pd.DataFrame()
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 400:
-            print(f"Invalid ticker '{clean_ticker}': {e}")
-        else:
-            print(f"HTTP error fetching data for '{clean_ticker}': {e}")
-        return pd.DataFrame()
-    except requests.exceptions.RequestException as e:
-        print(f"Network error fetching data for '{clean_ticker}': {e}")
+
+        # Rename 'time' column to 'tradingDate' for compatibility
+        df = df.rename(columns={'time': 'tradingDate'})
+
+        # Convert tradingDate to datetime if not already
+        df['tradingDate'] = pd.to_datetime(df['tradingDate'])
+
+        # Keep relevant columns
+        keep = ['tradingDate', 'open', 'high', 'low', 'close', 'volume']
+        return df[[col for col in keep if col in df.columns]]
+
+    except ImportError as e:
+        print(f"vnstock library not installed. Please run: pip install vnstock")
         return pd.DataFrame()
     except Exception as e:
-        print(f"Unexpected error fetching data for '{clean_ticker}': {e}")
+        print(f"Error fetching data for '{clean_ticker}': {e}")
         return pd.DataFrame()
 
 def get_close_price(df: pd.DataFrame, target_date: str = None):
@@ -141,7 +125,10 @@ def get_close_price(df: pd.DataFrame, target_date: str = None):
     if df.empty:
         return None
     if target_date:
-        target = pd.to_datetime(target_date).tz_localize('UTC')
+        target = pd.to_datetime(target_date)
+        # Ensure both are timezone-naive for comparison
+        if df['tradingDate'].dt.tz is not None:
+            target = target.tz_localize('UTC')
         df2 = df[df['tradingDate'] <= target]
         if df2.empty:
             return None

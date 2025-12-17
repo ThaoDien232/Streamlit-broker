@@ -7,3 +7,4 @@ openai
 plotly
 toml
 tabulate
+vnstock
