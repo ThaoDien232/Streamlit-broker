@@ -1,5 +1,12 @@
 import streamlit as st
 import toml
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables FIRST before any other imports
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 # Load theme from config.toml
 theme_config = toml.load("utils/config.toml")
