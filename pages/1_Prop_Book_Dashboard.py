@@ -485,6 +485,7 @@ def display_position_changes(broker, selected_quarter):
     """Display position changes for the selected quarter if available"""
     db = get_db_handler()
     if not db:
+        st.warning("MongoDB connection not available")
         return
 
     try:
