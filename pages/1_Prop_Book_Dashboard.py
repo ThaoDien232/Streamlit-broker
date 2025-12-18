@@ -488,10 +488,7 @@ def display_position_changes(broker, selected_quarter):
         changes = handler.get_position_changes(broker=broker, quarter=selected_quarter)
 
         if changes:
-            # Display the position changes
-            st.markdown("---")
-            st.subheader(f"📰 Position Changes - {selected_quarter}")
-
+            # Display the position changes (no header, no markdown line)
             for idx, change in enumerate(changes):
                 update_date = change.get('update_date', '')
                 news_info = change.get('news_info', '')
