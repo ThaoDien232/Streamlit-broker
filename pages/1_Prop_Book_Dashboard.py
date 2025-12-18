@@ -470,27 +470,33 @@ else:
     st.caption("Prices not yet loaded - Click 'Refresh Prices' to load")
 
 # Initialize MongoDB handler
-@st.cache_resource
 def get_db_handler():
     """Get MongoDB handler for position changes"""
     try:
         handler = MongoDBHandler()
-        handler.connect()
-        return handler
+        success = handler.connect()
+        if success:
+            return handler
+        else:
+            return None
     except Exception as e:
-        st.error(f"MongoDB connection error: {str(e)}")
+        # Don't show error to avoid confusion with other errors
         return None
 
 def display_position_changes(broker, selected_quarter):
     """Display position changes for the selected quarter if available"""
+    st.caption(f"🔍 Querying MongoDB: broker={broker}, quarter={selected_quarter}")
+
     db = get_db_handler()
     if not db:
-        st.warning("MongoDB connection not available")
+        st.warning("⚠️ MongoDB connection not available")
         return
 
     try:
         # Query for position changes matching broker and quarter
         changes = db.get_position_changes(broker=broker, quarter=selected_quarter)
+
+        st.caption(f"🔍 Query returned {len(changes)} record(s)")
 
         if changes:
             # Display the position changes
@@ -515,8 +521,10 @@ def display_position_changes(broker, selected_quarter):
                         disabled=True,
                         key=f"change_{change['_id']}"
                     )
+        else:
+            st.caption(f"ℹ️ No position changes found for {broker} - {selected_quarter}")
     except Exception as e:
-        st.error(f"Error loading position changes: {str(e)}")
+        st.error(f"❌ Error loading position changes: {str(e)}")
 
 def display_prop_book_table():
     """Display prop book data by broker and quarter"""
@@ -642,9 +650,13 @@ def display_prop_book_table():
                 next_q = q_num + 1
                 next_year = year
             next_quarter = f"{next_q}Q{next_year:02d}"
+
+            # Debug info
+            st.caption(f"🔍 Debug: Latest quarter = {latest_quarter}, Next quarter = {next_quarter}, Broker = {selected_brokers}")
+
             display_position_changes(selected_brokers, next_quarter)
-        except Exception:
-            pass  # Skip if quarter format is invalid
+        except Exception as e:
+            st.error(f"Error calculating next quarter: {str(e)}")
 
 # Main application
 def main():
