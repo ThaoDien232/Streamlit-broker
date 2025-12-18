@@ -494,18 +494,19 @@ def display_position_changes(broker, selected_quarter):
 
             for idx, change in enumerate(changes):
                 update_date = change.get('update_date', '')
+                news_info = change.get('news_info', '')
 
-                st.info(f"**Update Date: {update_date}**")
+                # Combine update date with news info
+                display_text = f"Update Date: {update_date}\n\n{news_info}"
 
-                if change.get('news_info'):
-                    # Display news/info in a text area
-                    st.text_area(
-                        "",
-                        value=change['news_info'],
-                        height=150,
-                        disabled=True,
-                        key=f"change_{broker}_{selected_quarter}_{idx}"
-                    )
+                # Display in a single text area
+                st.text_area(
+                    "",
+                    value=display_text,
+                    height=150,
+                    disabled=True,
+                    key=f"change_{broker}_{selected_quarter}_{idx}"
+                )
     except Exception as e:
         # Silently fail if CSV doesn't exist yet
         pass
