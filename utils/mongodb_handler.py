@@ -4,12 +4,16 @@ MongoDB handler for prop book position changes tracking
 import os
 from datetime import datetime
 from typing import List, Dict, Optional
+from pathlib import Path
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from project root
+# Get the root directory (parent of utils)
+root_dir = Path(__file__).parent.parent
+env_path = root_dir / '.env'
+load_dotenv(dotenv_path=env_path)
 
 class MongoDBHandler:
     """Handler for MongoDB operations related to position changes"""
