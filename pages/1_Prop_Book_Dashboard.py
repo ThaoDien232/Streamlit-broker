@@ -1,12 +1,5 @@
 import streamlit as st
 import toml
-import os
-from pathlib import Path
-from dotenv import load_dotenv
-
-# Load environment variables FIRST before any other imports
-env_path = Path(__file__).parent.parent / '.env'
-load_dotenv(dotenv_path=env_path)
 
 # Load theme from config.toml
 theme_config = toml.load("utils/config.toml")
@@ -24,7 +17,7 @@ import requests
 import time
 import sys
 sys.path.append('.')
-from utils.mongodb_handler import MongoDBHandler
+from utils.position_changes_handler import PositionChangesHandler
 
 st.set_page_config(page_title="Prop Book Dashboard", layout="wide")
 
@@ -476,48 +469,33 @@ if st.session_state.price_last_updated:
 else:
     st.caption("Prices not yet loaded - Click 'Refresh Prices' to load")
 
-# Initialize MongoDB handler
-def get_db_handler():
-    """Get MongoDB handler for position changes"""
+# Initialize CSV handler for position changes
+def get_position_changes_handler():
+    """Get CSV handler for position changes"""
     try:
-        handler = MongoDBHandler()
-        success = handler.connect()
-        if success:
-            return handler
-        else:
-            return None
+        return PositionChangesHandler()
     except Exception as e:
-        # Don't show error to avoid confusion with other errors
         return None
 
 def display_position_changes(broker, selected_quarter):
     """Display position changes for the selected quarter if available"""
-    st.caption(f"🔍 Querying MongoDB: broker={broker}, quarter={selected_quarter}")
-
-    db = get_db_handler()
-    if not db:
-        st.warning("⚠️ MongoDB connection not available")
+    handler = get_position_changes_handler()
+    if not handler:
         return
 
     try:
         # Query for position changes matching broker and quarter
-        changes = db.get_position_changes(broker=broker, quarter=selected_quarter)
-
-        st.caption(f"🔍 Query returned {len(changes)} record(s)")
+        changes = handler.get_position_changes(broker=broker, quarter=selected_quarter)
 
         if changes:
             # Display the position changes
             st.markdown("---")
             st.subheader(f"📰 Position Changes - {selected_quarter}")
 
-            for change in changes:
-                update_date = change.get('update_date')
-                if isinstance(update_date, datetime):
-                    date_str = update_date.strftime('%Y-%m-%d')
-                else:
-                    date_str = str(update_date)
+            for idx, change in enumerate(changes):
+                update_date = change.get('update_date', '')
 
-                st.info(f"**Update Date: {date_str}**")
+                st.info(f"**Update Date: {update_date}**")
 
                 if change.get('news_info'):
                     # Display news/info in a text area
@@ -526,12 +504,11 @@ def display_position_changes(broker, selected_quarter):
                         value=change['news_info'],
                         height=150,
                         disabled=True,
-                        key=f"change_{change['_id']}"
+                        key=f"change_{broker}_{selected_quarter}_{idx}"
                     )
-        else:
-            st.caption(f"ℹ️ No position changes found for {broker} - {selected_quarter}")
     except Exception as e:
-        st.error(f"❌ Error loading position changes: {str(e)}")
+        # Silently fail if CSV doesn't exist yet
+        pass
 
 def display_prop_book_table():
     """Display prop book data by broker and quarter"""
@@ -657,9 +634,6 @@ def display_prop_book_table():
                 next_q = q_num + 1
                 next_year = year
             next_quarter = f"{next_q}Q{next_year:02d}"
-
-            # Debug info
-            st.caption(f"🔍 Debug: Latest quarter = {latest_quarter}, Next quarter = {next_quarter}, Broker = {selected_brokers}")
 
             display_position_changes(selected_brokers, next_quarter)
         except Exception as e:
