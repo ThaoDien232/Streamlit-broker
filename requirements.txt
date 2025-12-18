@@ -2,6 +2,7 @@ streamlit
 pandas
 openpyxl
 python-dotenv
+pymongo
 pyodbc
 openai
 plotly

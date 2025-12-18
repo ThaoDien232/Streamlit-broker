@@ -15,6 +15,9 @@ from datetime import datetime
 import re
 import requests
 import time
+import sys
+sys.path.append('.')
+from utils.mongodb_handler import MongoDBHandler
 
 st.set_page_config(page_title="Prop Book Dashboard", layout="wide")
 
@@ -466,6 +469,54 @@ if st.session_state.price_last_updated:
 else:
     st.caption("Prices not yet loaded - Click 'Refresh Prices' to load")
 
+# Initialize MongoDB handler
+@st.cache_resource
+def get_db_handler():
+    """Get MongoDB handler for position changes"""
+    try:
+        handler = MongoDBHandler()
+        handler.connect()
+        return handler
+    except Exception as e:
+        st.error(f"MongoDB connection error: {str(e)}")
+        return None
+
+def display_position_changes(broker, selected_quarter):
+    """Display position changes for the selected quarter if available"""
+    db = get_db_handler()
+    if not db:
+        return
+
+    try:
+        # Query for position changes matching broker and quarter
+        changes = db.get_position_changes(broker=broker, quarter=selected_quarter)
+
+        if changes:
+            # Display the position changes
+            st.markdown("---")
+            st.subheader(f"📰 Position Changes - {selected_quarter}")
+
+            for change in changes:
+                update_date = change.get('update_date')
+                if isinstance(update_date, datetime):
+                    date_str = update_date.strftime('%Y-%m-%d')
+                else:
+                    date_str = str(update_date)
+
+                st.info(f"**Update Date: {date_str}**")
+
+                if change.get('news_info'):
+                    # Display news/info in a text area
+                    st.text_area(
+                        "",
+                        value=change['news_info'],
+                        height=150,
+                        disabled=True,
+                        key=f"change_{change['_id']}"
+                    )
+    except Exception as e:
+        st.error(f"Error loading position changes: {str(e)}")
+
 def display_prop_book_table():
     """Display prop book data by broker and quarter"""
 
@@ -576,6 +627,23 @@ def display_prop_book_table():
         # Display without price fetching (instant load)
         formatted_df = formatted_table(filtered_df, available_quarters, key_suffix=f"display_{selected_brokers}", fetch_prices=False)
         st.dataframe(formatted_df, use_container_width=True)
+
+    # Display position changes for the quarter AFTER the latest data quarter
+    if latest_quarter:
+        # Calculate next quarter (e.g., if latest is 3Q25, show 4Q25)
+        try:
+            q_num = int(latest_quarter[0])
+            year = int(latest_quarter[2:])
+            if q_num == 4:
+                next_q = 1
+                next_year = year + 1
+            else:
+                next_q = q_num + 1
+                next_year = year
+            next_quarter = f"{next_q}Q{next_year:02d}"
+            display_position_changes(selected_brokers, next_quarter)
+        except Exception:
+            pass  # Skip if quarter format is invalid
 
 # Main application
 def main():
